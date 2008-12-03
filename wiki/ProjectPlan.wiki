@@ -1,0 +1,45 @@
+#summary Plans for optimizing Python
+
+= Quick Optimizations =
+
+Q1 will likely be dominated by getting a 30%-50% improvement with
+existing approaches. These will probably include compiling Python with
+LLVM+LTO (10%), vmgen (10%(-30%??)), 64 bits (guess -20-+20%) and
+other small ceval, function call, etc. tweaks. I'll probably also
+start pushing to simplify the EvalFrameEx loop even if that doesn't
+help performance because it'll make migrating to LLVM easier.
+
+= Long-term Plan =
+Once we get the quick improvements out of the way and convince some
+people to adopt our Python, we'll start switching to LLVM, probably
+initially in a separate branch. This can go in lots of stages:
+
+<ol>
+<li>Change the compiler to generate LLVM IR instead of Python bytecode. Or convert bytecode to LLVM IR in EvalFrameEx like the vmgen patch does. The code that's currently inside the switch cases would move to separate functions (known as "opcode interpretation functions" from now on), and then the IR would just be a list of %call instructions pointing at those functions. We don't need to set up any optimizations at all, and we don't even need to cache the JITted function pointer that ExecutionEngine::getPointerToFunction() returns. This will be slow, but should be pretty easy to get working. I think this is the stage at which your idea makes the most sense. We could keep the original EvalFrameEx function around, generate _both_ bytecodes, and dynamically decide which to execute based on a flag in the code object.</li>
+
+<li>Start adding optimizations and push EvalFrameEx into the LLVM IR. At this point we'll need to get the opcode interpretation functions into LLVM IR, but I'm not sure whether it'll be easier to use IRBuilder directly or compile them to bitcode with llvm-gcc and load that. Either way, we'll want to let LLVM inline their definitions into the JITted output for each code object. At this point I expect the llvm version to get faster than the vmgen version.
+
+Talin points out that it'll be hard to apply most of the pre-defined optimizations at first because Python calls are indirect. This motivates type inference so we can make the calls direct.</li>
+</ol>
+
+3+ can be tried in parallel.
+
+<ol start="3">
+<li>Generate better LLVM IR than a direct translation from CPython bytecode would imply.</li>
+
+<li>Figure out how to specialize functions for particular types, which allows better inlining. We should be able to do as well as psyco pretty easily since we can steal their algorithms.
+<ol type="a">
+<li>Allow users to annotate functions to tell the interpreter which specializations to use.</li>
+<li>Profile calls and infer common argument types.</li>
+</ol></li>
+
+<li>If the optimizations become expensive enough that the JIT hurts our startup time, we can profile for expensive functions and only optimize them. This resembles how HotSpot works.</li>
+
+<li>4b and 5 require us to be able to keep multiple versions of code around for any given function and backpatch existing callers. We'll probably want to GC the multiple versions, which should be interesting.</li>
+
+<li>Persist the generated and optimized IR to disk in place of .pyc
+files, perhaps along with any gathered profile data. This allows
+subsequent runs to take advantage of the optimization work previous
+runs have already done. Matches LLVM's promise to be "A Compilation
+Framework for Lifelong Program Analysis & Transformation". :)</li>
+</ol>
