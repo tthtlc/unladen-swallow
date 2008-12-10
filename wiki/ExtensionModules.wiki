@@ -16,7 +16,7 @@ In order to make Python efficient in a multiprocessor system, we'll need to chan
 
 Currently extension modules manage reference counts via macros such as Py_INCREF and Py_DECREF, which are provided by the Python header files. We will need to replace these macros with ones that conform to the new collection strategy.
 
-For the short term, traditional reference counting, but with atomic operations, appears to be the best choice since it can be implemented with relatively little effort. The main downside of this approach is that it has the worst performance. It has been reported that Python with atomic operations slows down by a factor of 2, although this may still be a win on a 4-processor system. Also, it may be possible to reduce the number of addref/release pairs during native code generation by doing variable lifetime analysis during the optimization phase.
+For the short term, traditional reference counting, but with atomic operations, appears to be the best choice since it can be implemented with relatively little effort. The main downside of this approach is that it has the worst performance. There is anecdotal evidence that Python with atomic operations slows down by a factor of 2, although this may still be a win on a 4-processor system. Also, it may be possible to reduce the number of addref/release pairs during native code generation by doing variable lifetime analysis during the optimization phase.
 
 For the longer term, true garbage collection is likely to yield the best result.
 
