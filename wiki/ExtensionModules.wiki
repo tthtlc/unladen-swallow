@@ -10,9 +10,9 @@ Binary compatibility is not an option, because many of the performance improveme
 
 In order to make Python efficient in a multiprocessor system, we'll need to change the way reference counts work. The current implementation of reference counts use non-atomic operations which require the GIL for consistency. Removing the GIL will require using a concurrency-safe reference counting implementation, such as one of the following:
 
-* Traditional reference counting with atomic increment / decrement.
-* Thread-local Addref/Release queues, as described in the Recycler paper.
-* True concurrent garbage collection.
+ * Traditional reference counting with atomic increment / decrement.
+ * Thread-local Addref/Release queues, as described in the Recycler paper.
+ * True concurrent garbage collection.
 
 Extension modules manage reference counts via macros such as Py_INCREF and Py_DECREF, which are provided by the Python header files. We will need to replace these macros with ones that conform to the new collection strategy.
 
