@@ -1,0 +1,3 @@
+#summary How to infer types in Python
+
+   "Ugly duck typing: if it looks like a duck, and walks like a duck, it's a swan." --levesque
