@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Wrapper script for all of Unladen Swallow's third-party tests.
+"""Wrapper script for building all of Unladen Swallow's third-party tests.
 
 This is equivalent to manually invoking setup.py in each lib/ directory.
 """
@@ -24,7 +24,7 @@ def SetupSubdir(subdir):
     current_dir = os.getcwd()
     os.chdir(subdir)
     try:
-        retval = subprocess.call([sys.executable] + sys.argv)
+        retval = subprocess.call([sys.executable, "setup.py"] + sys.argv[1:])
         if retval:
           raise SystemExit()
     finally:
@@ -49,5 +49,6 @@ def FindThirdPartyLibs(basedir):
 
 
 if __name__ == "__main__":
-    for subdir in FindThirdPartyLibs("lib"):
+    basedir = os.path.join(os.path.split(__file__)[0], "lib")
+    for subdir in FindThirdPartyLibs(basedir):
         SetupSubdir(subdir)
