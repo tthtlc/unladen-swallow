@@ -42,6 +42,9 @@ SHELL=		/bin/sh
 # Use this to make a link between python$(VERSION) and python in $(BINDIR)
 LN=		@LN@
 
+# Used to create the ceval .i files.
+AWK=            @AWK@
+
 # Portable install script (configure doesn't always guess right)
 INSTALL=	@INSTALL@
 INSTALL_PROGRAM=@INSTALL_PROGRAM@
@@ -569,6 +572,35 @@ Python/formatter_unicode.o: $(srcdir)/Python/formatter_unicode.c \
 
 Python/formatter_string.o: $(srcdir)/Python/formatter_string.c \
 				$(STRINGLIB_HEADERS)
+
+# Vmgen-provided ceval bits
+
+Python/ceval.o: $(srcdir)/Python/ceval.c \
+		Python/ceval-labels.i \
+		Python/ceval-vm.i \
+		Python/ceval-peephole.i \
+		Python/ceval-gen.i \
+		Python/ceval-translate.i \
+		Python/ceval-disasm-bytes.i \
+		Python/ceval-disasm.i
+	$(CC) -c $(PY_CFLAGS) -IPython -fno-gcse -o $@ $<
+
+Python/ceval-vm-unmangled.i Python/ceval-disasm.i Python/ceval-gen.i Python/ceval-labels.i Python/ceval-profile.i Python/ceval-peephole.i: \
+		$(srcdir)/Python/ceval.vmg \
+		$(srcdir)/Python/mangler.awk
+	vmgen $<
+	mv ceval-vm.i Python/ceval-vm-unmangled.i
+	mv ceval-disasm.i ceval-gen.i ceval-labels.i ceval-profile.i ceval-peephole.i Python/
+
+Python/ceval-vm.i: Python/ceval-vm-unmangled.i
+	$(AWK) -f $(srcdir)/Python/mangler.awk $< > $@
+
+Python/ceval-translate.i: $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES
+	$(AWK) -f $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES > $@
+
+Python/ceval-disasm-bytes.i: $(srcdir)/Python/gendisasm.awk $(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS
+	$(AWK) -f $(srcdir)/Python/gendisasm.awk \
+		$(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS > $@
 
 ############################################################################
 # Header files

@@ -103,6 +103,7 @@ PyCode_New(int argcount, int nlocals, int stacksize, int flags,
 		Py_INCREF(lnotab);
 		co->co_lnotab = lnotab;
                 co->co_zombieframe = NULL;
+                co->co_tcode = NULL;
 	}
 	return co;
 }
@@ -268,6 +269,8 @@ code_dealloc(PyCodeObject *co)
 	Py_XDECREF(co->co_lnotab);
         if (co->co_zombieframe != NULL)
                 PyObject_GC_Del(co->co_zombieframe);
+        if (co->co_tcode != NULL)
+                free(co->co_tcode);
 	PyObject_DEL(co);
 }
 

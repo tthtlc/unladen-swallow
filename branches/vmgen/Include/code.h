@@ -6,6 +6,15 @@
 extern "C" {
 #endif
 
+typedef void *Opcode;
+typedef int Oparg;
+
+typedef union inst {
+        Opcode opcode;
+        Oparg  oparg;
+} vmgen_Cell, Inst;
+
+
 /* Bytecode object */
 typedef struct {
     PyObject_HEAD
@@ -14,6 +23,7 @@ typedef struct {
     int co_stacksize;		/* #entries needed for evaluation stack */
     int co_flags;		/* CO_..., see below */
     PyObject *co_code;		/* instruction opcodes */
+    Inst *co_tcode;             /* threaded instructions */
     PyObject *co_consts;	/* list (constants used) */
     PyObject *co_names;		/* list of strings (names used) */
     PyObject *co_varnames;	/* tuple of strings (local variable names) */

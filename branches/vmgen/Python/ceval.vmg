@@ -1,0 +1,1221 @@
+
+\ VM instruction implementations
+
+\ To compile this file with vmgen, find prims2x.fs in the gforth distribution
+\ and change "4 constant max-stacks" to "9 constant max-stacks".
+
+\ _. Stack definitions &c.
+
+\ stack inst-stream next_instr Cell
+\E s" Oparg" single inst-stream type-prefix i
+\E inst-stream stack-prefix #
+
+\E stack data-stack stack_pointer Obj
+\E : sp-access-transform ( itemnum -- index ) negate 1- ;
+\E ' sp-access-transform ' data-stack >body stack-access-transform !
+\E s" Obj" single data-stack type-prefix a
+
+
+\E stack dummy-stack0 __none__ incref
+\E dummy-stack0 stack-prefix inc:
+
+\E stack dummy-stack1 __none__ decref
+\E dummy-stack1 stack-prefix dec:
+
+\E stack dummy-stack2 __none__ next
+\E dummy-stack2 stack-prefix next:
+\E s" __none__" single dummy-stack2 type-prefix next_opcode
+\E s" __none__" single dummy-stack2 type-prefix on_error
+\E s" __none__" single dummy-stack2 type-prefix fast_block_end
+\E s" __none__" single dummy-stack2 type-prefix fast_yield
+\E s" __none__" single dummy-stack2 type-prefix error
+
+
+\E store-optimization on
+
+\ _. Instructions
+
+\ _ , Superinstruction Prefix Approved Opcodes (TM)
+nop ( -- )
+
+load_fast ( #i -- a  inc:a )
+x = a = GETLOCAL(i);
+if (x == NULL) {
+        format_exc_check_arg(
+                PyExc_UnboundLocalError,
+                UNBOUNDLOCAL_ERROR_MSG,
+                PyTuple_GetItem(co->co_varnames, i));
+        ERROR();
+}
+
+load_const ( #i -- a  inc:a )
+x = a = GETITEM(consts, i);
+
+store_fast ( #i a -- )
+SETLOCAL(i, a);
+
+pop_top ( a -- dec:a )
+
+rot_two ( a1 a2 -- a2 a1 )
+
+rot_three ( a1 a2 a3 -- a3 a1 a2 )
+
+rot_four ( a1 a2 a3 a4 -- a4 a1 a2 a3 )
+
+dup_top ( a -- a a  inc:a )
+
+dup_top_two ( a1 a2 -- a1 a2 a1 a2  inc:a1 inc:a2 )
+
+dup_top_three ( a1 a2 a3 -- a1 a2 a3 a1 a2 a3  inc:a1 inc:a2 inc:a3 )
+
+\ _ , UNARY
+unary_positive ( a1 -- a2   dec:a1  next:a2 )
+a2 = PyNumber_Positive(a1);
+
+unary_negative ( a1 -- a2  dec:a1  next:a2 )
+a2 = PyNumber_Negative(a1);
+
+unary_not ( -- )
+a1 = TOP();
+err = PyObject_IsTrue(a1);
+Py_DECREF(a1);
+if (err == 0) {
+        Py_INCREF(Py_True);
+        SET_TOP(Py_True);
+        NEXT();
+} else if (err > 0) {
+        Py_INCREF(Py_False);
+        SET_TOP(Py_False);
+        err = 0;
+        NEXT();
+}
+STACKADJ(-1);
+ERROR();
+
+unary_convert ( a1 -- a2  dec:a1  next:a2 )
+a2 = PyObject_Repr(a1);
+
+unary_invert ( a1 -- a2  dec:a1  next:a2 )
+a2 = PyNumber_Invert(a1);
+
+\ _ , BINARY
+binary_power ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Power(a1, a2, Py_None);
+
+binary_multiply ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Multiply(a1, a2);
+
+binary_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Divide(a1, a2);
+
+binary_true_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_TrueDivide(a1, a2);
+
+binary_floor_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_FloorDivide(a1, a2);
+
+binary_modulo ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Remainder(a1, a2);
+
+binary_add ( a1 a2 -- a   next:a )
+if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
+        /* INLINE: int + int */
+        register long u, v, i;
+        u = PyInt_AS_LONG(a1);
+        v = PyInt_AS_LONG(a2);
+        i = u + v;
+        if ((i^u) < 0 && (i^v) < 0)
+                a = PyNumber_Add(a1, a2);
+        else
+                a = PyInt_FromLong(i);
+        Py_DECREF(a1);
+} else if (PyString_CheckExact(a1) && PyString_CheckExact(a2)) {
+        int opcode;
+        ADDR2OP(next_instr->opcode, opcode);
+        a = string_concatenate(a1, a2, f, opcode, (next_instr+1)->oparg);
+        /* string_concatenate consumed the ref to v */
+} else {
+        a = PyNumber_Add(a1, a2);
+        Py_DECREF(a1);
+}
+Py_DECREF(a2);
+
+binary_subtract ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
+        /* INLINE: int - int */
+        register long u, v, i;
+        u = PyInt_AS_LONG(a1);
+        v = PyInt_AS_LONG(a2);
+        i = u - v;
+        if ((i^u) < 0 && (i^~v) < 0)
+                a = PyNumber_Subtract(a1, a2);
+        else
+                a = PyInt_FromLong(i);
+} else
+        a = PyNumber_Subtract(a1, a2);
+
+binary_subscr ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+if (PyList_CheckExact(a1) && PyInt_CheckExact(a2)) {
+        /* INLINE: list[int] */
+        Py_ssize_t i = PyInt_AsSsize_t(a2);
+        if (i < 0)
+                i += PyList_GET_SIZE(a1);
+        if (i >= 0 && i < PyList_GET_SIZE(a1)) {
+                a = PyList_GET_ITEM(a1, i);
+                Py_INCREF(a);
+        } else
+                a = PyObject_GetItem(a1, a2);
+} else
+        a = PyObject_GetItem(a1, a2);
+
+binary_lshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Lshift(a1, a2);
+
+binary_rshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Rshift(a1, a2);
+
+binary_and ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_And(a1, a2);
+
+binary_xor ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Xor(a1, a2);
+
+binary_or ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_Or(a1, a2);
+
+\ _ , LIST_APPEND
+list_append ( a1 a2 -- dec:a1 dec:a2  next:error )
+err = PyList_Append(a1, a2);
+
+\ _ , INPLACE
+inplace_power ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlacePower(a1, a2, Py_None);
+
+inplace_multiply ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceMultiply(a1, a2);
+
+inplace_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceDivide(a1, a2);
+
+inplace_true_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceTrueDivide(a1, a2);
+
+inplace_floor_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceFloorDivide(a1, a2);
+
+inplace_modulo ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceRemainder(a1, a2);
+
+inplace_add ( a1 a2 -- a   next:a )
+if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
+        /* INLINE: int + int */
+        register long u, v, i;
+        u = PyInt_AS_LONG(a1);
+        v = PyInt_AS_LONG(a2);
+        i = u + v;
+        if ((i^u) < 0 && (i^v) < 0)
+                a = PyNumber_InPlaceAdd(a1, a2);
+        else
+                a = PyInt_FromLong(i);
+        Py_DECREF(a1);
+} else if (PyString_CheckExact(a1) && PyString_CheckExact(a2)) {
+        int opcode;
+        ADDR2OP(next_instr->opcode, opcode);
+        a = string_concatenate(a1, a2, f, opcode, (next_instr+1)->oparg);
+        /* string_concatenate consumed the ref to v */
+} else {
+        a = PyNumber_InPlaceAdd(a1, a2);
+        Py_DECREF(a1);
+}
+Py_DECREF(a2);
+
+inplace_subtract ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
+        /* INLINE: int - int */
+        register long u, v, i;
+        u = PyInt_AS_LONG(a1);
+        v = PyInt_AS_LONG(a2);
+        i = u - v;
+        if ((i^u) < 0 && (i^~v) < 0)
+                a = PyNumber_InPlaceSubtract(a1, a2);
+        else
+                a = PyInt_FromLong(i);
+} else
+        a = PyNumber_InPlaceSubtract(a1, a2);
+
+inplace_lshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceLshift(a1, a2);
+
+inplace_rshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceRshift(a1, a2);
+
+inplace_and ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceAnd(a1, a2);
+
+inplace_xor ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceXor(a1, a2);
+
+inplace_or ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PyNumber_InPlaceOr(a1, a2);
+
+\ _ , SLICE
+slice_none ( a1 -- a2  dec:a1  next:a2 )
+a2 = apply_slice(a1, NULL, NULL);
+
+slice_left ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = apply_slice(a1, a2, NULL);
+
+slice_right ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = apply_slice(a1, NULL, a2);
+
+slice_both ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:a )
+a = apply_slice(a1, a2, a3);
+
+store_slice_none ( a1 a2 -- dec:a1 dec:a2  next:error )
+err = assign_slice(a2, NULL, NULL, a1);
+
+store_slice_left ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+err = assign_slice(a2, a3, NULL, a1);
+
+store_slice_right ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+err = assign_slice(a2, NULL, a3, a1);
+
+store_slice_both ( a1 a2 a3 a4 -- dec:a1 dec:a2 dec:a3 dec:a4  next:error )
+err = assign_slice(a2, a3, a4, a1); /* a2[a3:a4] = a1 */
+
+delete_slice_none ( a1 -- dec:a1  next:error )
+err = assign_slice(a1, NULL, NULL, (PyObject *) NULL);
+
+delete_slice_left ( a1 a2 -- dec:a1 dec:a2  next:error )
+err = assign_slice(a1, a2, NULL, (PyObject *) NULL);
+
+delete_slice_right ( a1 a2 -- dec:a1 dec:a2  next:error )
+err = assign_slice(a1, NULL, a2, (PyObject *) NULL);
+
+delete_slice_both ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+err = assign_slice(a1, a2, a3, (PyObject *) NULL); /* del a1[a2:a3] */
+
+\ _ , SUBSCR
+store_subscr ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+err = PyObject_SetItem(a2, a3, a1);
+
+delete_subscr ( a1 a2 -- dec:a1 dec:a2  next:error )
+err = PyObject_DelItem(a1, a2);
+
+\ _ , PRINT
+print_expr ( a1 -- dec:a1  next:on_error )
+a2 = PySys_GetObject("displayhook");
+if (a2 == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "lost sys.displayhook");
+        err = -1;
+        x = NULL;
+}
+if (err == 0) {
+        x = PyTuple_Pack(1, a1);
+        if (x == NULL)
+                err = -1;
+}
+if (err == 0) {
+        a2 = PyEval_CallObject(a2, x);
+        Py_XDECREF(a2);
+        if (a2 == NULL)
+                err = -1;
+}
+Py_XDECREF(x);
+
+print_item_to ( a1 -- )
+a2 = stream = a1;
+
+print_item ( a1 -- dec:a1  next:error )
+if (stream == NULL || stream == Py_None) {
+        a2 = PySys_GetObject("stdout");
+        if (a2 == NULL) {
+                PyErr_SetString(PyExc_RuntimeError,
+                                "lost sys.stdout");
+                err = -1;
+        }
+}
+/* PyFile_SoftSpace() can exececute arbitrary code
+   if sys.stdout is an instance with a __getattr__.
+   If __getattr__ raises an exception, w will
+   be freed, so we need to prevent that temporarily. */
+Py_XINCREF(a2);
+if (a2 != NULL && PyFile_SoftSpace(a2, 0))
+        err = PyFile_WriteString(" ", a2);
+if (err == 0)
+        err = PyFile_WriteObject(a1, a2, Py_PRINT_RAW);
+if (err == 0) {
+        /* XXX move into writeobject() ? */
+        if (PyString_Check(a1)) {
+                char *s = PyString_AS_STRING(a1);
+                Py_ssize_t len = PyString_GET_SIZE(a1);
+                if (len == 0 ||
+                    !isspace(Py_CHARMASK(s[len-1])) ||
+                    s[len-1] == ' ')
+                        PyFile_SoftSpace(a2, 1);
+        } else
+                PyFile_SoftSpace(a2, 1);
+}
+Py_XDECREF(a2);
+Py_XDECREF(stream);
+stream = NULL;
+
+print_newline ( -- next:on_error )
+if (stream == NULL || stream == Py_None) {
+        a2 = PySys_GetObject("stdout");
+        if (a2 == NULL) {
+                PyErr_SetString(PyExc_RuntimeError,
+                                "lost sys.stdout");
+                why = WHY_EXCEPTION;
+        }
+}
+if (a2 != NULL) {
+        /* a2.write() may replace sys.stdout, so we
+         * have to keep our reference to it */
+        Py_INCREF(a2);
+        err = PyFile_WriteString("\n", a2);
+        if (err == 0)
+                PyFile_SoftSpace(a2, 0);
+        Py_DECREF(a2);
+}
+Py_XDECREF(stream);
+stream = NULL;
+
+\ _ , RAISE_VARARGS
+raise_varargs_zero ( -- next:on_error )
+why = do_raise(NULL, NULL, NULL);
+
+raise_varargs_one ( a1 -- next:on_error )
+why = do_raise(a1, NULL, NULL);
+
+raise_varargs_two ( a1 a2 -- next:on_error )
+why = do_raise(a1, a2, NULL);
+
+raise_varargs_three ( a1 a2 a3 -- next:on_error )
+why = do_raise(a1, a2, a3);
+
+\ _ , LOAD
+load_locals ( -- )
+if ((x = f->f_locals) != NULL) {
+        Py_INCREF(x);
+        PUSH(x);
+        NEXT();
+}
+PyErr_SetString(PyExc_SystemError, "no locals");
+ERROR();
+
+load_name ( #i -- )
+a2 = GETITEM(names, i);
+if ((a1 = f->f_locals) == NULL) {
+        PyErr_Format(PyExc_SystemError,
+                     "no locals when loading %s",
+                     PyObject_REPR(a2));
+        why = WHY_EXCEPTION;
+        ERROR();
+}
+if (PyDict_CheckExact(a1)) {
+        x = PyDict_GetItem(a1, a2);
+        Py_XINCREF(x);
+} else {
+        x = PyObject_GetItem(a1, a2);
+        if (x == NULL && PyErr_Occurred()) {
+                if (!PyErr_ExceptionMatches(PyExc_KeyError))
+                        ERROR();
+                PyErr_Clear();
+        }
+}
+if (x == NULL) {
+        x = PyDict_GetItem(f->f_globals, a2);
+        if (x == NULL) {
+                x = PyDict_GetItem(f->f_builtins, a2);
+                if (x == NULL) {
+                        format_exc_check_arg(PyExc_NameError, NAME_ERROR_MSG, a2);
+                        ERROR();
+                }
+        }
+        Py_INCREF(x);
+}
+PUSH(x);
+NEXT();
+
+load_global ( #i -- )
+a1 = GETITEM(names, i);
+if (PyString_CheckExact(a1)) {
+        /* Inline the PyDict_GetItem() calls.
+	   WARNING: this is an extreme speed hack.
+	   Do not try this at home. */
+        long hash = ((PyStringObject *)a1)->ob_shash;
+        if (hash != -1) {
+                PyDictObject *d = (PyDictObject *)(f->f_globals);
+                PyDictEntry  *e = d->ma_lookup(d, a1, hash);
+                if (e == NULL) {
+                        x = NULL;
+                        ERROR();
+                }
+                x = e->me_value;
+                if (x != NULL) {
+                        Py_INCREF(x);
+                        PUSH(x);
+                        NEXT();
+                }
+                d = (PyDictObject *)(f->f_builtins);
+                e = d->ma_lookup(d, a1, hash);
+                if (e == NULL) {
+                        x = NULL;
+                        ERROR();
+                }
+                x = e->me_value;
+                if (x != NULL) {
+                        Py_INCREF(x);
+                        PUSH(x);
+                        NEXT();
+                }
+                goto load_global_error;
+        }
+}
+/* This is the un-inlined version of the code above */
+x = PyDict_GetItem(f->f_globals, a1);
+if (x == NULL) {
+        x = PyDict_GetItem(f->f_builtins, a1);
+        if (x == NULL) {
+        load_global_error:
+                format_exc_check_arg(
+                        PyExc_NameError,
+                        GLOBAL_NAME_ERROR_MSG,
+                        a1);
+                ERROR();
+        }
+}
+Py_INCREF(x);
+PUSH(x);
+NEXT();
+
+load_closure ( #i -- a  inc:a  next:a )
+a = freevars[i];
+
+load_deref ( #i -- )
+x = freevars[i];
+a2 = PyCell_Get(x);
+if (a2 != NULL) {
+        PUSH(a2);
+        NEXT();
+}
+err = -1;
+/* Don't stomp existing exception */
+if (PyErr_Occurred())
+        ERROR();
+if (i < PyTuple_GET_SIZE(co->co_cellvars)) {
+        a1 = PyTuple_GET_ITEM(co->co_cellvars, i);
+        format_exc_check_arg(
+                PyExc_UnboundLocalError,
+                UNBOUNDLOCAL_ERROR_MSG,
+                a1);
+} else {
+        a1 = PyTuple_GET_ITEM(
+                co->co_freevars,
+                i - PyTuple_GET_SIZE(co->co_cellvars));
+        format_exc_check_arg(
+                PyExc_NameError,
+                UNBOUNDFREE_ERROR_MSG,
+                a1);
+}
+ERROR();
+
+load_attr ( #i a1 -- a3  dec:a1  next:a3 )
+a2 = GETITEM(names, i);
+a3 = PyObject_GetAttr(a1, a2);
+
+\ _ , VALUE
+return_value ( a -- next:fast_block_end )
+retval = a;
+why = WHY_RETURN;
+
+yield_value ( a -- next:fast_yield )
+retval = a;
+f->f_stacktop = stack_pointer;
+why = WHY_YIELD;
+
+\ _ , EXEC_STMT
+exec_stmt ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:on_error )
+err = exec_statement(f, a1, a2, a3);
+
+\ _ , POP_BLOCK
+pop_block ( -- next:next_opcode )
+PyTryBlock *b = PyFrame_BlockPop(f);
+while (STACK_LEVEL() > b->b_level) {
+        a1 = POP();
+        Py_DECREF(a1);
+}
+
+\ _ , END_FINALLY
+end_finally ( a1 -- next:on_error )
+if (PyInt_Check(a1)) {
+        why = (enum why_code) PyInt_AS_LONG(a1);
+        assert(why != WHY_YIELD);
+        if (why == WHY_RETURN || why == WHY_CONTINUE)
+                retval = POP();
+} else if (PyExceptionClass_Check(a1) || PyString_Check(a1)) {
+        a2 = POP();
+        a3 = POP();
+        PyErr_Restore(a1, a2, a3);
+        why = WHY_RERAISE;
+        ERROR();
+} else if (a1 != Py_None) {
+        PyErr_SetString(PyExc_SystemError, "'finally' pops bad exception");
+        why = WHY_EXCEPTION;
+}
+Py_DECREF(a1);
+
+\ _ , BUILD
+build_class ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:on_error )
+x = a = build_class(a3, a2, a1);
+
+build_tuple ( #i -- )
+x = PyTuple_New(i);
+if (x != NULL) {
+        for (; --i >= 0;) {
+                a1 = POP();
+                PyTuple_SET_ITEM(x, i, a1);
+        }
+        PUSH(x);
+        NEXT();
+}
+ERROR();
+
+build_list ( #i -- )
+x = PyList_New(i);
+if (x != NULL) {
+        for (; --i >= 0;) {
+                a1 = POP();
+                PyList_SET_ITEM(x, i, a1);
+        }
+        PUSH(x);
+        NEXT();
+}
+ERROR();
+
+build_map ( #i -- a  next:a )
+a = _PyDict_NewPresized(i);
+
+store_map ( a1 a2 a3 -- a1  dec:a2 dec:a3 next:error )
+/* a1 == dict, a2 == value, a3 == key */
+assert (PyDict_CheckExact(a1));
+err = PyDict_SetItem(a1, a3, a2);  /* a1[a3] = a2 */
+
+build_slice_two ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+a = PySlice_New(a1, a2, NULL);
+
+build_slice_three ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:a )
+a = PySlice_New(a1, a2, a3);
+
+\ _ , STORE
+store_name ( #i -- )
+a2 = GETITEM(names, i);
+a1 = POP();
+if ((x = f->f_locals) != NULL) {
+        if (PyDict_CheckExact(x))
+                err = PyDict_SetItem(x, a2, a1);
+        else
+                err = PyObject_SetItem(x, a2, a1);
+        Py_DECREF(a1);
+        if (err == 0) NEXT();
+        ERROR();
+}
+PyErr_Format(PyExc_SystemError,
+             "no locals found when storing %s",
+             PyObject_REPR(a2));
+ERROR();
+
+store_attr ( #i a1 a2 -- dec:a1 dec:a2  next:error )
+a3 = GETITEM(names, i);
+err = PyObject_SetAttr(a2, a3, a1); /* a2.a3 = a1 */
+
+store_global ( #i a1 -- dec:a1  next:error )
+a2 = GETITEM(names, i);
+err = PyDict_SetItem(f->f_globals, a2, a1);
+
+store_deref ( #i a -- dec:a  next:next_opcode )
+x = freevars[i];
+PyCell_Set(x, a);
+
+\ _ , DELETE
+delete_name ( #i -- )
+a1 = GETITEM(names, i);
+if ((x = f->f_locals) != NULL) {
+        if ((err = PyObject_DelItem(x, a1)) != 0)
+                format_exc_check_arg(PyExc_NameError, NAME_ERROR_MSG, a1);
+        ERROR();
+}
+PyErr_Format(PyExc_SystemError,
+             "no locals when deleting %s",
+             PyObject_REPR(a1));
+ERROR();
+
+delete_attr ( #i a1 -- dec:a1  next:on_error )
+a2 = GETITEM(names, i);
+err = PyObject_SetAttr(a1, a2, (PyObject *) NULL); /* del a1.a2 */
+
+delete_global ( #i -- next:on_error )
+a1 = GETITEM(names, i);
+if ((err = PyDict_DelItem(f->f_globals, a1)) != 0)
+        format_exc_check_arg(PyExc_NameError, GLOBAL_NAME_ERROR_MSG, a1);
+
+delete_fast ( #i -- )
+x = GETLOCAL(i);
+if (x != NULL) {
+        SETLOCAL(i, NULL);
+        NEXT();
+}
+format_exc_check_arg(
+        PyExc_UnboundLocalError,
+        UNBOUNDLOCAL_ERROR_MSG,
+        PyTuple_GetItem(co->co_varnames, i));
+ERROR();
+
+\ _ , UNPACK_SEQUENCE
+unpack_sequence ( #i a1 -- )
+if (PyTuple_CheckExact(a1) && PyTuple_GET_SIZE(a1) == i) {
+        PyObject **items = ((PyTupleObject *)a1)->ob_item;
+        while (i--) {
+                a2 = items[i];
+                Py_INCREF(a2);
+                PUSH(a2);
+        }
+        Py_DECREF(a1);
+        NEXT();
+} else if (PyList_CheckExact(a1) && PyList_GET_SIZE(a1) == i) {
+        PyObject **items = ((PyListObject *)a1)->ob_item;
+        while (i--) {
+                a2 = items[i];
+                Py_INCREF(a2);
+                PUSH(a2);
+        }
+} else if (unpack_iterable(a1, i, stack_pointer + i)) {
+        stack_pointer += i;
+} else {
+        /* unpack_iterable() raised an exception */
+        why = WHY_EXCEPTION;
+}
+Py_DECREF(a1);
+ERROR();
+
+\ _ , COMPARE_OP
+compare_op ( #i a1 a2 -- a  dec:a1 dec:a2  next:a )
+if (PyInt_CheckExact(a2) && PyInt_CheckExact(a1)) {
+        /* INLINE: cmp(int, int) */
+        register long u, v;
+        register int res;
+        u = PyInt_AS_LONG(a1);
+        v = PyInt_AS_LONG(a2);
+        switch (i) {
+        case PyCmp_LT: res = u <  v; break;
+        case PyCmp_LE: res = u <= v; break;
+        case PyCmp_EQ: res = u == v; break;
+        case PyCmp_NE: res = u != v; break;
+        case PyCmp_GT: res = u >  v; break;
+        case PyCmp_GE: res = u >= v; break;
+        case PyCmp_IS: res = a1 == a2; break;
+        case PyCmp_IS_NOT: res = a1 != a2; break;
+        default: res = -1;
+        }
+        if (res < 0)
+                a = cmp_outcome(i, a1, a2);
+        else {
+                a = res ? Py_True : Py_False;
+                Py_INCREF(a);
+        }
+} else
+        a = cmp_outcome(i, a1, a2);
+
+\ _ , IMPORT
+import_name ( #i -- )
+a3 = GETITEM(names, i);
+x = PyDict_GetItemString(f->f_builtins, "__import__");
+if (x == NULL) {
+        PyErr_SetString(PyExc_ImportError, "__import__ not found");
+        ERROR();
+}
+Py_INCREF(x);
+a2 = POP();
+a1 = TOP();
+if (PyInt_AsLong(a1) != -1 || PyErr_Occurred())
+        a3 = PyTuple_Pack(5,
+                          a3,
+                          f->f_globals,
+                          f->f_locals == NULL ? Py_None : f->f_locals,
+                          a2,
+                          a1);
+else
+        a3 = PyTuple_Pack(4,
+                          a3,
+                          f->f_globals,
+                          f->f_locals == NULL ? Py_None : f->f_locals,
+                          a2);
+Py_DECREF(a2);
+Py_DECREF(a1);
+if (a3 == NULL) {
+        a1 = POP();
+        Py_DECREF(x);
+        x = NULL;
+        ERROR();
+}
+a2 = x;
+x = PyEval_CallObject(a2, a3);
+Py_DECREF(a2);
+Py_DECREF(a3);
+SET_TOP(x);
+if (x != NULL) NEXT();
+ERROR();
+
+import_star ( a1 -- )
+PyFrame_FastToLocals(f);
+if ((x = f->f_locals) == NULL) {
+        PyErr_SetString(PyExc_SystemError, "no locals found during 'import *'");
+        ERROR();
+}
+err = import_all_from(x, a1);
+PyFrame_LocalsToFast(f, 0);
+Py_DECREF(a1);
+if (err == 0) NEXT();
+ERROR();
+
+import_from ( #i a1 -- a1 a3  next:a3 )
+a2 = GETITEM(names, i);
+a3 = import_from(a1, a2);
+
+\ _ , JUMP
+jump_forward ( #i -- )
+JUMPBY(i);
+
+jump_if_false ( #i a1 -- a1 )
+if (a1 == Py_True)
+        ;
+else if (a1 == Py_False)
+        JUMPBY(i);
+else {
+        err = PyObject_IsTrue(a1);
+        if (err > 0)
+                err = 0;
+        else if (err == 0)
+                JUMPBY(i);
+        else
+                ERROR();
+        NEXT();
+}
+
+jump_if_true ( #i a1 -- a1 )
+if (a1 == Py_False)
+        ;
+else if (a1 == Py_True)
+        JUMPBY(i);
+else {
+        err = PyObject_IsTrue(a1);
+        if (err > 0) {
+                err = 0;
+                JUMPBY(i);
+        } else if (err == 0)
+                ;
+        else
+                ERROR();
+        NEXT();
+}
+
+jump_absolute ( #i -- next:next_opcode )
+JUMPTO(i);
+
+\ _ , ITER
+get_iter ( -- )
+/* before: [obj]; after [getiter(obj)] */
+a1 = TOP();
+x = PyObject_GetIter(a1);
+Py_DECREF(a1);
+if (x != NULL) {
+        SET_TOP(x);
+        NEXT();
+}
+STACKADJ(-1);
+ERROR();
+
+for_iter ( #i -- )
+/* before: [iter]; after: [iter, iter()] *or* [] */
+a1 = TOP();
+x = (*a1->ob_type->tp_iternext)(a1);
+if (x != NULL) {
+        PUSH(x);
+        NEXT();
+}
+if (PyErr_Occurred()) {
+        if (!PyErr_ExceptionMatches(PyExc_StopIteration))
+                ERROR();
+        PyErr_Clear();
+}
+/* iterator ended normally */
+x = a1 = POP();
+Py_DECREF(a1);
+JUMPBY(i);
+NEXT();
+
+\ _ , LOOP
+break_loop ( -- next:fast_block_end )
+why = WHY_BREAK;
+
+continue_loop ( #i -- )
+retval = PyInt_FromLong(i);
+if (!retval) {
+        x = NULL;
+        ERROR();
+}
+why = WHY_CONTINUE;
+goto fast_block_end;
+
+\ _ , SETUP
+\ NOTE: If you add any new block-setup opcodes that are not try/except/finally
+\ handlers, you may need to update the PyGen_NeedsFinalizing() function.
+
+setup_loop ( #i -- next:next_opcode )
+PyFrame_BlockSetup(f, SETUP_LOOP, INSTR_OFFSET() + i, STACK_LEVEL());
+
+setup_except ( #i -- next:next_opcode )
+PyFrame_BlockSetup(f, SETUP_EXCEPT, INSTR_OFFSET() + i, STACK_LEVEL());
+
+setup_finally ( #i -- next:next_opcode )
+PyFrame_BlockSetup(f, SETUP_FINALLY, INSTR_OFFSET() + i, STACK_LEVEL());
+
+\ _ , WITH_CLEANUP
+with_cleanup ( -- )
+{
+        /* At the top of the stack are 1-3 values indicating
+           how/why we entered the finally clause:
+           - TOP = None
+           - (TOP, SECOND) = (WHY_{RETURN,CONTINUE}), retval
+           - TOP = WHY_*; no retval below it
+           - (TOP, SECOND, THIRD) = exc_info()
+           Below them is EXIT, the context.__exit__ bound method.
+           In the last case, we must call
+             EXIT(TOP, SECOND, THIRD)
+           otherwise we must call
+             EXIT(None, None, None)
+
+           In all cases, we remove EXIT from the stack, leaving
+           the rest in the same order.
+
+           In addition, if the stack represents an exception,
+           *and* the function call returns a 'true' value, we
+           "zap" this information, to prevent END_FINALLY from
+           re-raising the exception.  (But non-local gotos
+           should still be resumed.)
+        */
+
+        PyObject *exit_func;
+
+        a1 = POP();
+        if (a1 == Py_None) {
+                exit_func = TOP();
+                SET_TOP(a1);
+                a2 = a3 = Py_None;
+        }
+        else if (PyInt_Check(a1)) {
+                switch(PyInt_AS_LONG(a1)) {
+                case WHY_RETURN:
+                case WHY_CONTINUE:
+                        /* Retval in TOP. */
+                        exit_func = SECOND();
+                        SET_SECOND(TOP());
+                        SET_TOP(a1);
+                        break;
+                default:
+                        exit_func = TOP();
+                        SET_TOP(a1);
+                        break;
+                }
+                a1 = a2 = a3 = Py_None;
+        }
+        else {
+                a2 = TOP();
+                a3 = SECOND();
+                exit_func = THIRD();
+                SET_TOP(a1);
+                SET_SECOND(a2);
+                SET_THIRD(a3);
+        }
+        /* XXX Not the fastest way to call it... */
+        x = PyObject_CallFunctionObjArgs(exit_func, a1, a2, a3,
+                                         NULL);
+        Py_DECREF(exit_func);
+        if (x == NULL)
+                ERROR(); /* Go to error exit */
+        if (a1 != Py_None)
+                err = PyObject_IsTrue(x);
+        else
+                err = 0;
+        Py_DECREF(x);
+        if (err < 0)
+                ERROR(); /* Go to error exit */
+        else if (err > 0) {
+                /* There was an exception and a true return */
+                STACKADJ(-2);
+                Py_INCREF(Py_None);
+                SET_TOP(Py_None);
+                Py_DECREF(a1);
+                Py_DECREF(a2);
+                Py_DECREF(a3);
+        } else {
+                /* The stack was rearranged to remove EXIT
+                   above. Let END_FINALLY do its thing */
+        }
+        ERROR();
+}
+
+\ _ , CALL_FUNCTION
+call_function ( #i -- )
+PyObject **sp = stack_pointer;
+x = call_function(&sp, i);
+stack_pointer = sp;
+PUSH(x);
+if (x != NULL) NEXT();
+ERROR();
+
+call_function_var_kw ( #i -- )
+int opcode = i & 0x0000FFFF;
+int oparg  = i>>16;
+int na     = oparg & 0xff;
+int nk     = (oparg>>8) & 0xff;
+int flags  = (opcode - CALL_FUNCTION) & 3;
+int n      = na + 2 * nk;
+PyObject **pfunc, *func, **sp;
+if (flags & CALL_FLAG_VAR)
+        n++;
+if (flags & CALL_FLAG_KW)
+        n++;
+pfunc = stack_pointer - n - 1;
+func  = *pfunc;
+if (PyMethod_Check(func) && PyMethod_GET_SELF(func) != NULL) {
+        PyObject *self = PyMethod_GET_SELF(func);
+        Py_INCREF(self);
+        func = PyMethod_GET_FUNCTION(func);
+        Py_INCREF(func);
+        Py_DECREF(*pfunc);
+        *pfunc = self;
+        na++;
+        n++;
+} else
+        Py_INCREF(func);
+sp = stack_pointer;
+x = ext_do_call(func, &sp, flags, na, nk);
+stack_pointer = sp;
+Py_DECREF(func);
+while (stack_pointer > pfunc) {
+        a1 = POP();
+        Py_DECREF(a1);
+}
+PUSH(x);
+if (x != NULL) NEXT();
+ERROR();
+
+\ _ , MAKE
+make_function ( #i -- )
+a1 = POP(); /* code object */
+x = PyFunction_New(a1, f->f_globals);
+Py_DECREF(a1);
+/* XXX Maybe this should be a separate opcode? */
+if (x != NULL && i > 0) {
+        a1 = PyTuple_New(i);
+        if (a1 == NULL) {
+                Py_DECREF(x);
+                x = NULL;
+                ERROR();
+        }
+        while (--i >= 0) {
+                a2 = POP();
+                PyTuple_SET_ITEM(a1, i, a2);
+        }
+        err = PyFunction_SetDefaults(x, a1);
+        Py_DECREF(a1);
+}
+PUSH(x);
+ERROR();
+
+make_closure ( #i -- )
+a1 = POP(); /* code object */
+x = PyFunction_New(a1, f->f_globals);
+Py_DECREF(a1);
+if (x != NULL) {
+        a1 = POP();
+        if (PyFunction_SetClosure(x, a1) != 0) {
+                /* Can't happen unless bytecode is corrupt. */
+                why = WHY_EXCEPTION;
+        }
+        Py_DECREF(a1);
+}
+if (x != NULL && i > 0) {
+        a1 = PyTuple_New(i);
+        if (a1 == NULL) {
+                Py_DECREF(x);
+                x = NULL;
+                ERROR();
+        }
+        while (--i >= 0) {
+                a2 = POP();
+                PyTuple_SET_ITEM(a1, i, a2);
+        }
+        if (PyFunction_SetDefaults(x, a1) != 0) {
+                /* Can't happen unless
+                   PyFunction_SetDefaults changes. */
+                why = WHY_EXCEPTION;
+        }
+        Py_DECREF(a1);
+}
+PUSH(x);
+ERROR();
+
+\ _. Superinstructions
+ff = load_fast load_fast
+fc = load_fast load_const
+cf = load_const load_fast
+cc = load_const load_const
+
+ffbinary_power = load_fast load_fast   binary_power
+fcbinary_power = load_fast load_const  binary_power
+cfbinary_power = load_const load_fast  binary_power
+ccbinary_power = load_const load_const binary_power
+ffbinary_multiply = load_fast load_fast   binary_multiply
+fcbinary_multiply = load_fast load_const  binary_multiply
+cfbinary_multiply = load_const load_fast  binary_multiply
+ccbinary_multiply = load_const load_const binary_multiply
+ffbinary_divide = load_fast load_fast   binary_divide
+fcbinary_divide = load_fast load_const  binary_divide
+cfbinary_divide = load_const load_fast  binary_divide
+ccbinary_divide = load_const load_const binary_divide
+ffbinary_true_divide = load_fast load_fast   binary_true_divide
+fcbinary_true_divide = load_fast load_const  binary_true_divide
+cfbinary_true_divide = load_const load_fast  binary_true_divide
+ccbinary_true_divide = load_const load_const binary_true_divide
+ffbinary_floor_divide = load_fast load_fast   binary_floor_divide
+fcbinary_floor_divide = load_fast load_const  binary_floor_divide
+cfbinary_floor_divide = load_const load_fast  binary_floor_divide
+ccbinary_floor_divide = load_const load_const binary_floor_divide
+ffbinary_modulo = load_fast load_fast   binary_modulo
+fcbinary_modulo = load_fast load_const  binary_modulo
+cfbinary_modulo = load_const load_fast  binary_modulo
+ccbinary_modulo = load_const load_const binary_modulo
+ffbinary_add = load_fast load_fast   binary_add
+fcbinary_add = load_fast load_const  binary_add
+cfbinary_add = load_const load_fast  binary_add
+ccbinary_add = load_const load_const binary_add
+ffbinary_subtract = load_fast load_fast   binary_subtract
+fcbinary_subtract = load_fast load_const  binary_subtract
+cfbinary_subtract = load_const load_fast  binary_subtract
+ccbinary_subtract = load_const load_const binary_subtract
+ffbinary_subscr = load_fast load_fast   binary_subscr
+fcbinary_subscr = load_fast load_const  binary_subscr
+cfbinary_subscr = load_const load_fast  binary_subscr
+ccbinary_subscr = load_const load_const binary_subscr
+ffbinary_lshift = load_fast load_fast   binary_lshift
+fcbinary_lshift = load_fast load_const  binary_lshift
+cfbinary_lshift = load_const load_fast  binary_lshift
+ccbinary_lshift = load_const load_const binary_lshift
+ffbinary_rshift = load_fast load_fast   binary_rshift
+fcbinary_rshift = load_fast load_const  binary_rshift
+cfbinary_rshift = load_const load_fast  binary_rshift
+ccbinary_rshift = load_const load_const binary_rshift
+ffbinary_and = load_fast load_fast   binary_and
+fcbinary_and = load_fast load_const  binary_and
+cfbinary_and = load_const load_fast  binary_and
+ccbinary_and = load_const load_const binary_and
+ffbinary_xor = load_fast load_fast   binary_xor
+fcbinary_xor = load_fast load_const  binary_xor
+cfbinary_xor = load_const load_fast  binary_xor
+ccbinary_xor = load_const load_const binary_xor
+ffbinary_or = load_fast load_fast   binary_or
+fcbinary_or = load_fast load_const  binary_or
+cfbinary_or = load_const load_fast  binary_or
+ccbinary_or = load_const load_const binary_or
+fflist_append = load_fast load_fast   list_append
+fclist_append = load_fast load_const  list_append
+cflist_append = load_const load_fast  list_append
+cclist_append = load_const load_const list_append
+ffinplace_power = load_fast load_fast   inplace_power
+fcinplace_power = load_fast load_const  inplace_power
+cfinplace_power = load_const load_fast  inplace_power
+ccinplace_power = load_const load_const inplace_power
+ffinplace_multiply = load_fast load_fast   inplace_multiply
+fcinplace_multiply = load_fast load_const  inplace_multiply
+cfinplace_multiply = load_const load_fast  inplace_multiply
+ccinplace_multiply = load_const load_const inplace_multiply
+ffinplace_divide = load_fast load_fast   inplace_divide
+fcinplace_divide = load_fast load_const  inplace_divide
+cfinplace_divide = load_const load_fast  inplace_divide
+ccinplace_divide = load_const load_const inplace_divide
+ffinplace_true_divide = load_fast load_fast   inplace_true_divide
+fcinplace_true_divide = load_fast load_const  inplace_true_divide
+cfinplace_true_divide = load_const load_fast  inplace_true_divide
+ccinplace_true_divide = load_const load_const inplace_true_divide
+ffinplace_floor_divide = load_fast load_fast   inplace_floor_divide
+fcinplace_floor_divide = load_fast load_const  inplace_floor_divide
+cfinplace_floor_divide = load_const load_fast  inplace_floor_divide
+ccinplace_floor_divide = load_const load_const inplace_floor_divide
+ffinplace_modulo = load_fast load_fast   inplace_modulo
+fcinplace_modulo = load_fast load_const  inplace_modulo
+cfinplace_modulo = load_const load_fast  inplace_modulo
+ccinplace_modulo = load_const load_const inplace_modulo
+ffinplace_add = load_fast load_fast   inplace_add
+fcinplace_add = load_fast load_const  inplace_add
+cfinplace_add = load_const load_fast  inplace_add
+ccinplace_add = load_const load_const inplace_add
+ffinplace_subtract = load_fast load_fast   inplace_subtract
+fcinplace_subtract = load_fast load_const  inplace_subtract
+cfinplace_subtract = load_const load_fast  inplace_subtract
+ccinplace_subtract = load_const load_const inplace_subtract
+ffinplace_lshift = load_fast load_fast   inplace_lshift
+fcinplace_lshift = load_fast load_const  inplace_lshift
+cfinplace_lshift = load_const load_fast  inplace_lshift
+ccinplace_lshift = load_const load_const inplace_lshift
+ffinplace_rshift = load_fast load_fast   inplace_rshift
+fcinplace_rshift = load_fast load_const  inplace_rshift
+cfinplace_rshift = load_const load_fast  inplace_rshift
+ccinplace_rshift = load_const load_const inplace_rshift
+ffinplace_and = load_fast load_fast   inplace_and
+fcinplace_and = load_fast load_const  inplace_and
+cfinplace_and = load_const load_fast  inplace_and
+ccinplace_and = load_const load_const inplace_and
+ffinplace_xor = load_fast load_fast   inplace_xor
+fcinplace_xor = load_fast load_const  inplace_xor
+cfinplace_xor = load_const load_fast  inplace_xor
+ccinplace_xor = load_const load_const inplace_xor
+ffinplace_or = load_fast load_fast   inplace_or
+fcinplace_or = load_fast load_const  inplace_or
+cfinplace_or = load_const load_fast  inplace_or
+ccinplace_or = load_const load_const inplace_or
+ffslice_left = load_fast load_fast   slice_left
+fcslice_left = load_fast load_const  slice_left
+cfslice_left = load_const load_fast  slice_left
+ccslice_left = load_const load_const slice_left
+ffslice_right = load_fast load_fast   slice_right
+fcslice_right = load_fast load_const  slice_right
+cfslice_right = load_const load_fast  slice_right
+ccslice_right = load_const load_const slice_right
+ffdelete_slice_left = load_fast load_fast   delete_slice_left
+fcdelete_slice_left = load_fast load_const  delete_slice_left
+cfdelete_slice_left = load_const load_fast  delete_slice_left
+ccdelete_slice_left = load_const load_const delete_slice_left
+ffdelete_slice_right = load_fast load_fast   delete_slice_right
+fcdelete_slice_right = load_fast load_const  delete_slice_right
+cfdelete_slice_right = load_const load_fast  delete_slice_right
+ccdelete_slice_right = load_const load_const delete_slice_right
+ffdelete_subscr = load_fast load_fast   delete_subscr
+fcdelete_subscr = load_fast load_const  delete_subscr
+cfdelete_subscr = load_const load_fast  delete_subscr
+ccdelete_subscr = load_const load_const delete_subscr
+ffstore_attr = load_fast load_fast   store_attr
+fcstore_attr = load_fast load_const  store_attr
+cfstore_attr = load_const load_fast  store_attr
+ccstore_attr = load_const load_const store_attr
+ffcompare_op = load_fast load_fast   compare_op
+fccompare_op = load_fast load_const  compare_op
+cfcompare_op = load_const load_fast  compare_op
+cccompare_op = load_const load_const compare_op
+
+funary_positive = load_fast unary_positive
+funary_negative = load_fast unary_negative
+funary_convert  = load_fast unary_convert
+funary_invert   = load_fast unary_invert
