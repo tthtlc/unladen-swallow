@@ -468,13 +468,6 @@ Miscellaneous opcodes.
    Calls ``list.append(TOS1, TOS)``.  Used to implement list comprehensions.
 
 
-.. opcode:: LOAD_LOCALS ()
-
-   Pushes a reference to the locals of the current scope on the stack. This is used
-   in the code for a class definition: After the class body is evaluated, the
-   locals are passed to the class definition.
-
-
 .. opcode:: RETURN_VALUE ()
 
    Returns with TOS to the caller of the function.

@@ -780,8 +780,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return 0;
 		case WITH_CLEANUP:
 			return -1; /* XXX Sometimes more */
-		case LOAD_LOCALS:
-			return 1;
 		case RETURN_VALUE:
 			return -1;
 		case IMPORT_STAR:
@@ -1464,8 +1462,15 @@ compiler_class(struct compiler *c, stmt_ty s)
 		compiler_exit_scope(c);
 		return 0;
 	}
+	str = PyString_InternFromString("#@locals");
+	if (!str || !compiler_nameop(c, str, Load)) {
+		Py_XDECREF(str);
+		compiler_exit_scope(c);
+		return 0;
+	}
+	Py_DECREF(str);
 
-	ADDOP_IN_SCOPE(c, LOAD_LOCALS);
+	ADDOP_I(c, CALL_FUNCTION, 0);
 	ADDOP_IN_SCOPE(c, RETURN_VALUE);
 	co = assemble(c, 1);
 	compiler_exit_scope(c);

@@ -1430,7 +1430,8 @@ class AbstractClassCode:
 
     def finish(self):
         self.graph.startExitBlock()
-        self.emit('LOAD_LOCALS')
+        self.emit('LOAD_GLOBAL', '#@locals')
+        self.emit('CALL_FUNCTION', 0)
         self.emit('RETURN_VALUE')
 
 class ClassCodeGenerator(NestedScopeMixin, AbstractClassCode, CodeGenerator):

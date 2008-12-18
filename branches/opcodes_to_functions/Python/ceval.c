@@ -1688,15 +1688,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			}
 			break;
 
-		case LOAD_LOCALS:
-			if ((x = f->f_locals) != NULL) {
-				Py_INCREF(x);
-				PUSH(x);
-				continue;
-			}
-			PyErr_SetString(PyExc_SystemError, "no locals");
-			break;
-
 		case RETURN_VALUE:
 			retval = POP();
 			why = WHY_RETURN;
