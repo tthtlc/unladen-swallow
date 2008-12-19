@@ -1046,6 +1046,7 @@ class CodeGenerator:
             self.emit('STORE_SUBSCR')
 
     def visitExec(self, node):
+        self.emit('LOAD_GLOBAL', '#@exec')
         self.visit(node.expr)
         if node.locals is None:
             self.emit('LOAD_CONST', None)
@@ -1055,7 +1056,7 @@ class CodeGenerator:
             self.emit('DUP_TOP')
         else:
             self.visit(node.globals)
-        self.emit('EXEC_STMT')
+        self.emit('CALL_FUNCTION', 3)
 
     def visitCallFunc(self, node):
         pos = 0

@@ -155,6 +155,7 @@ static int compiler_addop_j(struct compiler *, int, basicblock *, int);
 static basicblock *compiler_use_new_block(struct compiler *);
 static int compiler_error(struct compiler *, const char *);
 static int compiler_nameop(struct compiler *, identifier, expr_context_ty);
+static int compiler_load_global(struct compiler *, const char *);
 
 static PyCodeObject *compiler_mod(struct compiler *, mod_ty);
 static int compiler_visit_stmt(struct compiler *, stmt_ty);
@@ -784,8 +785,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return -1;
 		case IMPORT_STAR:
 			return -1;
-		case EXEC_STMT:
-			return -3;
 		case YIELD_VALUE:
 			return 0;
 
@@ -1419,7 +1418,7 @@ compiler_function(struct compiler *c, stmt_ty s)
 static int
 compiler_class(struct compiler *c, stmt_ty s)
 {
-	int n, i, arg;
+	int n, i;
 	PyCodeObject *co;
 	PyObject *str;
 	asdl_seq* decos = s->v.ClassDef.decorator_list;
@@ -1427,23 +1426,8 @@ compiler_class(struct compiler *c, stmt_ty s)
 	if (!compiler_decorators(c, decos))
 		return 0;
 
-	/* Manually insert the LOAD_GLOBAL statement. compiler_nameop won't do the
-	   right thing here. */
-	str = PyString_InternFromString("#@buildclass");
-	if (!str) {
-		compiler_exit_scope(c);
-		return 0;
-	}
-	arg = compiler_add_o(c, c->u->u_names, str);
-	Py_DECREF(str);
-	if (arg < 0) {
-		compiler_exit_scope(c);
-		return 0;
-	}
-	if (!compiler_addop_i(c, LOAD_GLOBAL, arg)) {
-		compiler_exit_scope(c);
-		return 0;
-	}
+	if (!compiler_load_global(c, "#@buildclass"))
+        return 0;
 
 	/* push class name on stack, needed by #@buildclass */
 	ADDOP_O(c, LOAD_CONST, s->v.ClassDef.name, consts);
@@ -1478,15 +1462,11 @@ compiler_class(struct compiler *c, stmt_ty s)
 		compiler_exit_scope(c);
 		return 0;
 	}
-	str = PyString_InternFromString("#@locals");
-	if (!str || !compiler_nameop(c, str, Load)) {
-		Py_XDECREF(str);
-		compiler_exit_scope(c);
-		return 0;
-	}
-	Py_DECREF(str);
 
+	if (!compiler_load_global(c, "#@locals"))
+        return 0;
 	ADDOP_I(c, CALL_FUNCTION, 0);
+
 	ADDOP_IN_SCOPE(c, RETURN_VALUE);
 	co = assemble(c, 1);
 	compiler_exit_scope(c);
@@ -1508,6 +1488,29 @@ compiler_class(struct compiler *c, stmt_ty s)
 	if (!compiler_nameop(c, s->v.ClassDef.name, Store))
 		return 0;
 	return 1;
+}
+
+static int
+compiler_exec(struct compiler *c, stmt_ty s)
+{
+    if (!compiler_load_global(c, "#@exec"))
+        return 0;
+
+	VISIT(c, expr, s->v.Exec.body);
+	if (s->v.Exec.globals) {
+		VISIT(c, expr, s->v.Exec.globals);
+		if (s->v.Exec.locals) {
+			VISIT(c, expr, s->v.Exec.locals);
+		} else {
+			ADDOP(c, DUP_TOP);
+		}
+	} else {
+		ADDOP_O(c, LOAD_CONST, Py_None, consts);
+		ADDOP(c, DUP_TOP);
+	}
+    ADDOP_I(c, CALL_FUNCTION, 3);
+    ADDOP(c, POP_TOP);
+    return 1;
 }
 
 static int
@@ -2192,20 +2195,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 	case ImportFrom_kind:
 		return compiler_from_import(c, s);
 	case Exec_kind:
-		VISIT(c, expr, s->v.Exec.body);
-		if (s->v.Exec.globals) {
-			VISIT(c, expr, s->v.Exec.globals);
-			if (s->v.Exec.locals) {
-				VISIT(c, expr, s->v.Exec.locals);
-			} else {
-				ADDOP(c, DUP_TOP);
-			}
-		} else {
-			ADDOP_O(c, LOAD_CONST, Py_None, consts);
-			ADDOP(c, DUP_TOP);
-		}
-		ADDOP(c, EXEC_STMT);
-		break;
+        return compiler_exec(c, s);
 	case Global_kind:
 		break;
 	case Expr_kind:
@@ -2487,6 +2477,28 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
 	if (arg < 0)
 		return 0;
 	return compiler_addop_i(c, op, arg);
+}
+
+static int
+compiler_load_global(struct compiler *c, const char *global_name)
+{
+    int arg;
+    PyObject *str = PyString_InternFromString(global_name);
+    if (!str) {
+    	compiler_exit_scope(c);
+    	return 0;
+    }
+    arg = compiler_add_o(c, c->u->u_names, str);
+    Py_DECREF(str);
+    if (arg < 0) {
+    	compiler_exit_scope(c);
+    	return 0;
+    }
+    if (!compiler_addop_i(c, LOAD_GLOBAL, arg)) {
+    	compiler_exit_scope(c);
+    	return 0;
+    }
+    return 1;
 }
 
 static int

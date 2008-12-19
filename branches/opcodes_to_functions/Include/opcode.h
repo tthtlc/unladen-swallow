@@ -77,7 +77,7 @@ extern "C" {
 /*#define LOAD_LOCALS	82  Replaced with a function call to #@locals. */
 #define RETURN_VALUE	83
 #define IMPORT_STAR	84
-#define EXEC_STMT	85
+/*#define EXEC_STMT	85  Replaced with a function call to #@exec. */
 #define YIELD_VALUE	86
 #define POP_BLOCK	87
 #define END_FINALLY	88

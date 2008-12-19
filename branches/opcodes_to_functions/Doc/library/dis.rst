@@ -485,12 +485,6 @@ Miscellaneous opcodes.
    implements ``from module import *``.
 
 
-.. opcode:: EXEC_STMT ()
-
-   Implements ``exec TOS2,TOS1,TOS``.  The compiler fills missing optional
-   parameters with ``None``.
-
-
 .. opcode:: POP_BLOCK ()
 
    Removes one block from the block stack.  Per frame, there is a  stack of blocks,

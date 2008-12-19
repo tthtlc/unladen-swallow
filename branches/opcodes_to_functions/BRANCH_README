@@ -9,5 +9,5 @@ Opcodes targeted for removal:
 	- LOAD_LOCALS (done)
 	- BUILD_CLASS (done)
 	- MAKE_FUNCTION
-	- EXEC_STMT
+	- EXEC_STMT (done)
 	- PRINT_*

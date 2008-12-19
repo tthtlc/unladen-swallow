@@ -6,6 +6,7 @@
 #include "node.h"
 #include "code.h"
 #include "eval.h"
+#include "frameobject.h"
 
 #include <ctype.h>
 
@@ -296,6 +297,121 @@ PyDoc_STRVAR(callable_doc,
 \n\
 Return whether the object is callable (i.e., some kind of function).\n\
 Note that classes are callable, as are instances with a __call__() method.");
+
+
+static PyObject *
+builtin_exec(PyObject *self, PyObject *args)
+{
+	int n;
+	PyObject *v, *prog, *globals, *locals;
+    PyFrameObject *f;
+	int plain = 0;
+
+    if (!PyArg_UnpackTuple(args, "#@exec", 1, 3,
+	                       &prog, &globals, &locals))
+		return NULL;
+
+    f = PyThreadState_Get()->frame;
+
+	if (PyTuple_Check(prog) && globals == Py_None && locals == Py_None &&
+	    ((n = PyTuple_Size(prog)) == 2 || n == 3)) {
+		/* Backward compatibility hack */
+		globals = PyTuple_GetItem(prog, 1);
+		if (n == 3)
+			locals = PyTuple_GetItem(prog, 2);
+		prog = PyTuple_GetItem(prog, 0);
+	}
+	if (globals == Py_None) {
+		globals = PyEval_GetGlobals();
+		if (locals == Py_None) {
+			locals = PyEval_GetLocals();
+			plain = 1;
+		}
+		if (!globals || !locals) {
+			PyErr_SetString(PyExc_SystemError,
+					"globals and locals cannot be NULL");
+			return NULL;
+		}
+	}
+	else if (locals == Py_None)
+		locals = globals;
+	if (!PyString_Check(prog) &&
+	    !PyUnicode_Check(prog) &&
+	    !PyCode_Check(prog) &&
+	    !PyFile_Check(prog)) {
+		PyErr_SetString(PyExc_TypeError,
+			"exec: arg 1 must be a string, file, or code object");
+		return NULL;
+	}
+	if (!PyDict_Check(globals)) {
+		PyErr_SetString(PyExc_TypeError,
+		    "exec: arg 2 must be a dictionary or None");
+		return NULL;
+	}
+	if (!PyMapping_Check(locals)) {
+		PyErr_SetString(PyExc_TypeError,
+		    "exec: arg 3 must be a mapping or None");
+		return NULL;
+	}
+	if (PyDict_GetItemString(globals, "__builtins__") == NULL)
+		PyDict_SetItemString(globals, "__builtins__", f->f_builtins);
+	if (PyCode_Check(prog)) {
+		if (PyCode_GetNumFree((PyCodeObject *)prog) > 0) {
+			PyErr_SetString(PyExc_TypeError,
+		"code object passed to exec may not contain free variables");
+			return NULL;
+		}
+		v = PyEval_EvalCode((PyCodeObject *) prog, globals, locals);
+	}
+	else if (PyFile_Check(prog)) {
+		FILE *fp = PyFile_AsFile(prog);
+		char *name = PyString_AsString(PyFile_Name(prog));
+		PyCompilerFlags cf;
+		if (name == NULL)
+			return NULL;
+		cf.cf_flags = 0;
+		if (PyEval_MergeCompilerFlags(&cf))
+			v = PyRun_FileFlags(fp, name, Py_file_input, globals,
+					    locals, &cf);
+		else
+			v = PyRun_File(fp, name, Py_file_input, globals,
+				       locals);
+	}
+	else {
+		PyObject *tmp = NULL;
+		char *str;
+		PyCompilerFlags cf;
+		cf.cf_flags = 0;
+#ifdef Py_USING_UNICODE
+		if (PyUnicode_Check(prog)) {
+			tmp = PyUnicode_AsUTF8String(prog);
+			if (tmp == NULL)
+				return NULL;
+			prog = tmp;
+			cf.cf_flags |= PyCF_SOURCE_IS_UTF8;
+		}
+#endif
+		if (PyString_AsStringAndSize(prog, &str, NULL))
+			return NULL;
+		if (PyEval_MergeCompilerFlags(&cf))
+			v = PyRun_StringFlags(str, Py_file_input, globals,
+					      locals, &cf);
+		else
+			v = PyRun_String(str, Py_file_input, globals, locals);
+		Py_XDECREF(tmp);
+	}
+	if (plain)
+		PyFrame_LocalsToFast(f, 0);
+	if (v == NULL)
+		return NULL;
+	Py_DECREF(v);
+	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(exec_doc,
+"#@exec(program, [globals, [locals]]) -> None\n\
+\n\
+Execute Python code. For internal use only.");
 
 
 static PyObject *
@@ -2592,6 +2708,7 @@ static PyMethodDef builtin_methods[] = {
   	{"zip",         builtin_zip,        METH_VARARGS, zip_doc},
     /* The following built-in functions are for internal use only. */
 	{"#@buildclass",	builtin_buildclass,	    METH_VARARGS, buildclass_doc},
+	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
 	{NULL,		NULL},
 };
