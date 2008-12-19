@@ -1057,6 +1057,7 @@ class CodeGenerator:
         else:
             self.visit(node.globals)
         self.emit('CALL_FUNCTION', 3)
+        self.emit('POP_TOP')
 
     def visitCallFunc(self, node):
         pos = 0
