@@ -954,6 +954,7 @@ with_cleanup ( -- )
         if (err < 0)
                 ERROR(); /* Go to error exit */
         else if (err > 0) {
+                err = 0;
                 /* There was an exception and a true return */
                 STACKADJ(-2);
                 Py_INCREF(Py_None);
