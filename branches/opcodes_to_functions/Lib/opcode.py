@@ -120,7 +120,7 @@ def_op('EXEC_STMT', 85)
 def_op('YIELD_VALUE', 86)
 def_op('POP_BLOCK', 87)
 def_op('END_FINALLY', 88)
-def_op('BUILD_CLASS', 89)
+# def_op('BUILD_CLASS', 89)  Replaced with a function call to #@buildclass.
 
 HAVE_ARGUMENT = 90              # Opcodes from here have an argument:
 

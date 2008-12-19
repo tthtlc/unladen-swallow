@@ -219,6 +219,68 @@ PyDoc_STRVAR(bin_doc,
 \n\
 Return the binary representation of an integer or long integer.");
 
+static PyObject *
+builtin_buildclass(PyObject *self, PyObject *args)
+{
+	PyObject *metaclass = NULL, *result, *base, *methods, *bases, *name;
+
+	if (!PyArg_UnpackTuple(args, "#@buildclass", 3, 3,
+	                       &name, &bases, &methods))
+		return NULL;
+
+	if (PyDict_Check(methods))
+		metaclass = PyDict_GetItemString(methods, "__metaclass__");
+	if (metaclass != NULL)
+		Py_INCREF(metaclass);
+	else if (PyTuple_Check(bases) && PyTuple_GET_SIZE(bases) > 0) {
+		base = PyTuple_GET_ITEM(bases, 0);
+		metaclass = PyObject_GetAttrString(base, "__class__");
+		if (metaclass == NULL) {
+			PyErr_Clear();
+			metaclass = (PyObject *)base->ob_type;
+			Py_INCREF(metaclass);
+		}
+	}
+	else {
+		PyObject *g = PyEval_GetGlobals();
+		if (g != NULL && PyDict_Check(g))
+			metaclass = PyDict_GetItemString(g, "__metaclass__");
+		if (metaclass == NULL)
+			metaclass = (PyObject *) &PyClass_Type;
+		Py_INCREF(metaclass);
+	}
+	result = PyObject_CallFunctionObjArgs(metaclass, name, bases, methods,
+					      NULL);
+	Py_DECREF(metaclass);
+	if (result == NULL && PyErr_ExceptionMatches(PyExc_TypeError)) {
+		/* A type error here likely means that the user passed
+		   in a base that was not a class (such the random module
+		   instead of the random.random type).  Help them out with
+		   by augmenting the error message with more information.*/
+
+		PyObject *ptype, *pvalue, *ptraceback;
+
+		PyErr_Fetch(&ptype, &pvalue, &ptraceback);
+		if (PyString_Check(pvalue)) {
+			PyObject *newmsg;
+			newmsg = PyString_FromFormat(
+				"Error when calling the metaclass bases\n"
+				"    %s",
+				PyString_AS_STRING(pvalue));
+			if (newmsg != NULL) {
+				Py_DECREF(pvalue);
+				pvalue = newmsg;
+			}
+		}
+		PyErr_Restore(ptype, pvalue, ptraceback);
+	}
+	return result;
+}
+
+PyDoc_STRVAR(buildclass_doc,
+"#@buildclass(name, bases, methods) -> class\n\
+\n\
+Build a class. For internal use only.");
 
 static PyObject *
 builtin_callable(PyObject *self, PyObject *v)
@@ -2505,7 +2567,6 @@ static PyMethodDef builtin_methods[] = {
  	{"iter",	builtin_iter,       METH_VARARGS, iter_doc},
  	{"len",		builtin_len,        METH_O, len_doc},
  	{"locals",	(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
- 	{"#@locals",	(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
  	{"map",		builtin_map,        METH_VARARGS, map_doc},
  	{"max",		(PyCFunction)builtin_max,        METH_VARARGS | METH_KEYWORDS, max_doc},
  	{"min",		(PyCFunction)builtin_min,        METH_VARARGS | METH_KEYWORDS, min_doc},
@@ -2529,6 +2590,9 @@ static PyMethodDef builtin_methods[] = {
 #endif
  	{"vars",	builtin_vars,       METH_VARARGS, vars_doc},
   	{"zip",         builtin_zip,        METH_VARARGS, zip_doc},
+    /* The following built-in functions are for internal use only. */
+	{"#@buildclass",	builtin_buildclass,	    METH_VARARGS, buildclass_doc},
+ 	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
 	{NULL,		NULL},
 };
 

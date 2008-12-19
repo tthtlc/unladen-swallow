@@ -793,8 +793,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return 0;
 		case END_FINALLY:
 			return -1; /* or -2 or -3 if exception occurred */
-		case BUILD_CLASS:
-			return -2;
 
 		case STORE_NAME:
 			return -1;
@@ -1421,7 +1419,7 @@ compiler_function(struct compiler *c, stmt_ty s)
 static int
 compiler_class(struct compiler *c, stmt_ty s)
 {
-	int n, i;
+	int n, i, arg;
 	PyCodeObject *co;
 	PyObject *str;
 	asdl_seq* decos = s->v.ClassDef.decorator_list;
@@ -1429,7 +1427,25 @@ compiler_class(struct compiler *c, stmt_ty s)
 	if (!compiler_decorators(c, decos))
 		return 0;
 
-	/* push class name on stack, needed by BUILD_CLASS */
+	/* Manually insert the LOAD_GLOBAL statement. compiler_nameop won't do the
+	   right thing here. */
+	str = PyString_InternFromString("#@buildclass");
+	if (!str) {
+		compiler_exit_scope(c);
+		return 0;
+	}
+	arg = compiler_add_o(c, c->u->u_names, str);
+	Py_DECREF(str);
+	if (arg < 0) {
+		compiler_exit_scope(c);
+		return 0;
+	}
+	if (!compiler_addop_i(c, LOAD_GLOBAL, arg)) {
+		compiler_exit_scope(c);
+		return 0;
+	}
+
+	/* push class name on stack, needed by #@buildclass */
 	ADDOP_O(c, LOAD_CONST, s->v.ClassDef.name, consts);
 	/* push the tuple of base classes on the stack */
 	n = asdl_seq_LEN(s->v.ClassDef.bases);
@@ -1481,7 +1497,10 @@ compiler_class(struct compiler *c, stmt_ty s)
 	Py_DECREF(co);
 
 	ADDOP_I(c, CALL_FUNCTION, 0);
-	ADDOP(c, BUILD_CLASS);
+	
+	/* Call #@buildclass */
+	ADDOP_I(c, CALL_FUNCTION, 3);
+
 	/* apply decorators */
 	for (i = 0; i < asdl_seq_LEN(decos); i++) {
 		ADDOP_I(c, CALL_FUNCTION, 1);

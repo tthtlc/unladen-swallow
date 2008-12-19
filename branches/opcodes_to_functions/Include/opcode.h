@@ -81,7 +81,7 @@ extern "C" {
 #define YIELD_VALUE	86
 #define POP_BLOCK	87
 #define END_FINALLY	88
-#define BUILD_CLASS	89
+/*#define BUILD_CLASS	89  Replaced with a function call to #@buildclass. */
 
 #define HAVE_ARGUMENT	90	/* Opcodes from here have an argument: */
 

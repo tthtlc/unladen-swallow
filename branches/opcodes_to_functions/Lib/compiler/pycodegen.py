@@ -394,13 +394,14 @@ class CodeGenerator:
         walk(node.code, gen)
         gen.finish()
         self.set_lineno(node)
+        self.emit('LOAD_GLOBAL', '#@buildclass')
         self.emit('LOAD_CONST', node.name)
         for base in node.bases:
             self.visit(base)
         self.emit('BUILD_TUPLE', len(node.bases))
         self._makeClosure(gen, 0)
-        self.emit('CALL_FUNCTION', 0)
-        self.emit('BUILD_CLASS')
+        self.emit('CALL_FUNCTION', 0)  # Call the closure, get the locals dict
+        self.emit('CALL_FUNCTION', 3)  # Call #@buildclass
         self.storeName(node.name)
 
     # The rest are standard visitor methods

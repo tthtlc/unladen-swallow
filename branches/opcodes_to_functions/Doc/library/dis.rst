@@ -504,12 +504,6 @@ Miscellaneous opcodes.
    with the outer-next block.
 
 
-.. opcode:: BUILD_CLASS ()
-
-   Creates a new class object.  TOS is the methods dictionary, TOS1 the tuple of
-   the names of the base classes, and TOS2 the class name.
-
-
 .. opcode:: WITH_CLEANUP ()
 
    Cleans up the stack when a :keyword:`with` statement block exits.  On top of

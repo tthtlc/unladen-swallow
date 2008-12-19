@@ -119,7 +119,6 @@ static int assign_slice(PyObject *, PyObject *,
 static PyObject * cmp_outcome(int, PyObject *, PyObject *);
 static PyObject * import_from(PyObject *, PyObject *);
 static int import_all_from(PyObject *, PyObject *);
-static PyObject * build_class(PyObject *, PyObject *, PyObject *);
 static int exec_statement(PyFrameObject *,
 			  PyObject *, PyObject *, PyObject *);
 static void set_exc_info(PyThreadState *, PyObject *, PyObject *, PyObject *);
@@ -1746,18 +1745,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 				why = WHY_EXCEPTION;
 			}
 			Py_DECREF(v);
-			break;
-
-		case BUILD_CLASS:
-			u = TOP();
-			v = SECOND();
-			w = THIRD();
-			STACKADJ(-2);
-			x = build_class(u, v, w);
-			SET_TOP(x);
-			Py_DECREF(u);
-			Py_DECREF(v);
-			Py_DECREF(w);
 			break;
 
 		case STORE_NAME:
@@ -4263,60 +4250,6 @@ import_all_from(PyObject *locals, PyObject *v)
 	}
 	Py_DECREF(all);
 	return err;
-}
-
-static PyObject *
-build_class(PyObject *methods, PyObject *bases, PyObject *name)
-{
-	PyObject *metaclass = NULL, *result, *base;
-
-	if (PyDict_Check(methods))
-		metaclass = PyDict_GetItemString(methods, "__metaclass__");
-	if (metaclass != NULL)
-		Py_INCREF(metaclass);
-	else if (PyTuple_Check(bases) && PyTuple_GET_SIZE(bases) > 0) {
-		base = PyTuple_GET_ITEM(bases, 0);
-		metaclass = PyObject_GetAttrString(base, "__class__");
-		if (metaclass == NULL) {
-			PyErr_Clear();
-			metaclass = (PyObject *)base->ob_type;
-			Py_INCREF(metaclass);
-		}
-	}
-	else {
-		PyObject *g = PyEval_GetGlobals();
-		if (g != NULL && PyDict_Check(g))
-			metaclass = PyDict_GetItemString(g, "__metaclass__");
-		if (metaclass == NULL)
-			metaclass = (PyObject *) &PyClass_Type;
-		Py_INCREF(metaclass);
-	}
-	result = PyObject_CallFunctionObjArgs(metaclass, name, bases, methods,
-					      NULL);
-	Py_DECREF(metaclass);
-	if (result == NULL && PyErr_ExceptionMatches(PyExc_TypeError)) {
-		/* A type error here likely means that the user passed
-		   in a base that was not a class (such the random module
-		   instead of the random.random type).  Help them out with
-		   by augmenting the error message with more information.*/
-
-		PyObject *ptype, *pvalue, *ptraceback;
-
-		PyErr_Fetch(&ptype, &pvalue, &ptraceback);
-		if (PyString_Check(pvalue)) {
-			PyObject *newmsg;
-			newmsg = PyString_FromFormat(
-				"Error when calling the metaclass bases\n"
-				"    %s",
-				PyString_AS_STRING(pvalue));
-			if (newmsg != NULL) {
-				Py_DECREF(pvalue);
-				pvalue = newmsg;
-			}
-		}
-		PyErr_Restore(ptype, pvalue, ptraceback);
-	}
-	return result;
 }
 
 static int

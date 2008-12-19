@@ -74,9 +74,10 @@ extern time_t PyOS_GetLastModificationTime(char *, FILE *);
        Python 2.6a0: 62151 (peephole optimizations and STORE_MAP opcode)
        Python 2.6a1: 62161 (WITH_CLEANUP optimization)
 	   Unladen Swallow 2.6.1: 62171 (Remove LOAD_LOCALS)
+	   Unladen Swallow 2.6.1: 62181 (Remove BUILD_CLASS)
 .
 */
-#define MAGIC (62171 | ((long)'\r'<<16) | ((long)'\n'<<24))
+#define MAGIC (62181 | ((long)'\r'<<16) | ((long)'\n'<<24))
 
 /* Magic word as global; note that _PyImport_Init() can change the
    value of this global to accommodate for alterations of how the
