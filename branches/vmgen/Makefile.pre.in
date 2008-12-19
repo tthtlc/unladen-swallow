@@ -576,24 +576,21 @@ Python/formatter_string.o: $(srcdir)/Python/formatter_string.c \
 # Vmgen-provided ceval bits
 
 Python/ceval.o: $(srcdir)/Python/ceval.c \
-		Python/ceval-labels.i \
 		Python/ceval-vm.i \
-		Python/ceval-peephole.i \
-		Python/ceval-gen.i \
 		Python/ceval-translate.i \
-		Python/ceval-disasm-bytes.i \
-		Python/ceval-disasm.i
+		Python/ceval-disasm-bytes.i
 	$(CC) -c $(PY_CFLAGS) -IPython -fno-gcse -o $@ $<
 
-Python/ceval-vm-unmangled.i Python/ceval-disasm.i Python/ceval-gen.i Python/ceval-labels.i Python/ceval-profile.i Python/ceval-peephole.i: \
-		$(srcdir)/Python/ceval.vmg \
-		$(srcdir)/Python/mangler.awk
+# Actually generates all of Python/ceval-vm.i, Python/ceval-disasm.i,
+# Python/ceval-gen.i, Python/ceval-labels.i, Python/ceval-profile.i,
+# and Python/ceval-peephole.i, but I can't figure out how to tell make
+# that a single command produces multiple outputs, so I abbreviate
+# that whole list with just ceval-vm.i.
+Python/ceval-vm.i: $(srcdir)/Python/ceval.vmg $(srcdir)/Python/mangler.awk
 	vmgen $<
-	mv ceval-vm.i Python/ceval-vm-unmangled.i
+	$(AWK) -f $(srcdir)/Python/mangler.awk ceval-vm.i > Python/ceval-vm.i
+	rm ceval-vm.i
 	mv ceval-disasm.i ceval-gen.i ceval-labels.i ceval-profile.i ceval-peephole.i Python/
-
-Python/ceval-vm.i: Python/ceval-vm-unmangled.i
-	$(AWK) -f $(srcdir)/Python/mangler.awk $< > $@
 
 Python/ceval-translate.i: $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES
 	$(AWK) -f $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES > $@

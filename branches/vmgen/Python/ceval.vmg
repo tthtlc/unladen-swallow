@@ -40,11 +40,13 @@ nop ( -- )
 
 load_fast ( #i -- a  inc:a )
 x = a = GETLOCAL(i);
-if (x == NULL) {
+if (a == NULL) {
         format_exc_check_arg(
                 PyExc_UnboundLocalError,
                 UNBOUNDLOCAL_ERROR_MSG,
                 PyTuple_GetItem(co->co_varnames, i));
+        /* On exception, make sure the stack is valid. */
+        STACKADJ(-1);
         ERROR();
 }
 
@@ -1069,153 +1071,75 @@ PUSH(x);
 ERROR();
 
 \ _. Superinstructions
-ff = load_fast load_fast
-fc = load_fast load_const
-cf = load_const load_fast
 cc = load_const load_const
 
-ffbinary_power = load_fast load_fast   binary_power
-fcbinary_power = load_fast load_const  binary_power
-cfbinary_power = load_const load_fast  binary_power
+cbinary_power = load_const binary_power
 ccbinary_power = load_const load_const binary_power
-ffbinary_multiply = load_fast load_fast   binary_multiply
-fcbinary_multiply = load_fast load_const  binary_multiply
-cfbinary_multiply = load_const load_fast  binary_multiply
+cbinary_multiply = load_const binary_multiply
 ccbinary_multiply = load_const load_const binary_multiply
-ffbinary_divide = load_fast load_fast   binary_divide
-fcbinary_divide = load_fast load_const  binary_divide
-cfbinary_divide = load_const load_fast  binary_divide
+cbinary_divide = load_const binary_divide
 ccbinary_divide = load_const load_const binary_divide
-ffbinary_true_divide = load_fast load_fast   binary_true_divide
-fcbinary_true_divide = load_fast load_const  binary_true_divide
-cfbinary_true_divide = load_const load_fast  binary_true_divide
+cbinary_true_divide = load_const binary_true_divide
 ccbinary_true_divide = load_const load_const binary_true_divide
-ffbinary_floor_divide = load_fast load_fast   binary_floor_divide
-fcbinary_floor_divide = load_fast load_const  binary_floor_divide
-cfbinary_floor_divide = load_const load_fast  binary_floor_divide
+cbinary_floor_divide = load_const binary_floor_divide
 ccbinary_floor_divide = load_const load_const binary_floor_divide
-ffbinary_modulo = load_fast load_fast   binary_modulo
-fcbinary_modulo = load_fast load_const  binary_modulo
-cfbinary_modulo = load_const load_fast  binary_modulo
+cbinary_modulo = load_const binary_modulo
 ccbinary_modulo = load_const load_const binary_modulo
-ffbinary_add = load_fast load_fast   binary_add
-fcbinary_add = load_fast load_const  binary_add
-cfbinary_add = load_const load_fast  binary_add
+cbinary_add = load_const binary_add
 ccbinary_add = load_const load_const binary_add
-ffbinary_subtract = load_fast load_fast   binary_subtract
-fcbinary_subtract = load_fast load_const  binary_subtract
-cfbinary_subtract = load_const load_fast  binary_subtract
+cbinary_subtract = load_const binary_subtract
 ccbinary_subtract = load_const load_const binary_subtract
-ffbinary_subscr = load_fast load_fast   binary_subscr
-fcbinary_subscr = load_fast load_const  binary_subscr
-cfbinary_subscr = load_const load_fast  binary_subscr
+cbinary_subscr = load_const binary_subscr
 ccbinary_subscr = load_const load_const binary_subscr
-ffbinary_lshift = load_fast load_fast   binary_lshift
-fcbinary_lshift = load_fast load_const  binary_lshift
-cfbinary_lshift = load_const load_fast  binary_lshift
+cbinary_lshift = load_const binary_lshift
 ccbinary_lshift = load_const load_const binary_lshift
-ffbinary_rshift = load_fast load_fast   binary_rshift
-fcbinary_rshift = load_fast load_const  binary_rshift
-cfbinary_rshift = load_const load_fast  binary_rshift
+cbinary_rshift = load_const binary_rshift
 ccbinary_rshift = load_const load_const binary_rshift
-ffbinary_and = load_fast load_fast   binary_and
-fcbinary_and = load_fast load_const  binary_and
-cfbinary_and = load_const load_fast  binary_and
+cbinary_and = load_const binary_and
 ccbinary_and = load_const load_const binary_and
-ffbinary_xor = load_fast load_fast   binary_xor
-fcbinary_xor = load_fast load_const  binary_xor
-cfbinary_xor = load_const load_fast  binary_xor
+cbinary_xor = load_const binary_xor
 ccbinary_xor = load_const load_const binary_xor
-ffbinary_or = load_fast load_fast   binary_or
-fcbinary_or = load_fast load_const  binary_or
-cfbinary_or = load_const load_fast  binary_or
+cbinary_or = load_const binary_or
 ccbinary_or = load_const load_const binary_or
-fflist_append = load_fast load_fast   list_append
-fclist_append = load_fast load_const  list_append
-cflist_append = load_const load_fast  list_append
+clist_append = load_const list_append
 cclist_append = load_const load_const list_append
-ffinplace_power = load_fast load_fast   inplace_power
-fcinplace_power = load_fast load_const  inplace_power
-cfinplace_power = load_const load_fast  inplace_power
+cinplace_power = load_const inplace_power
 ccinplace_power = load_const load_const inplace_power
-ffinplace_multiply = load_fast load_fast   inplace_multiply
-fcinplace_multiply = load_fast load_const  inplace_multiply
-cfinplace_multiply = load_const load_fast  inplace_multiply
+cinplace_multiply = load_const inplace_multiply
 ccinplace_multiply = load_const load_const inplace_multiply
-ffinplace_divide = load_fast load_fast   inplace_divide
-fcinplace_divide = load_fast load_const  inplace_divide
-cfinplace_divide = load_const load_fast  inplace_divide
+cinplace_divide = load_const inplace_divide
 ccinplace_divide = load_const load_const inplace_divide
-ffinplace_true_divide = load_fast load_fast   inplace_true_divide
-fcinplace_true_divide = load_fast load_const  inplace_true_divide
-cfinplace_true_divide = load_const load_fast  inplace_true_divide
+cinplace_true_divide = load_const inplace_true_divide
 ccinplace_true_divide = load_const load_const inplace_true_divide
-ffinplace_floor_divide = load_fast load_fast   inplace_floor_divide
-fcinplace_floor_divide = load_fast load_const  inplace_floor_divide
-cfinplace_floor_divide = load_const load_fast  inplace_floor_divide
+cinplace_floor_divide = load_const inplace_floor_divide
 ccinplace_floor_divide = load_const load_const inplace_floor_divide
-ffinplace_modulo = load_fast load_fast   inplace_modulo
-fcinplace_modulo = load_fast load_const  inplace_modulo
-cfinplace_modulo = load_const load_fast  inplace_modulo
+cinplace_modulo = load_const inplace_modulo
 ccinplace_modulo = load_const load_const inplace_modulo
-ffinplace_add = load_fast load_fast   inplace_add
-fcinplace_add = load_fast load_const  inplace_add
-cfinplace_add = load_const load_fast  inplace_add
+cinplace_add = load_const inplace_add
 ccinplace_add = load_const load_const inplace_add
-ffinplace_subtract = load_fast load_fast   inplace_subtract
-fcinplace_subtract = load_fast load_const  inplace_subtract
-cfinplace_subtract = load_const load_fast  inplace_subtract
+cinplace_subtract = load_const inplace_subtract
 ccinplace_subtract = load_const load_const inplace_subtract
-ffinplace_lshift = load_fast load_fast   inplace_lshift
-fcinplace_lshift = load_fast load_const  inplace_lshift
-cfinplace_lshift = load_const load_fast  inplace_lshift
+cinplace_lshift = load_const inplace_lshift
 ccinplace_lshift = load_const load_const inplace_lshift
-ffinplace_rshift = load_fast load_fast   inplace_rshift
-fcinplace_rshift = load_fast load_const  inplace_rshift
-cfinplace_rshift = load_const load_fast  inplace_rshift
+cinplace_rshift = load_const inplace_rshift
 ccinplace_rshift = load_const load_const inplace_rshift
-ffinplace_and = load_fast load_fast   inplace_and
-fcinplace_and = load_fast load_const  inplace_and
-cfinplace_and = load_const load_fast  inplace_and
+cinplace_and = load_const inplace_and
 ccinplace_and = load_const load_const inplace_and
-ffinplace_xor = load_fast load_fast   inplace_xor
-fcinplace_xor = load_fast load_const  inplace_xor
-cfinplace_xor = load_const load_fast  inplace_xor
+cinplace_xor = load_const inplace_xor
 ccinplace_xor = load_const load_const inplace_xor
-ffinplace_or = load_fast load_fast   inplace_or
-fcinplace_or = load_fast load_const  inplace_or
-cfinplace_or = load_const load_fast  inplace_or
+cinplace_or = load_const inplace_or
 ccinplace_or = load_const load_const inplace_or
-ffslice_left = load_fast load_fast   slice_left
-fcslice_left = load_fast load_const  slice_left
-cfslice_left = load_const load_fast  slice_left
+cslice_left = load_const slice_left
 ccslice_left = load_const load_const slice_left
-ffslice_right = load_fast load_fast   slice_right
-fcslice_right = load_fast load_const  slice_right
-cfslice_right = load_const load_fast  slice_right
+cslice_right = load_const slice_right
 ccslice_right = load_const load_const slice_right
-ffdelete_slice_left = load_fast load_fast   delete_slice_left
-fcdelete_slice_left = load_fast load_const  delete_slice_left
-cfdelete_slice_left = load_const load_fast  delete_slice_left
+cdelete_slice_left = load_const delete_slice_left
 ccdelete_slice_left = load_const load_const delete_slice_left
-ffdelete_slice_right = load_fast load_fast   delete_slice_right
-fcdelete_slice_right = load_fast load_const  delete_slice_right
-cfdelete_slice_right = load_const load_fast  delete_slice_right
+cdelete_slice_right = load_const delete_slice_right
 ccdelete_slice_right = load_const load_const delete_slice_right
-ffdelete_subscr = load_fast load_fast   delete_subscr
-fcdelete_subscr = load_fast load_const  delete_subscr
-cfdelete_subscr = load_const load_fast  delete_subscr
+cdelete_subscr = load_const delete_subscr
 ccdelete_subscr = load_const load_const delete_subscr
-ffstore_attr = load_fast load_fast   store_attr
-fcstore_attr = load_fast load_const  store_attr
-cfstore_attr = load_const load_fast  store_attr
+cstore_attr = load_const store_attr
 ccstore_attr = load_const load_const store_attr
-ffcompare_op = load_fast load_fast   compare_op
-fccompare_op = load_fast load_const  compare_op
-cfcompare_op = load_const load_fast  compare_op
+ccompare_op = load_const compare_op
 cccompare_op = load_const load_const compare_op
-
-funary_positive = load_fast unary_positive
-funary_negative = load_fast unary_negative
-funary_convert  = load_fast unary_convert
-funary_invert   = load_fast unary_invert
