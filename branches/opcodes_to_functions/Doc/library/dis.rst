@@ -421,13 +421,6 @@ nothing on the stack.
 Miscellaneous opcodes.
 
 
-.. opcode:: PRINT_EXPR ()
-
-   Implements the expression statement for the interactive mode.  TOS is removed
-   from the stack and printed.  In non-interactive mode, an expression statement is
-   terminated with ``POP_STACK``.
-
-
 .. opcode:: PRINT_ITEM ()
 
    Prints TOS to the file-like object bound to ``sys.stdout``.  There is one such

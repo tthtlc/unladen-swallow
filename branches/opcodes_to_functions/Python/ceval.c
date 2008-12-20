@@ -1554,30 +1554,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			if (err == 0) continue;
 			break;
 
-		case PRINT_EXPR:
-			v = POP();
-			w = PySys_GetObject("displayhook");
-			if (w == NULL) {
-				PyErr_SetString(PyExc_RuntimeError,
-						"lost sys.displayhook");
-				err = -1;
-				x = NULL;
-			}
-			if (err == 0) {
-				x = PyTuple_Pack(1, v);
-				if (x == NULL)
-					err = -1;
-			}
-			if (err == 0) {
-				w = PyEval_CallObject(w, x);
-				Py_XDECREF(w);
-				if (w == NULL)
-					err = -1;
-			}
-			Py_DECREF(v);
-			Py_XDECREF(x);
-			break;
-
 		case PRINT_ITEM_TO:
 			w = stream = POP();
 			/* fall through to PRINT_ITEM */

@@ -10,4 +10,5 @@ Opcodes targeted for removal:
 	- BUILD_CLASS (done)
 	- MAKE_FUNCTION
 	- EXEC_STMT (done)
+	- PRINT_EXPR (done)
 	- PRINT_*

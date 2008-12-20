@@ -62,7 +62,7 @@ extern "C" {
 #define INPLACE_POWER	67
 #define GET_ITER	68
 
-#define PRINT_EXPR	70
+/* #define PRINT_EXPR	70  Replaced with a call to #@displayhook. */
 #define PRINT_ITEM	71
 #define PRINT_NEWLINE	72
 #define PRINT_ITEM_TO   73

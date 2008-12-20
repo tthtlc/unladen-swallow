@@ -300,6 +300,28 @@ Note that classes are callable, as are instances with a __call__() method.");
 
 
 static PyObject *
+builtin_displayhook(PyObject *self, PyObject *args)
+{
+    PyObject *displayhook, *result;
+
+	displayhook = PySys_GetObject("displayhook");
+	if (displayhook == NULL) {
+		PyErr_SetString(PyExc_RuntimeError, "lost sys.displayhook");
+		return NULL;
+	}
+	result = PyEval_CallObject(displayhook, args);
+	Py_XDECREF(result);
+	if (result == NULL)
+		return NULL;
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(displayhook_doc,
+"#@displayhook(object) -> None\n\
+\n\
+Print an object using sys.displayhook(). For internal use only.");
+
+static PyObject *
 builtin_exec(PyObject *self, PyObject *args)
 {
 	int n;
@@ -2708,8 +2730,10 @@ static PyMethodDef builtin_methods[] = {
   	{"zip",         builtin_zip,        METH_VARARGS, zip_doc},
     /* The following built-in functions are for internal use only. */
 	{"#@buildclass",	builtin_buildclass,	    METH_VARARGS, buildclass_doc},
+ 	{"#@displayhook",	builtin_displayhook,     METH_VARARGS, displayhook_doc},
 	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
+ 	{"#@print",         (PyCFunction)builtin_print,      METH_VARARGS | METH_KEYWORDS, print_doc},
 	{NULL,		NULL},
 };
 

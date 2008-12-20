@@ -1318,8 +1318,10 @@ class InteractiveCodeGenerator(NestedScopeMixin, CodeGenerator):
     def visitDiscard(self, node):
         # XXX Discard means it's an expression.  Perhaps this is a bad
         # name.
+        self.emit('LOAD_GLOBAL', '#@displayhook')
         self.visit(node.expr)
-        self.emit('PRINT_EXPR')
+        self.emit('CALL_FUNCTION', 1)
+        self.emit('POP_TOP')
 
 class AbstractFunctionCode:
     optimized = 1

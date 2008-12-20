@@ -761,8 +761,6 @@ opcode_stack_effect(int opcode, int oparg)
 		case GET_ITER:
 			return 0;
 
-		case PRINT_EXPR:
-			return -1;
 		case PRINT_ITEM:
 			return -1;
 		case PRINT_NEWLINE:
@@ -2200,8 +2198,11 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 		break;
 	case Expr_kind:
 		if (c->c_interactive && c->c_nestlevel <= 1) {
+			if (!compiler_load_global(c, "#@displayhook"))
+                return 0;
 			VISIT(c, expr, s->v.Expr.value);
-			ADDOP(c, PRINT_EXPR);
+			ADDOP_I(c, CALL_FUNCTION, 1);
+			ADDOP(c, POP_TOP);
 		}
 		else if (s->v.Expr.value->kind != Str_kind &&
 			 s->v.Expr.value->kind != Num_kind) {
