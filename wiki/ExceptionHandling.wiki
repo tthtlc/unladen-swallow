@@ -1,0 +1,3 @@
+#summary How to throw and catch exceptions
+
+Nothing much here yet, but when we get to this, http://lists.cs.uiuc.edu/pipermail/llvmdev/2008-December/018989.html may be useful.
