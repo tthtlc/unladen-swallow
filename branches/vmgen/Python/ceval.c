@@ -127,9 +127,8 @@ static void reset_exc_info(PyThreadState *);
 static void format_exc_check_arg(PyObject *, char *, PyObject *);
 static PyObject * string_concatenate(PyObject *, PyObject *,
                                      PyFrameObject *, int, int );
-static void prepare_peeptable(void);
 static void translate_code(Inst **, unsigned char *, int);
-static void disassemble_bytecode(unsigned char *);
+static void disassemble_bytecode(PyPInstVec *code);
 static void disassemble_tcode(Inst *, Inst *);
 
 #define NAME_ERROR_MSG \
@@ -558,7 +557,7 @@ volatile int _Py_Ticker = 100;
 
 /* XXX patched pythonrun.c */
 #define MAYBE(stmt) /* if (Py_IsInitialized() == 42) { (stmt); } */
-#define NAME(inst)  MAYBE(printf("%s: %s: %d: %s [%d] {%x, %x} NOS==%x\n", \
+#define NAME(inst)  MAYBE(printf("%s: %s: %d: %s [%d] {%p, %p} NOS==%p\n", \
                                  PyString_AS_STRING(co->co_filename),   \
                                  PyString_AS_STRING(co->co_name),       \
                                  INSTR_OFFSET(), inst, STACK_LEVEL(),   \
@@ -680,7 +679,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	PyCodeObject *co;
 
 	Inst *first_instr;
-	Inst *ip;
 	PyObject *names;
 	PyObject *consts;
 #if defined(Py_DEBUG)
@@ -802,27 +800,28 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         first_instr = co->co_tcode;
         /* Export instruction addresses, then translate CPython bytecode
            to DTC. Store result in the code object. */
-        static int init = 1;
         static Opcode labels[] = {
 #include "ceval-labels.i"
         };
 
-        if (init) {
-                vm_prim = labels;
-                prepare_peeptable();
-                init = 0;
-        }
-
         if (first_instr == NULL) {
-                MAYBE(disassemble_bytecode(PyString_AS_STRING(co->co_code)));
-                int len = PyString_Size(co->co_code);
-                ip = first_instr = (Inst *) calloc(len, sizeof(Inst));
-                translate_code(
-                        &ip,
-                        (unsigned char *) PyString_AS_STRING(co->co_code),
-                        len);
+                Py_ssize_t len, i;
+                PyPInst *pinsts = co->co_code->instructions;
+                len = co->co_code->size;
+                MAYBE(disassemble_bytecode(co->co_code));
+                first_instr = (Inst *) calloc(len, sizeof(Inst));
+                for (i = 0; i < len; ++i) {
+                        if (pinsts[i].is_arg) {
+                                first_instr[i].oparg =
+                                        PyPInst_GET_ARG(pinsts + i);
+                        }
+                        else {
+                                first_instr[i].opcode =
+                                        labels[PyPInst_GET_OPCODE(pinsts + i)];
+                        }
+                }
                 co->co_tcode = first_instr;
-                MAYBE(disassemble_tcode(first_instr, ip));
+                MAYBE(disassemble_tcode(first_instr, first_instr + len));
         }
 
 	/* An explanation is in order for the next line.
@@ -1340,353 +1339,24 @@ fail: /* Jump here from prelude on failure */
 }
 
 
-/* JIT bytecode->DTC translator:
-
-   - We use a simple, greedy peepholing algorithm for superinstructions
-     (taken from the vmgen example code).
-   - Vmgen generates the necessary table as an array of tuples of
-     instruction indices (known at compile time); we convert this into a
-     hash table at runtime.
-   - translate_code() is a little kludgy right now.
- */
-
-#define HASH_SIZE 1024
-#define HASH(a,b) (((((long)(a)) ^ ((long)(b))) >> 4) & (HASH_SIZE-1))
-
-typedef struct idx_combination {
-        int prefix;      /* instruction or superinstruction prefix index */
-        int lastprim;    /* most recently added instruction index        */
-        int combination; /* resulting superinstruction index             */
-} IdxCombination;
-
-typedef struct opcode_combination {
-        struct opcode_combination *next;
-        Opcode prefix;
-        Opcode lastprim;
-        Opcode combination;
-} *OpcodeCombination;
-
-static IdxCombination peephole_table[] = {
-#include "ceval-peephole.i"
-};
-
-static OpcodeCombination peeptable[HASH_SIZE];
-
-static void
-prepare_peeptable()
-{
-        long i;
-
-        for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
-                IdxCombination *c   = &(peephole_table[i]);
-                OpcodeCombination p = (OpcodeCombination) malloc(sizeof(*p));
-
-                p->prefix      = vm_prim[c->prefix];
-                p->lastprim    = vm_prim[c->lastprim];
-                p->combination = vm_prim[c->combination];
-
-                long h       = HASH(p->prefix, p->lastprim);
-                p->next      = peeptable[h];
-                peeptable[h] = p;
-        }
-}
-
-static Opcode
-combine(Opcode op1, Opcode op2)
-{
-        OpcodeCombination p;
-
-        for (p = peeptable[HASH(op1, op2)]; p != NULL; p = p->next)
-                if (op1 == p->prefix && op2 == p->lastprim)
-                        return p->combination;
-
-        return NULL;
-}
-
-static int cur_super_len = 0; /* # of insts accumulated so far */
-static int super_len     = 0; /* # of insts in last opcode     */
-static int super_done    = 0; /* flag: last opcode finalized   */
-
-/* Your typical superinstructions of e.g. 3 components
-     OP1 ARG1 OP2 ARG2 OP3
-   will be compiled as
-     OP1_OP2_OP3 ARG1 ARG2.
-   Since calls to gen_inst() are interleaved with calls to gen_arg(),
-   we save the position of OP1 in the instruction stream.
- */
-static Inst *prev_inst = NULL;
-
-static void
-gen_inst(Inst **ctp, Opcode op)
-{
-        Opcode super_op = NULL;
-
-        if (prev_inst && (super_op = combine(prev_inst->opcode, op))) {
-                cur_super_len++;
-                prev_inst->opcode = super_op;
-        } else {
-                /* We've been compiling a superinstruction, but the
-                   current instruction couldn't be added. */
-                if (cur_super_len > 1) {
-                        super_len  = cur_super_len;
-                        super_done = 1;
-                }
-                cur_super_len = 1;
-                prev_inst = *ctp;
-                (**ctp).opcode = op;
-                (*ctp)++;
-        }
-}
-
-static void
-genarg_i(Inst **ctp, Oparg arg)
-{
-        (**ctp).oparg = arg;
-        (*ctp)++;
-}
-
-#include "ceval-gen.i"
-
-/* Branch target store */
-typedef struct target {
-        int   idx; /* -1 indicates absolute jump */
-        Inst *arg;
-} *Target;
-
-static void
-translate_code(Inst **ctp, unsigned char *next_instr, int len)
-{
-        /* reset peepholer */
-        cur_super_len = 0;
-        super_len     = 0;
-        super_done    = 0;
-        prev_inst     = NULL;
-
-        /* ``addrmap'' is used initially to flag basic block boundaries
-           and later to record the mapping of pre-translation instruction
-           indices to post-translation instruction indices. */
-        int *addrmap = (int *) calloc(len, sizeof(int));
-        bzero(addrmap, sizeof(int)*len);
-
-        int i;
-        int jumps  = 0;
-        int idx    = 0;
-        int opcode = 0;
-        int oparg  = 0;
-        int blanks = 0; /* # of positions to shift the current instruction */
-
-        /* Code access macros */
-
-#define GETOP()  (next_instr[i++])
-#define GETARG() (i += 2, (next_instr[i-1]<<8) + next_instr[i-2])
-
-        /* Branch classification macros */
-
-#define ABSOLUTE_JUMP(op) (op==JUMP_ABSOLUTE || op==CONTINUE_LOOP)
-#define RELATIVE_JUMP(op) (op==FOR_ITER || op==JUMP_FORWARD ||          \
-                           op==JUMP_IF_FALSE || op==JUMP_IF_TRUE ||     \
-                           op==SETUP_LOOP || op==SETUP_EXCEPT ||        \
-                           op==SETUP_FINALLY)
-
-        /* Pass 1: flag BBBs, count jump instructions */
-        for (i = 0; i < len; ) {
-                opcode = GETOP();
-
-                if (HAS_ARG(opcode))
-                        oparg = GETARG();
-
-                if (opcode == EXTENDED_ARG) {
-                        opcode = GETOP();
-                        oparg  = oparg<<16 | GETARG();
-                }
-
-                if (ABSOLUTE_JUMP(opcode)) {
-                        addrmap[oparg] = 1;
-                        jumps++;
-                } else if (RELATIVE_JUMP(opcode)) {
-                        addrmap[i + oparg] = 1;
-                        jumps++;
-                }
-        }
-
-        Target targets = (Target) calloc(jumps, sizeof(struct target));
-        jumps = 0;
-
-        /* Pass 2: calculate new addresses, translate bytes to pointers */
-        for (i = 0; i < len;) {
-                /* ``super_done'' has been set. This means that the instruction
-                   compiled before the current one was preceded by a
-                   superinstruction to which it couldn't be appended. */
-                if (super_done) {
-                        assert(cur_super_len == 1);
-                        blanks += super_len-1;
-                        super_done = 0;
-                        addrmap[idx] -= super_len-1; /* adjust PREVIOUS inst's position */
-                }
-
-                /* We know the current instruction to be the target of some
-                   jump and hence we disable superinstruction generation and
-                   terminate the current one (if any). C.f. gen_inst(). */
-                if (addrmap[i]) {
-                        super_len = cur_super_len;
-                        cur_super_len = 0;
-                        prev_inst = NULL;
-                        blanks += super_len-1;
-                }
-
-                /* Adjust the CURRENT instruction's position */
-                addrmap[i] = i - blanks;
-
-                idx = i;
-                opcode = GETOP();
-
-                if (HAS_ARG(opcode))
-                        oparg = GETARG();
-
-                if (opcode == EXTENDED_ARG) {
-                        idx = i;
-                        opcode = GETOP();
-                        oparg  = oparg<<16 | GETARG();
-                        blanks += 3;
-                }
-
-                /* Save jump targets */
-                if (ABSOLUTE_JUMP(opcode)) {
-                        targets[jumps].idx = -1;
-                        targets[jumps].arg = *ctp+1; /* oparg to be */
-                        jumps++;
-                } else if (RELATIVE_JUMP(opcode)) {
-                        targets[jumps].idx = idx;
-                        targets[jumps].arg = *ctp+1;
-                        jumps++;
-                }
-
-                /* Translate bytecode */
-                switch (opcode) {
-                        /* Emulate fallthrough: OP ==> OP OP */
-                case PRINT_ITEM_TO:
-                        gen_print_item_to(ctp);
-                        gen_print_item(ctp);
-                        blanks--;
-                        break;
-                case PRINT_NEWLINE_TO:
-                        gen_print_item_to(ctp);
-                        gen_print_newline(ctp);
-                        blanks--;
-                        break;
-                        /* Specialize for oparg: OP ARG ARG ==> OP */
-                case DUP_TOPX:
-                        switch (oparg) {
-                        case 3: gen_dup_top_three(ctp); break;
-                        case 2: gen_dup_top_two(ctp);   break;
-                        default:
-                                Py_FatalError("invalid argument to DUP_TOPX"
-                                              " (bytecode corruption?)");
-                        }
-                        blanks += 2;
-                        break;
-                case RAISE_VARARGS:
-                        switch (oparg) {
-                        case 3: gen_raise_varargs_three(ctp); break;
-                        case 2: gen_raise_varargs_two(ctp);   break;
-                        case 1: gen_raise_varargs_one(ctp);   break;
-                        case 0: gen_raise_varargs_zero(ctp);  break;
-                        default:
-                                printf("bad RAISE_VARARGS oparg: %d\n", oparg);
-                                assert(0);
-                        }
-                        blanks += 2;
-                        break;
-                case BUILD_SLICE:
-                        switch (oparg) {
-                        case 3: gen_build_slice_three(ctp); break;
-                        case 2: gen_build_slice_two(ctp);   break;
-                        default:
-                                assert(0);
-                        }
-                        blanks += 2;
-                        break;
-                        /* More fallthrough */
-                case BINARY_DIVIDE:
-			if (!_Py_QnewFlag) gen_binary_divide(ctp);
-                        else gen_binary_true_divide(ctp);
-                        break;
-                case INPLACE_DIVIDE:
-			if (!_Py_QnewFlag) gen_inplace_divide(ctp);
-                        else gen_inplace_true_divide(ctp);
-                        break;
-                        /* Decode SLICE */
-                case SLICE+0: gen_slice_none(ctp);  break;
-                case SLICE+1: gen_slice_left(ctp);  break;
-                case SLICE+2: gen_slice_right(ctp); break;
-                case SLICE+3: gen_slice_both(ctp);  break;
-                case STORE_SLICE+0: gen_store_slice_none(ctp);  break;
-                case STORE_SLICE+1: gen_store_slice_left(ctp);  break;
-                case STORE_SLICE+2: gen_store_slice_right(ctp); break;
-                case STORE_SLICE+3: gen_store_slice_both(ctp);  break;
-                case DELETE_SLICE+0: gen_delete_slice_none(ctp);  break;
-                case DELETE_SLICE+1: gen_delete_slice_left(ctp);  break;
-                case DELETE_SLICE+2: gen_delete_slice_right(ctp); break;
-                case DELETE_SLICE+3: gen_delete_slice_both(ctp);  break;
-                        /* Store bytecode in oparg...
-                           XXX this doesn't work with extended arguments */
-                case CALL_FUNCTION_VAR:
-                        gen_call_function_var_kw(ctp, (oparg<<16) | CALL_FUNCTION_VAR);
-                        blanks++;
-                        break;
-                case CALL_FUNCTION_KW:
-                        gen_call_function_var_kw(ctp, (oparg<<16) | CALL_FUNCTION_KW);
-                        blanks++;
-                        break;
-                case CALL_FUNCTION_VAR_KW:
-                        gen_call_function_var_kw(ctp, (oparg<<16) | CALL_FUNCTION_VAR_KW);
-                        blanks++;
-                        break;
-
-#include "ceval-translate.i"
-
-                default:
-                        printf("unknown opcode: %d", opcode);
-                        assert(0);
-                }
-        }
-
-        /* Pass 3: retarget jumps */
-        for (i = 0; i < jumps; i++) {
-                if (targets[i].idx == -1) {
-                        targets[i].arg->oparg = addrmap[targets[i].arg->oparg];
-                } else {
-                        targets[i].arg->oparg =
-                                addrmap[targets[i].idx           /* branch instruction   */
-                                        + 3                      /* oparg is ip relative */
-                                        + targets[i].arg->oparg] /* offset               */
-                                - addrmap[targets[i].idx]        /* instruction shift    */
-                                - 2;                             /* new oparg format     */
-                }
-        }
-
-        free(addrmap);
-        free(targets);
-}
-
 /* Disassemblers */
 
 static void
-disassemble_bytecode(unsigned char *next_instr)
+disassemble_bytecode(PyPInstVec *code)
 {
         int opcode = 0, oparg = 0;
+        PyPInst *current = code->instructions;
+        PyPInst *end = current + code->size;
 
-        while (*next_instr) {
-                opcode = NEXTOP();
-                if (HAS_ARG(opcode))
-                        oparg = NEXTARG();
-        dis:
+        while (current < end) {
+                opcode = PyPInst_GET_OPCODE(current++);
+                if (current->is_arg)
+                        oparg = PyPInst_GET_ARG(current++);
+
                 switch (opcode) {
                 case EXTENDED_ARG:
-                        printf("EXTENDED_ARG\n");
-                        opcode = NEXTOP();
-                        oparg  = oparg<<16 | NEXTARG();
-                        goto dis;
+                        Py_FatalError("Unexpected EXTENDED_ARG");
+                        break;
 #include "ceval-disasm-bytes.i"
                 }
                 printf("\n");

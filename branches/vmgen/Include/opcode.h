@@ -147,6 +147,15 @@ enum cmp_op {PyCmp_LT=Py_LT, PyCmp_LE=Py_LE, PyCmp_EQ=Py_EQ, PyCmp_NE=Py_NE, PyC
 
 #define HAS_ARG(op) ((op) >= HAVE_ARGUMENT)
 
+/* Next we define the corresponding values for the vmgen-generated
+   opcodes. */
+
+#define INST_ADDR(x) VMG_##x
+enum PyVmgOpcode {
+#include "ceval-labels.i"
+};
+#undef INST_ADDR
+
 #ifdef __cplusplus
 }
 #endif

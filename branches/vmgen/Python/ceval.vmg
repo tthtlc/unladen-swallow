@@ -108,7 +108,10 @@ binary_multiply ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Multiply(a1, a2);
 
 binary_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
-a = PyNumber_Divide(a1, a2);
+if (!_Py_QnewFlag)
+        a = PyNumber_Divide(a1, a2);
+else
+        a = PyNumber_TrueDivide(a1, a2);
 
 binary_true_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_TrueDivide(a1, a2);
@@ -197,7 +200,10 @@ inplace_multiply ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceMultiply(a1, a2);
 
 inplace_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
-a = PyNumber_InPlaceDivide(a1, a2);
+if (!_Py_QnewFlag)
+        a = PyNumber_InPlaceDivide(a1, a2);
+else
+        a = PyNumber_InPlaceTrueDivide(a1, a2);
 
 inplace_true_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceTrueDivide(a1, a2);
@@ -327,8 +333,10 @@ Py_XDECREF(x);
 
 print_item_to ( a1 -- )
 a2 = stream = a1;
+goto print_item_fallthrough;
 
 print_item ( a1 -- dec:a1  next:error )
+print_item_fallthrough:
 if (stream == NULL || stream == Py_None) {
         a2 = PySys_GetObject("stdout");
         if (a2 == NULL) {
@@ -362,7 +370,12 @@ Py_XDECREF(a2);
 Py_XDECREF(stream);
 stream = NULL;
 
+print_newline_to ( a1 -- )
+a2 = stream = a1;
+goto print_newline_fallthrough;
+
 print_newline ( -- next:on_error )
+print_newline_fallthrough:
 if (stream == NULL || stream == Py_None) {
         a2 = PySys_GetObject("stdout");
         if (a2 == NULL) {

@@ -3399,7 +3399,7 @@ compiler_visit_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 */
 
 struct assembler {
-	PyObject *a_bytecode;  /* string containing bytecode */
+	PyPInstVec *a_code;    /* contains opcode.h, not vmgen codes */
 	int a_offset;	       /* offset into bytecode */
 	int a_nblocks;	       /* number of reachable blocks */
 	basicblock **a_postorder; /* list of blocks in dfs postorder */
@@ -3482,8 +3482,8 @@ assemble_init(struct assembler *a, int nblocks, int firstlineno)
 {
 	memset(a, 0, sizeof(struct assembler));
 	a->a_lineno = firstlineno;
-	a->a_bytecode = PyString_FromStringAndSize(NULL, DEFAULT_CODE_SIZE);
-	if (!a->a_bytecode)
+	a->a_code = NULL;
+	if (_PyPInstVec_Resize(&a->a_code, DEFAULT_CODE_SIZE) < 0)
 		return 0;
 	a->a_lnotab = PyString_FromStringAndSize(NULL, DEFAULT_LNOTAB_SIZE);
 	if (!a->a_lnotab)
@@ -3504,22 +3504,20 @@ assemble_init(struct assembler *a, int nblocks, int firstlineno)
 static void
 assemble_free(struct assembler *a)
 {
-	Py_XDECREF(a->a_bytecode);
+	PyObject_FREE(a->a_code);
 	Py_XDECREF(a->a_lnotab);
 	if (a->a_postorder)
 		PyObject_Free(a->a_postorder);
 }
 
-/* Return the size of a basic block in bytes. */
+/* Return the size of a basic block in PyPInst (usually 4-byte) units. */
 
 static int
 instrsize(struct instr *instr)
 {
 	if (!instr->i_hasarg)
 		return 1;	/* 1 byte for the opcode*/
-	if (instr->i_oparg > 0xffff)
-		return 6;	/* 1 (opcode) + 1 (EXTENDED_ARG opcode) + 2 (oparg) + 2(oparg extended) */
-	return 3; 		/* 1 (opcode) + 2 (oparg) */
+	return 2;  /* 1 (opcode) + 1 (arg) */
 }
 
 static int
@@ -3681,8 +3679,8 @@ static int
 assemble_emit(struct assembler *a, struct instr *i)
 {
 	int size, arg = 0, ext = 0;
-	Py_ssize_t len = PyString_GET_SIZE(a->a_bytecode);
-	char *code;
+	Py_ssize_t len = a->a_code->size;
+	PyPInst *code;
 
 	size = instrsize(i);
 	if (i->i_hasarg) {
@@ -3694,23 +3692,22 @@ assemble_emit(struct assembler *a, struct instr *i)
 	if (a->a_offset + size >= len) {
 		if (len > PY_SSIZE_T_MAX / 2)
 			return 0;
-		if (_PyString_Resize(&a->a_bytecode, len * 2) < 0)
+		if (_PyPInstVec_Resize(&a->a_code, len * 2) < 0)
 		    return 0;
 	}
-	code = PyString_AS_STRING(a->a_bytecode) + a->a_offset;
+	code = a->a_code->instructions + a->a_offset;
 	a->a_offset += size;
+	assert(size != 6);  /* XXX: No more reason to have EXTENDED_ARGs. */
 	if (size == 6) {
 		assert(i->i_hasarg);
-		*code++ = (char)EXTENDED_ARG;
-		*code++ = ext & 0xff;
-		*code++ = ext >> 8;
+		PyPInst_SET_OPCODE(code++, EXTENDED_ARG);
+		PyPInst_SET_ARG(code++, ext);
 		arg &= 0xffff;
 	}
-	*code++ = i->i_opcode;
+	PyPInst_SET_OPCODE(code++, i->i_opcode);
 	if (i->i_hasarg) {
-		assert(size == 3 || size == 6);
-		*code++ = arg & 0xff;
-		*code++ = arg >> 8;
+		assert(size == 2);
+		PyPInst_SET_ARG(code++, arg);
 	}
 	return 1;
 }
@@ -3850,7 +3847,6 @@ makecode(struct compiler *c, struct assembler *a)
 	PyObject *name = NULL;
 	PyObject *freevars = NULL;
 	PyObject *cellvars = NULL;
-	PyObject *bytecode = NULL;
 	int nlocals, flags;
 
 	tmp = dict_keys_inorder(c->u->u_consts, 0);
@@ -3879,8 +3875,8 @@ makecode(struct compiler *c, struct assembler *a)
 	if (flags < 0)
 		goto error;
 
-	bytecode = PyCode_Optimize(a->a_bytecode, consts, names, a->a_lnotab);
-	if (!bytecode)
+	PyCode_Optimize(&a->a_code, consts, names, a->a_lnotab);
+	if (!a->a_code)
 		goto error;
 
 	tmp = PyList_AsTuple(consts); /* PyCode_New requires a tuple */
@@ -3890,11 +3886,12 @@ makecode(struct compiler *c, struct assembler *a)
 	consts = tmp;
 
 	co = PyCode_New(c->u->u_argcount, nlocals, stackdepth(c), flags,
-			bytecode, consts, names, varnames,
+			a->a_code, consts, names, varnames,
 			freevars, cellvars,
 			filename, c->u->u_name,
 			c->u->u_firstlineno,
 			a->a_lnotab);
+	a->a_code = NULL;  /* PyCode_New takes ownership */
  error:
 	Py_XDECREF(consts);
 	Py_XDECREF(names);
@@ -3903,7 +3900,6 @@ makecode(struct compiler *c, struct assembler *a)
 	Py_XDECREF(name);
 	Py_XDECREF(freevars);
 	Py_XDECREF(cellvars);
-	Py_XDECREF(bytecode);
 	return co;
 }
 
@@ -3992,7 +3988,7 @@ assemble(struct compiler *c, int addNone)
 
 	if (_PyString_Resize(&a.a_lnotab, a.a_lnotab_off) < 0)
 		goto error;
-	if (_PyString_Resize(&a.a_bytecode, a.a_offset) < 0)
+	if (_PyPInstVec_Resize(&a.a_code, a.a_offset) < 0)
 		goto error;
 
 	co = makecode(c, &a);

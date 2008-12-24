@@ -357,12 +357,15 @@ w_object(PyObject *v, WFILE *p)
 	}
 	else if (PyCode_Check(v)) {
 		PyCodeObject *co = (PyCodeObject *)v;
+                PyObject *temp_code_list;
 		w_byte(TYPE_CODE, p);
 		w_long(co->co_argcount, p);
 		w_long(co->co_nlocals, p);
 		w_long(co->co_stacksize, p);
 		w_long(co->co_flags, p);
-		w_object(co->co_code, p);
+                temp_code_list = _PyPInstVec_ToList(co->co_code);
+		w_object(temp_code_list, p);
+                Py_DECREF(temp_code_list);
 		w_object(co->co_consts, p);
 		w_object(co->co_names, p);
 		w_object(co->co_varnames, p);
@@ -902,7 +905,8 @@ r_object(RFILE *p)
 			int nlocals;
 			int stacksize;
 			int flags;
-			PyObject *code = NULL;
+			PyObject *code_list = NULL;
+			PyPInstVec *code = NULL;
 			PyObject *consts = NULL;
 			PyObject *names = NULL;
 			PyObject *varnames = NULL;
@@ -920,7 +924,10 @@ r_object(RFILE *p)
 			nlocals = (int)r_long(p);
 			stacksize = (int)r_long(p);
 			flags = (int)r_long(p);
-			code = r_object(p);
+			code_list = r_object(p);
+			if (code_list == NULL)
+				goto code_error;
+			code = _PyPInstVec_FromSequence(code_list);
 			if (code == NULL)
 				goto code_error;
 			consts = r_object(p);
@@ -954,9 +961,11 @@ r_object(RFILE *p)
 					code, consts, names, varnames,
 					freevars, cellvars, filename, name,
 					firstlineno, lnotab);
+			code = NULL;
 
 		  code_error:
-			Py_XDECREF(code);
+			Py_XDECREF(code_list);
+                        PyObject_FREE(code);
 			Py_XDECREF(consts);
 			Py_XDECREF(names);
 			Py_XDECREF(varnames);

@@ -1,11 +1,7 @@
 STOP_CODE            0
-BINARY_DIVIDE        21
 SLICE                30
 STORE_SLICE          40
 DELETE_SLICE         50
-INPLACE_DIVIDE       58
-PRINT_ITEM_TO        73
-PRINT_NEWLINE_TO     74
 DUP_TOPX             99
 RAISE_VARARGS        130
 BUILD_SLICE          133

@@ -573,29 +573,33 @@ Python/formatter_unicode.o: $(srcdir)/Python/formatter_unicode.c \
 Python/formatter_string.o: $(srcdir)/Python/formatter_string.c \
 				$(STRINGLIB_HEADERS)
 
+Python/peephole.o: Include/peephole-translate.i
+
 # Vmgen-provided ceval bits
 
 Python/ceval.o: $(srcdir)/Python/ceval.c \
-		Python/ceval-vm.i \
-		Python/ceval-translate.i \
-		Python/ceval-disasm-bytes.i
-	$(CC) -c $(PY_CFLAGS) -IPython -fno-gcse -o $@ $<
+		Include/ceval-vm.i \
+		Include/ceval-disasm-bytes.i
+	$(CC) -c $(PY_CFLAGS) -fno-gcse -o $@ $<
 
-# Actually generates all of Python/ceval-vm.i, Python/ceval-disasm.i,
-# Python/ceval-gen.i, Python/ceval-labels.i, Python/ceval-profile.i,
-# and Python/ceval-peephole.i, but I can't figure out how to tell make
+# Actually generates all of Include/ceval-vm.i, Include/ceval-disasm.i,
+# Include/ceval-gen.i, Include/ceval-labels.i, Include/ceval-profile.i,
+# and Include/ceval-peephole.i, but I can't figure out how to tell make
 # that a single command produces multiple outputs, so I abbreviate
 # that whole list with just ceval-vm.i.
-Python/ceval-vm.i: $(srcdir)/Python/ceval.vmg $(srcdir)/Python/mangler.awk
+Include/ceval-vm.i: $(srcdir)/Python/ceval.vmg $(srcdir)/Python/mangler.awk
 	vmgen $<
-	$(AWK) -f $(srcdir)/Python/mangler.awk ceval-vm.i > Python/ceval-vm.i
+	$(AWK) -f $(srcdir)/Python/mangler.awk ceval-vm.i > Include/ceval-vm.i
 	rm ceval-vm.i
-	mv ceval-disasm.i ceval-gen.i ceval-labels.i ceval-profile.i ceval-peephole.i Python/
+	mv ceval-disasm.i ceval-gen.i ceval-labels.i ceval-profile.i ceval-peephole.i Include/
 
-Python/ceval-translate.i: $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES
+# Already built, just telling make.
+Include/ceval-disasm.i Include/ceval-gen.i Include/ceval-labels.i Include/ceval-profile.i Include/ceval-peephole.i : Include/ceval-vm.i
+
+Include/peephole-translate.i: $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES
 	$(AWK) -f $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES > $@
 
-Python/ceval-disasm-bytes.i: $(srcdir)/Python/gendisasm.awk $(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS
+Include/ceval-disasm-bytes.i: $(srcdir)/Python/gendisasm.awk $(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS
 	$(AWK) -f $(srcdir)/Python/gendisasm.awk \
 		$(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS > $@
 
@@ -615,6 +619,7 @@ PYTHON_HEADERS= \
 		Include/bufferobject.h \
 		Include/cellobject.h \
 		Include/ceval.h \
+		Include/ceval-labels.i \
 		Include/classobject.h \
 		Include/cobject.h \
 		Include/code.h \

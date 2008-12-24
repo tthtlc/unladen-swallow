@@ -68,7 +68,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	int new_lineno = 0;		/* The new value of f_lineno */
 	int new_lasti = 0;		/* The new value of f_lasti */
 	int new_iblock = 0;		/* The new value of f_iblock */
-	unsigned char *code = NULL;	/* The bytecode for the frame... */
+	PyPInst *code = NULL;		/* The bytecode for the frame... */
 	Py_ssize_t code_len = 0;	/* ...and its length */
 	char *lnotab = NULL;		/* Iterating over co_lnotab */
 	Py_ssize_t lnotab_len = 0;	/* (ditto) */
@@ -137,7 +137,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	}
 
 	/* We're now ready to look at the bytecode. */
-	PyString_AsStringAndSize(f->f_code->co_code, (char **)&code, &code_len);
+	code = f->f_code->co_code->instructions;
+	code_len = f->f_code->co_code->size;
 	min_addr = MIN(new_lasti, f->f_lasti);
 	max_addr = MAX(new_lasti, f->f_lasti);
 
@@ -151,7 +152,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	 * cases (AFAIK) where a line's code can start with DUP_TOP or
 	 * POP_TOP, but if any ever appear, they'll be subject to the same
 	 * restriction (but with a different error message). */
-	if (code[new_lasti] == DUP_TOP || code[new_lasti] == POP_TOP) {
+	if (PyPInst_GET_OPCODE(code + new_lasti) == DUP_TOP ||
+            PyPInst_GET_OPCODE(code + new_lasti) == POP_TOP) {
 		PyErr_SetString(PyExc_ValueError,
 		    "can't jump to 'except' line as there's no exception");
 		return -1;
@@ -172,7 +174,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	memset(in_finally, '\0', sizeof(in_finally));
 	blockstack_top = 0;
 	for (addr = 0; addr < code_len; addr++) {
-		unsigned char op = code[addr];
+		unsigned char op = PyPInst_GET_OPCODE(code + addr);
 		switch (op) {
 		case SETUP_LOOP:
 		case SETUP_EXCEPT:
@@ -183,7 +185,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 
 		case POP_BLOCK:
 			assert(blockstack_top > 0);
-			setup_op = code[blockstack[blockstack_top-1]];
+			setup_op = PyPInst_GET_OPCODE(
+				code + blockstack[blockstack_top-1]);
 			if (setup_op == SETUP_FINALLY) {
 				in_finally[blockstack_top-1] = 1;
 			}
@@ -198,7 +201,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 			 * 'finally' block.  (If blockstack_top is 0, we must
 			 * be seeing such an END_FINALLY.) */
 			if (blockstack_top > 0) {
-				setup_op = code[blockstack[blockstack_top-1]];
+				setup_op = PyPInst_GET_OPCODE(
+					code + blockstack[blockstack_top-1]);
 				if (setup_op == SETUP_FINALLY) {
 					blockstack_top--;
 				}
@@ -256,7 +260,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	 * again - in that case we raise an exception below. */
 	delta_iblock = 0;
 	for (addr = min_addr; addr < max_addr; addr++) {
-		unsigned char op = code[addr];
+		unsigned char op = PyPInst_GET_OPCODE(code + addr);
 		switch (op) {
 		case SETUP_LOOP:
 		case SETUP_EXCEPT:
