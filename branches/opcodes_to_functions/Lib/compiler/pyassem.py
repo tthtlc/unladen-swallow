@@ -290,7 +290,7 @@ class Block:
     def getContainedGraphs(self):
         """Return all graphs contained within this block.
 
-        For example, a MAKE_FUNCTION block will contain a reference to
+        For example, a #@make_function block will contain a reference to
         the graph for the function body.
         """
         contained = []
@@ -604,7 +604,7 @@ class PyFlowGraph(FlowGraph):
     def getConsts(self):
         """Return a tuple for the const slot of the code object
 
-        Must convert references to code (MAKE_FUNCTION) to code
+        Must convert references to code (#@make_function) to code
         objects recursively.
         """
         l = []
@@ -796,8 +796,6 @@ class StackDepthTracker:
         return self.CALL_FUNCTION(argc)-1
     def CALL_FUNCTION_VAR_KW(self, argc):
         return self.CALL_FUNCTION(argc)-2
-    def MAKE_FUNCTION(self, argc):
-        return -argc
     def MAKE_CLOSURE(self, argc):
         # XXX need to account for free variables too!
         return -argc

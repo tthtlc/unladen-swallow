@@ -8,7 +8,7 @@ The import magic number will be increased with every commit to this branch, but 
 Opcodes targeted for removal:
 	- LOAD_LOCALS (done)
 	- BUILD_CLASS (done)
-	- MAKE_FUNCTION
+	- MAKE_FUNCTION (done)
 	- EXEC_STMT (done)
 	- PRINT_* (done)
 	- IMPORT_FROM (done)

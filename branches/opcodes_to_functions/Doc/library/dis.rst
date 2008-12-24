@@ -702,13 +702,6 @@ the more significant byte last.
    the function itself off the stack, and pushes the return value.
 
 
-.. opcode:: MAKE_FUNCTION (argc)
-
-   Pushes a new function object on the stack.  TOS is the code associated with the
-   function.  The function object is defined to have *argc* default parameters,
-   which are found below TOS.
-
-
 .. opcode:: MAKE_CLOSURE (argc)
 
    Creates a new function object, sets its *func_closure* slot, and pushes it on

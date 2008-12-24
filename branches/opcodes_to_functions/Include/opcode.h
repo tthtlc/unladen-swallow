@@ -124,7 +124,7 @@ extern "C" {
 #define RAISE_VARARGS	130	/* Number of raise arguments (1, 2 or 3) */
 /* CALL_FUNCTION_XXX opcodes defined below depend on this definition */
 #define CALL_FUNCTION	131	/* #args + (#kwargs<<8) */
-#define MAKE_FUNCTION	132	/* #defaults */
+/* #define MAKE_FUNCTION	132	Replaced by #@make_function() builtin. */
 #define BUILD_SLICE 	133	/* Number of items */
 
 #define MAKE_CLOSURE    134     /* #free vars */

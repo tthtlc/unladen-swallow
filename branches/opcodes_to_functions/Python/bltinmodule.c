@@ -325,8 +325,8 @@ static PyObject *
 builtin_exec(PyObject *self, PyObject *args)
 {
 	int n;
-	PyObject *v, *prog, *globals, *locals;
-    PyFrameObject *f;
+	PyObject *v, *prog, *globals, *locals, *builtins_dict;
+	PyFrameObject *f;
 	int plain = 0;
 
     if (!PyArg_UnpackTuple(args, "#@exec", 1, 3,
@@ -375,8 +375,23 @@ builtin_exec(PyObject *self, PyObject *args)
 		    "exec: arg 3 must be a mapping or None");
 		return NULL;
 	}
-	if (PyDict_GetItemString(globals, "__builtins__") == NULL)
+	builtins_dict = PyDict_GetItemString(globals, "__builtins__");
+	if (builtins_dict == NULL)
 		PyDict_SetItemString(globals, "__builtins__", f->f_builtins);
+	else if (PyDict_Check(builtins_dict) && PyDict_Size(builtins_dict) == 0) {
+		/* Copy over the #@-prefixed functions. */
+		PyObject *key, *value;
+		Py_ssize_t pos = 0;
+
+		while (PyDict_Next(f->f_builtins, &pos, &key, &value)) {
+			if (PyString_Check(key)) {
+				char *key_str = PyString_AsString(key);
+				if (key_str[0] == '#' && key_str[1] == '@') {
+					PyDict_SetItem(builtins_dict, key, value);
+				}
+			}
+		}
+	}
 	if (PyCode_Check(prog)) {
 		if (PyCode_GetNumFree((PyCodeObject *)prog) > 0) {
 			PyErr_SetString(PyExc_TypeError,
@@ -1132,6 +1147,48 @@ PyDoc_STRVAR(import_from_doc,
 \n\
 Simulate the removed IMPORT_NAME opcode. Internal use only.");
 
+static PyObject *
+builtin_make_function(PyObject *self, PyObject *args)
+{
+	PyFrameObject *frame;
+	PyObject *code_obj, *func, *defaults, *default_obj;
+	int i, n = PyTuple_Size(args);
+
+	frame = PyThreadState_Get()->frame;
+
+	code_obj = PyTuple_GetItem(args, 0);
+	func = PyFunction_New(code_obj, frame->f_globals);
+	if (func == NULL)
+		return NULL;
+
+	if (n == 1) {
+		defaults = Py_None;
+		Py_INCREF(defaults);
+	} else {
+		defaults = PyTuple_New(n - 1);
+		if (defaults == NULL) {
+			Py_DECREF(func);
+			return NULL;
+		}
+		for (i = 1; i < n; i++) {
+			default_obj = PyTuple_GetItem(args, i);
+			Py_INCREF(default_obj);
+			PyTuple_SetItem(defaults, i - 1, default_obj);
+		}
+	}
+	if (PyFunction_SetDefaults(func, defaults)) {
+		Py_DECREF(defaults);
+		Py_DECREF(func);
+		return NULL;
+	}
+	Py_DECREF(defaults);
+	return func;
+}
+
+PyDoc_STRVAR(make_function_doc,
+"#@make_function(code_obj, *default_args) -> function\n\
+\n\
+Build a function object. Internal use only.");
 
 static PyObject *
 builtin_map(PyObject *self, PyObject *args)
@@ -2870,6 +2927,7 @@ static PyMethodDef builtin_methods[] = {
 	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
 	{"#@import_from",	builtin_import_from,	    METH_VARARGS, import_from_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
+	{"#@make_function",	builtin_make_function,	    METH_VARARGS, make_function_doc},
  	{"#@print_stmt",    (PyCFunction)builtin_print_stmt,      METH_VARARGS | METH_KEYWORDS, print_doc},
 	{NULL,		NULL},
 };

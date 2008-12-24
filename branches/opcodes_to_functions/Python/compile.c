@@ -852,9 +852,7 @@ opcode_stack_effect(int opcode, int oparg)
 			return -NARGS(oparg)-1;
 		case CALL_FUNCTION_VAR_KW:
 			return -NARGS(oparg)-2;
-#undef NARGS
-		case MAKE_FUNCTION:
-			return -oparg;
+#undef NARGS			
 		case BUILD_SLICE:
 			if (oparg == 3)
 				return -2;
@@ -1267,13 +1265,21 @@ compiler_lookup_arg(PyObject *dict, PyObject *name)
 }
 
 static int
-compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
+compiler_make_closure(struct compiler *c, PyCodeObject *co, asdl_seq *defaults)
 {
-	int i, free = PyCode_GetNumFree(co);
+	int i, free = PyCode_GetNumFree(co), ndefaults = 0;
 	if (free == 0) {
+		if (!compiler_load_global(c, "#@make_function"))
+			return 0;
 	    ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
-	    ADDOP_I(c, MAKE_FUNCTION, args);
+		if (defaults)
+			VISIT_SEQ(c, expr, defaults);
+		ADDOP_I(c, CALL_FUNCTION, asdl_seq_LEN(defaults) + 1);
 	    return 1;
+	}
+	if (defaults) {
+		ndefaults = asdl_seq_LEN(defaults);
+		VISIT_SEQ(c, expr, defaults);
 	}
 	for (i = 0; i < free; ++i) {
 		/* Bypass com_addop_varname because it will generate
@@ -1296,8 +1302,8 @@ compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
 		if (arg == -1) {
 			printf("lookup %s in %s %d %d\n"
 				"freevars of %s: %s\n",
-				PyObject_REPR(name), 
-				PyString_AS_STRING(c->u->u_name), 
+				PyObject_REPR(name),
+				PyString_AS_STRING(c->u->u_name),
 				reftype, arg,
 				PyString_AS_STRING(co->co_name),
 				PyObject_REPR(co->co_freevars));
@@ -1307,7 +1313,7 @@ compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
 	}
 	ADDOP_I(c, BUILD_TUPLE, free);
 	ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
-	ADDOP_I(c, MAKE_CLOSURE, args);
+	ADDOP_I(c, MAKE_CLOSURE, ndefaults);
 	return 1;
 }
 
@@ -1363,8 +1369,6 @@ compiler_function(struct compiler *c, stmt_ty s)
 
 	if (!compiler_decorators(c, decos))
 		return 0;
-	if (args->defaults)
-		VISIT_SEQ(c, expr, args->defaults);
 	if (!compiler_enter_scope(c, s->v.FunctionDef.name, (void *)s,
 				  s->lineno))
 		return 0;
@@ -1393,7 +1397,7 @@ compiler_function(struct compiler *c, stmt_ty s)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
+	compiler_make_closure(c, co, args->defaults);
 	Py_DECREF(co);
 
 	for (i = 0; i < asdl_seq_LEN(decos); i++) {
@@ -1410,7 +1414,7 @@ compiler_class(struct compiler *c, stmt_ty s)
 	PyCodeObject *co;
 	PyObject *str;
 	asdl_seq* decos = s->v.ClassDef.decorator_list;
-	
+
 	if (!compiler_decorators(c, decos))
 		return 0;
 
@@ -1436,7 +1440,7 @@ compiler_class(struct compiler *c, stmt_ty s)
 		compiler_exit_scope(c);
 		return 0;
 	}
-	
+
 	Py_DECREF(str);
 	str = PyString_InternFromString("__module__");
 	if (!str || !compiler_nameop(c, str, Store)) {
@@ -1461,11 +1465,11 @@ compiler_class(struct compiler *c, stmt_ty s)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, 0);
+	compiler_make_closure(c, co, NULL);
 	Py_DECREF(co);
 
 	ADDOP_I(c, CALL_FUNCTION, 0);
-	
+
 	/* Call #@buildclass */
 	ADDOP_I(c, CALL_FUNCTION, 3);
 
@@ -1539,8 +1543,6 @@ compiler_lambda(struct compiler *c, expr_ty e)
 			return 0;
 	}
 
-	if (args->defaults)
-		VISIT_SEQ(c, expr, args->defaults);
 	if (!compiler_enter_scope(c, name, (void *)e, e->lineno))
 		return 0;
 
@@ -1555,7 +1557,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
+	compiler_make_closure(c, co, args->defaults);
 	Py_DECREF(co);
 
 	return 1;
@@ -2835,7 +2837,7 @@ compiler_genexp(struct compiler *c, expr_ty e)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, 0);
+	compiler_make_closure(c, co, NULL);
 	Py_DECREF(co);
 
 	VISIT(c, expr, outermost_iter);

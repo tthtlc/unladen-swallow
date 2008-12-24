@@ -167,7 +167,7 @@ haslocal.append(126)
 
 def_op('RAISE_VARARGS', 130)    # Number of raise arguments (1, 2, or 3)
 def_op('CALL_FUNCTION', 131)    # #args + (#kwargs << 8)
-def_op('MAKE_FUNCTION', 132)    # Number of args with default values
+# def_op('MAKE_FUNCTION', 132)  Replaced by #@make_function calls.
 def_op('BUILD_SLICE', 133)      # Number of items
 def_op('MAKE_CLOSURE', 134)
 def_op('LOAD_CLOSURE', 135)

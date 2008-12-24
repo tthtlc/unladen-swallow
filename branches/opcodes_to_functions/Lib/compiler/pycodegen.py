@@ -375,9 +375,7 @@ class CodeGenerator:
         walk(node.code, gen)
         gen.finish()
         self.set_lineno(node)
-        for default in node.defaults:
-            self.visit(default)
-        self._makeClosure(gen, len(node.defaults))
+        self._makeClosure(gen, node.defaults)
         for i in range(ndecorators):
             self.emit('CALL_FUNCTION', 1)
 
@@ -392,7 +390,7 @@ class CodeGenerator:
         for base in node.bases:
             self.visit(base)
         self.emit('BUILD_TUPLE', len(node.bases))
-        self._makeClosure(gen, 0)
+        self._makeClosure(gen, [])
         self.emit('CALL_FUNCTION', 0)  # Call the closure, get the locals dict
         self.emit('CALL_FUNCTION', 3)  # Call #@buildclass
         self.storeName(node.name)
@@ -622,17 +620,22 @@ class CodeGenerator:
         self.newBlock()
         self.emit('POP_TOP')
 
-    def _makeClosure(self, gen, args):
+    def _makeClosure(self, gen, defaults):
         frees = gen.scope.get_free_vars()
         if frees:
+            for default in defaults:
+                self.visit(default)
             for name in frees:
                 self.emit('LOAD_CLOSURE', name)
             self.emit('BUILD_TUPLE', len(frees))
             self.emit('LOAD_CONST', gen)
-            self.emit('MAKE_CLOSURE', args)
+            self.emit('MAKE_CLOSURE', len(defaults))
         else:
+            self.emit('LOAD_GLOBAL', '#@make_function')
             self.emit('LOAD_CONST', gen)
-            self.emit('MAKE_FUNCTION', args)
+            for default in defaults:
+                self.visit(default)
+            self.emit('CALL_FUNCTION', len(defaults) + 1)
 
     def visitGenExpr(self, node):
         gen = GenExprCodeGenerator(node, self.scopes, self.class_name,
@@ -640,7 +643,7 @@ class CodeGenerator:
         walk(node.code, gen)
         gen.finish()
         self.set_lineno(node)
-        self._makeClosure(gen, 0)
+        self._makeClosure(gen, [])
         # precomputation of outmost iterable
         self.visit(node.code.quals[0].iter)
         self.emit('GET_ITER')

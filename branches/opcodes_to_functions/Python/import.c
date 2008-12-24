@@ -79,9 +79,10 @@ extern time_t PyOS_GetLastModificationTime(char *, FILE *);
        Unladen Swallow 2.6.1: 63101 (Remove PRINT_EXPR)
        Unladen Swallow 2.6.1: 63111 (Remove PRINT_*)
        Unladen Swallow 2.6.1: 63121 (Remove IMPORT_FROM)
+       Unladen Swallow 2.6.1: 63131 (Remove MAKE_FUNCTION)
 .
 */
-#define MAGIC (63121 | ((long)'\r'<<16) | ((long)'\n'<<24))
+#define MAGIC (63131 | ((long)'\r'<<16) | ((long)'\n'<<24))
 
 /* Magic word as global; note that _PyImport_Init() can change the
    value of this global to accommodate for alterations of how the
