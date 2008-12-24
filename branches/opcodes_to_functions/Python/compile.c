@@ -761,14 +761,6 @@ opcode_stack_effect(int opcode, int oparg)
 		case GET_ITER:
 			return 0;
 
-		case PRINT_ITEM:
-			return -1;
-		case PRINT_NEWLINE:
-			return 0;
-		case PRINT_ITEM_TO:
-			return -2;
-		case PRINT_NEWLINE_TO:
-			return -1;
 		case INPLACE_LSHIFT:
 		case INPLACE_RSHIFT:
 		case INPLACE_AND:
@@ -1556,7 +1548,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
 
 	/* unpack nested arguments */
 	compiler_arguments(c, args);
-	
+
 	c->u->u_argcount = asdl_seq_LEN(args->args);
 	VISIT_IN_SCOPE(c, expr, e->v.Lambda.body);
 	ADDOP_IN_SCOPE(c, RETURN_VALUE);
@@ -1574,37 +1566,44 @@ compiler_lambda(struct compiler *c, expr_ty e)
 static int
 compiler_print(struct compiler *c, stmt_ty s)
 {
-	int i, n;
-	bool dest;
+	int i, n, kwargs = 0;
+	PyObject *str;
 
 	assert(s->kind == Print_kind);
 	n = asdl_seq_LEN(s->v.Print.values);
-	dest = false;
-	if (s->v.Print.dest) {
-		VISIT(c, expr, s->v.Print.dest);
-		dest = true;
-	}
+
+	if (!compiler_load_global(c, "#@print_stmt"))
+		return 0;
+
 	for (i = 0; i < n; i++) {
 		expr_ty e = (expr_ty)asdl_seq_GET(s->v.Print.values, i);
-		if (dest) {
-			ADDOP(c, DUP_TOP);
-			VISIT(c, expr, e);
-			ADDOP(c, ROT_TWO);
-			ADDOP(c, PRINT_ITEM_TO);
-		}
-		else {
-			VISIT(c, expr, e);
-			ADDOP(c, PRINT_ITEM);
-		}
+		VISIT(c, expr, e);
 	}
-	if (s->v.Print.nl) {
-		if (dest)
-			ADDOP(c, PRINT_NEWLINE_TO)
-		else
-			ADDOP(c, PRINT_NEWLINE)
+	if (!s->v.Print.nl) {
+		str = PyString_FromString("end");
+		if (!str)
+			return 0;
+		ADDOP_O(c, LOAD_CONST, str, consts);
+		Py_DECREF(str);
+		str = PyString_FromString("");
+		if (!str)
+			return 0;
+		ADDOP_O(c, LOAD_CONST, str, consts);
+		Py_DECREF(str);
+		kwargs++;
 	}
-	else if (dest)
-		ADDOP(c, POP_TOP);
+	if (s->v.Print.dest) {
+		str = PyString_FromString("file");
+		if (!str)
+			return 0;
+		ADDOP_O(c, LOAD_CONST, str, consts);
+		Py_DECREF(str);
+		VISIT(c, expr, s->v.Print.dest);
+		kwargs++;
+	}
+	/* One positional argument, variable number of keyword args. */
+	ADDOP_I(c, CALL_FUNCTION, n | (kwargs << 8));
+	ADDOP(c, POP_TOP);
 	return 1;
 }
 

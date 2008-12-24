@@ -758,7 +758,6 @@ class StackDepthTracker:
         'DELETE_SLICE+3': -3,
         'STORE_SUBSCR': -3,
         'DELETE_SUBSCR': -2,
-        'PRINT_ITEM': -1,
         'RETURN_VALUE': -1,
         'YIELD_VALUE': -1,
         'STORE_NAME': -1,

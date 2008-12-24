@@ -1822,6 +1822,119 @@ file: a file-like object (stream); defaults to the current sys.stdout.\n\
 sep:  string inserted between values, default a space.\n\
 end:  string appended after the last value, default a newline.");
 
+static void
+print_stmt_set_softspace(PyObject *obj, PyObject *file)
+{
+    if (PyString_Check(obj)) {
+        char *s = PyString_AS_STRING(obj);
+        Py_ssize_t len = PyString_GET_SIZE(obj);
+        if (len == 0 ||
+            !isspace(Py_CHARMASK(s[len-1])) ||
+            s[len-1] == ' ')
+                PyFile_SoftSpace(file, 1);
+    }
+#ifdef Py_USING_UNICODE
+    else if (PyUnicode_Check(obj)) {
+        Py_UNICODE *s = PyUnicode_AS_UNICODE(obj);
+        Py_ssize_t len = PyUnicode_GET_SIZE(obj);
+        if (len == 0 ||
+            !Py_UNICODE_ISSPACE(s[len-1]) ||
+            s[len-1] == ' ')
+            PyFile_SoftSpace(file, 1);
+    }
+#endif
+    else
+        PyFile_SoftSpace(file, 1);
+}
+
+/* This is the builtin_print() function above, but with support for all the
+ * softspace stuff needed to emulate the print statement.
+ */
+static PyObject *
+builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
+{
+	static char *kwlist[] = {"end", "file", 0};
+	static PyObject *dummy_args;
+	PyObject *end = NULL, *file = NULL, *to_print;
+	int i, err;
+
+	if (dummy_args == NULL) {
+		if (!(dummy_args = PyTuple_New(0)))
+			return NULL;
+	}
+	if (!PyArg_ParseTupleAndKeywords(dummy_args, kwds, "|OO:print_stmt",
+					 kwlist, &end, &file))
+		return NULL;
+	if (file == NULL || file == Py_None) {
+		file = PySys_GetObject("stdout");
+		/* sys.stdout may be None when FILE* stdout isn't connected */
+		if (file == Py_None)
+			Py_RETURN_NONE;
+		else if (file == NULL) {
+			PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
+			return NULL;
+		}
+	}
+
+	if (end && end != Py_None && !PyString_Check(end) &&
+		!PyUnicode_Check(end)) {
+		PyErr_Format(PyExc_TypeError,
+				 "end must be None, str or unicode, not %.200s",
+				 end->ob_type->tp_name);
+		return NULL;
+	}
+
+	/* PyFile_SoftSpace() can exececute arbitrary code
+	   if sys.stdout is an instance with a __getattr__.
+	   If __getattr__ raises an exception, w will
+	   be freed, so we need to prevent that temporarily. */
+	Py_INCREF(file);
+	if (PyTuple_Size(args) > 0 && PyFile_SoftSpace(file, 0)) {
+		if (PyFile_WriteString(" ", file)) {
+			Py_DECREF(file);
+			return NULL;
+		}
+	}
+
+	for (i = 0; i < PyTuple_Size(args); i++) {
+		if (i > 0 && PyFile_SoftSpace(file, 0)) {
+			if (PyFile_WriteString(" ", file)) {
+				Py_DECREF(file);
+				return NULL;
+			}
+		}
+		to_print = PyTuple_GetItem(args, i);
+		err = PyFile_WriteObject(to_print, file, Py_PRINT_RAW);
+		if (err) {
+			Py_DECREF(file);
+			return NULL;
+		}
+		print_stmt_set_softspace(to_print, file);
+	}
+
+	if (end == NULL || end == Py_None) {
+		err = PyFile_WriteString("\n", file);
+		PyFile_SoftSpace(file, 0);
+	} else if (PyString_Check(end) && PyString_Size(end) == 0) {
+		/* Adjust softspace appropriately based on the last item in the tuple. */
+		if (PyTuple_Size(args)) {
+			PyObject *last_obj = PyTuple_GetItem(args, PyTuple_Size(args) - 1);
+			if (!last_obj) {
+				Py_DECREF(file);
+				return NULL;
+			}
+			print_stmt_set_softspace(last_obj, file);
+		}
+	} else {
+		err = PyFile_WriteObject(end, file, Py_PRINT_RAW);
+		print_stmt_set_softspace(end, file);
+	}
+	Py_DECREF(file);
+	if (err)
+		return NULL;
+
+	Py_RETURN_NONE;
+}
 
 /* Return number of items in range (lo, hi, step), when arguments are
  * PyInt or PyLong objects.  step > 0 required.  Return a value < 0 if
@@ -2733,7 +2846,7 @@ static PyMethodDef builtin_methods[] = {
  	{"#@displayhook",	builtin_displayhook,     METH_VARARGS, displayhook_doc},
 	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
- 	{"#@print",         (PyCFunction)builtin_print,      METH_VARARGS | METH_KEYWORDS, print_doc},
+ 	{"#@print_stmt",    (PyCFunction)builtin_print_stmt,      METH_VARARGS | METH_KEYWORDS, print_doc},
 	{NULL,		NULL},
 };
 
