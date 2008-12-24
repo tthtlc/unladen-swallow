@@ -12,3 +12,6 @@ Opcodes targeted for removal:
 	- EXEC_STMT (done)
 	- PRINT_* (done)
 	- IMPORT_FROM (done)
+	- MAKE_CLOSURE
+	- IMPORT_STAR
+	- IMPORT_NAME
