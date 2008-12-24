@@ -117,7 +117,6 @@ static PyObject * apply_slice(PyObject *, PyObject *, PyObject *);
 static int assign_slice(PyObject *, PyObject *,
 			PyObject *, PyObject *);
 static PyObject * cmp_outcome(int, PyObject *, PyObject *);
-static PyObject * import_from(PyObject *, PyObject *);
 static int import_all_from(PyObject *, PyObject *);
 static void set_exc_info(PyThreadState *, PyObject *, PyObject *, PyObject *);
 static void reset_exc_info(PyThreadState *);
@@ -606,7 +605,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
    cases:
 
    IMPORT_STAR
-   IMPORT_FROM
    CALL_FUNCTION (and friends)
 
  */
@@ -2011,16 +2009,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			PyFrame_LocalsToFast(f, 0);
 			Py_DECREF(v);
 			if (err == 0) continue;
-			break;
-
-		case IMPORT_FROM:
-			w = GETITEM(names, oparg);
-			v = TOP();
-			READ_TIMESTAMP(intr0);
-			x = import_from(v, w);
-			READ_TIMESTAMP(intr1);
-			PUSH(x);
-			if (x != NULL) continue;
 			break;
 
 		case JUMP_FORWARD:
@@ -4055,20 +4043,6 @@ cmp_outcome(int op, register PyObject *v, register PyObject *w)
 	v = res ? Py_True : Py_False;
 	Py_INCREF(v);
 	return v;
-}
-
-static PyObject *
-import_from(PyObject *v, PyObject *name)
-{
-	PyObject *x;
-
-	x = PyObject_GetAttr(v, name);
-	if (x == NULL && PyErr_ExceptionMatches(PyExc_AttributeError)) {
-		PyErr_Format(PyExc_ImportError,
-			     "cannot import name %.230s",
-			     PyString_AsString(name));
-	}
-	return x;
 }
 
 static int

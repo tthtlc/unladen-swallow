@@ -817,8 +817,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return -1;
 		case IMPORT_NAME:
 			return 0;
-		case IMPORT_FROM:
-			return 1;
 
 		case JUMP_FORWARD:
 		case JUMP_IF_FALSE:
@@ -2053,6 +2051,8 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 	ADDOP_O(c, LOAD_CONST, names, consts);
 	Py_DECREF(names);
 	ADDOP_NAME(c, IMPORT_NAME, s->v.ImportFrom.module, names);
+	compiler_load_global(c, "#@import_from");
+	ADDOP(c, ROT_TWO);
 	for (i = 0; i < n; i++) {
 		alias_ty alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		identifier store_name;
@@ -2062,8 +2062,10 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 			ADDOP(c, IMPORT_STAR);
 			return 1;
 		}
-		    
-		ADDOP_NAME(c, IMPORT_FROM, alias->name, names);
+
+		ADDOP_I(c, DUP_TOPX, 2);
+		ADDOP_O(c, LOAD_CONST, alias->name, consts);
+		ADDOP_I(c, CALL_FUNCTION, 2);
 		store_name = alias->name;
 		if (alias->asname)
 			store_name = alias->asname;
@@ -2073,8 +2075,8 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 			return 0;
 		}
 	}
-	/* remove imported module */
-	ADDOP(c, POP_TOP);
+	ADDOP(c, POP_TOP);  /* remove imported module */
+	ADDOP(c, POP_TOP);  /* remove #@import_from function */
 	return 1;
 }
 

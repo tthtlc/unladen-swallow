@@ -1111,6 +1111,29 @@ simultaneously existing objects.  (Hint: it's the object's memory address.)");
 
 
 static PyObject *
+builtin_import_from(PyObject *self, PyObject *args)
+{
+	PyObject *module, *name, *obj;
+
+	if (!PyArg_UnpackTuple(args, "#@import_from", 2, 2, &module, &name))
+		return NULL;
+
+	obj = PyObject_GetAttr(module, name);
+	if (obj == NULL && PyErr_ExceptionMatches(PyExc_AttributeError)) {
+		PyErr_Format(PyExc_ImportError,
+			     "cannot import name %.230s",
+			     PyString_AsString(name));
+	}
+	return obj;
+}
+
+PyDoc_STRVAR(import_from_doc,
+"#@import_from(module, attr_name) -> object\n\
+\n\
+Simulate the removed IMPORT_NAME opcode. Internal use only.");
+
+
+static PyObject *
 builtin_map(PyObject *self, PyObject *args)
 {
 	typedef struct {
@@ -2845,6 +2868,7 @@ static PyMethodDef builtin_methods[] = {
 	{"#@buildclass",	builtin_buildclass,	    METH_VARARGS, buildclass_doc},
  	{"#@displayhook",	builtin_displayhook,     METH_VARARGS, displayhook_doc},
 	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
+	{"#@import_from",	builtin_import_from,	    METH_VARARGS, import_from_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
  	{"#@print_stmt",    (PyCFunction)builtin_print_stmt,      METH_VARARGS | METH_KEYWORDS, print_doc},
 	{NULL,		NULL},

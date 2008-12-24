@@ -11,3 +11,4 @@ Opcodes targeted for removal:
 	- MAKE_FUNCTION
 	- EXEC_STMT (done)
 	- PRINT_* (done)
+	- IMPORT_FROM (done)

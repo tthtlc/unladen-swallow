@@ -529,7 +529,6 @@ class PyFlowGraph(FlowGraph):
     _convert_STORE_NAME = _convert_NAME
     _convert_DELETE_NAME = _convert_NAME
     _convert_IMPORT_NAME = _convert_NAME
-    _convert_IMPORT_FROM = _convert_NAME
     _convert_STORE_ATTR = _convert_NAME
     _convert_LOAD_ATTR = _convert_NAME
     _convert_DELETE_ATTR = _convert_NAME
@@ -769,7 +768,6 @@ class StackDepthTracker:
         'STORE_FAST': -1,
         'IMPORT_STAR': -1,
         'IMPORT_NAME': -1,
-        'IMPORT_FROM': 1,
         'LOAD_ATTR': 0, # unlike other loads
         # close enough...
         'SETUP_EXCEPT': 3,

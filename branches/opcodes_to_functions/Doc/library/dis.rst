@@ -587,13 +587,6 @@ the more significant byte last.
    modifies the namespace.
 
 
-.. opcode:: IMPORT_FROM (namei)
-
-   Loads the attribute ``co_names[namei]`` from the module found in TOS. The
-   resulting object is pushed onto the stack, to be subsequently stored by a
-   ``STORE_FAST`` instruction.
-
-
 .. opcode:: JUMP_FORWARD (delta)
 
    Increments bytecode counter by *delta*.
