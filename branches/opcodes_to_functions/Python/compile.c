@@ -773,8 +773,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return -1; /* XXX Sometimes more */
 		case RETURN_VALUE:
 			return -1;
-		case IMPORT_STAR:
-			return -1;
 		case YIELD_VALUE:
 			return 0;
 
@@ -1994,7 +1992,7 @@ compiler_import(struct compiler *c, stmt_ty s)
 			const char *base = PyString_AS_STRING(alias->name);
 			char *dot = strchr(base, '.');
 			if (dot)
-				tmp = PyString_FromStringAndSize(base, 
+				tmp = PyString_FromStringAndSize(base,
 								 dot - base);
 			r = compiler_nameop(c, tmp, Store);
 			if (dot) {
@@ -2014,7 +2012,8 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 
 	PyObject *names = PyTuple_New(n);
 	PyObject *level;
-	
+	alias_ty alias;
+
 	if (!names)
 		return 0;
 
@@ -2031,7 +2030,7 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 
 	/* build up the names */
 	for (i = 0; i < n; i++) {
-		alias_ty alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
+		alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		Py_INCREF(alias->name);
 		PyTuple_SET_ITEM(names, i, alias->name);
 	}
@@ -2041,29 +2040,39 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 			    "__future__")) {
 			Py_DECREF(level);
 			Py_DECREF(names);
-			return compiler_error(c, 
+			return compiler_error(c,
 				      "from __future__ imports must occur "
 				      "at the beginning of the file");
 
 		}
 	}
 
+	/* Handle 'from x import *' */
+	alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, 0);
+	if (*PyString_AS_STRING(alias->name) == '*') {
+		assert(n == 1);
+		if (!compiler_load_global(c, "#@import_star"))
+			return 0;
+		ADDOP_O(c, LOAD_CONST, level, consts);
+		Py_DECREF(level);
+		ADDOP_O(c, LOAD_CONST, names, consts);
+		Py_DECREF(names);
+		ADDOP_NAME(c, IMPORT_NAME, s->v.ImportFrom.module, names);
+		ADDOP_I(c, CALL_FUNCTION, 1);
+		ADDOP(c, POP_TOP);
+		return 1;
+	}
+	/* Handle all other imports. */
+	if (!compiler_load_global(c, "#@import_from"))
+		return 0;
 	ADDOP_O(c, LOAD_CONST, level, consts);
 	Py_DECREF(level);
 	ADDOP_O(c, LOAD_CONST, names, consts);
 	Py_DECREF(names);
 	ADDOP_NAME(c, IMPORT_NAME, s->v.ImportFrom.module, names);
-	compiler_load_global(c, "#@import_from");
-	ADDOP(c, ROT_TWO);
 	for (i = 0; i < n; i++) {
-		alias_ty alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
+		alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		identifier store_name;
-
-		if (i == 0 && *PyString_AS_STRING(alias->name) == '*') {
-			assert(n == 1);
-			ADDOP(c, IMPORT_STAR);
-			return 1;
-		}
 
 		ADDOP_I(c, DUP_TOPX, 2);
 		ADDOP_O(c, LOAD_CONST, alias->name, consts);

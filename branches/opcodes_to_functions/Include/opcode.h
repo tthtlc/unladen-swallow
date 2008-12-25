@@ -76,7 +76,7 @@ extern "C" {
 #define WITH_CLEANUP    81
 /*#define LOAD_LOCALS	82  Replaced with a function call to #@locals. */
 #define RETURN_VALUE	83
-#define IMPORT_STAR	84
+/*#define IMPORT_STAR	84  Replaced with a function call to #@import_star. */
 /*#define EXEC_STMT	85  Replaced with a function call to #@exec. */
 #define YIELD_VALUE	86
 #define POP_BLOCK	87

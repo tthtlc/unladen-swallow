@@ -604,7 +604,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
    It's a case-by-case judgement.  I'll use intr1 for the following
    cases:
 
-   IMPORT_STAR
    CALL_FUNCTION (and friends)
 
  */
@@ -1993,22 +1992,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			Py_DECREF(w);
 			SET_TOP(x);
 			if (x != NULL) continue;
-			break;
-
-		case IMPORT_STAR:
-			v = POP();
-			PyFrame_FastToLocals(f);
-			if ((x = f->f_locals) == NULL) {
-				PyErr_SetString(PyExc_SystemError,
-					"no locals found during 'import *'");
-				break;
-			}
-			READ_TIMESTAMP(intr0);
-			err = import_all_from(x, v);
-			READ_TIMESTAMP(intr1);
-			PyFrame_LocalsToFast(f, 0);
-			Py_DECREF(v);
-			if (err == 0) continue;
 			break;
 
 		case JUMP_FORWARD:
@@ -4021,65 +4004,6 @@ cmp_outcome(int op, register PyObject *v, register PyObject *w)
 	v = res ? Py_True : Py_False;
 	Py_INCREF(v);
 	return v;
-}
-
-static int
-import_all_from(PyObject *locals, PyObject *v)
-{
-	PyObject *all = PyObject_GetAttrString(v, "__all__");
-	PyObject *dict, *name, *value;
-	int skip_leading_underscores = 0;
-	int pos, err;
-
-	if (all == NULL) {
-		if (!PyErr_ExceptionMatches(PyExc_AttributeError))
-			return -1; /* Unexpected error */
-		PyErr_Clear();
-		dict = PyObject_GetAttrString(v, "__dict__");
-		if (dict == NULL) {
-			if (!PyErr_ExceptionMatches(PyExc_AttributeError))
-				return -1;
-			PyErr_SetString(PyExc_ImportError,
-			"from-import-* object has no __dict__ and no __all__");
-			return -1;
-		}
-		all = PyMapping_Keys(dict);
-		Py_DECREF(dict);
-		if (all == NULL)
-			return -1;
-		skip_leading_underscores = 1;
-	}
-
-	for (pos = 0, err = 0; ; pos++) {
-		name = PySequence_GetItem(all, pos);
-		if (name == NULL) {
-			if (!PyErr_ExceptionMatches(PyExc_IndexError))
-				err = -1;
-			else
-				PyErr_Clear();
-			break;
-		}
-		if (skip_leading_underscores &&
-		    PyString_Check(name) &&
-		    PyString_AS_STRING(name)[0] == '_')
-		{
-			Py_DECREF(name);
-			continue;
-		}
-		value = PyObject_GetAttr(v, name);
-		if (value == NULL)
-			err = -1;
-		else if (PyDict_CheckExact(locals))
-			err = PyDict_SetItem(locals, name, value);
-		else
-			err = PyObject_SetItem(locals, name, value);
-		Py_DECREF(name);
-		Py_XDECREF(value);
-		if (err != 0)
-			break;
-	}
-	Py_DECREF(all);
-	return err;
 }
 
 static void

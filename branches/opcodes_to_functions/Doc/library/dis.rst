@@ -447,13 +447,6 @@ Miscellaneous opcodes.
    Pops ``TOS`` and yields it from a :term:`generator`.
 
 
-.. opcode:: IMPORT_STAR ()
-
-   Loads all symbols not starting with ``'_'`` directly from the module TOS to the
-   local namespace. The module is popped after loading all names. This opcode
-   implements ``from module import *``.
-
-
 .. opcode:: POP_BLOCK ()
 
    Removes one block from the block stack.  Per frame, there is a  stack of blocks,

@@ -897,24 +897,28 @@ class CodeGenerator:
         if level == 0 and not self.graph.checkFlag(CO_FUTURE_ABSIMPORT):
             level = -1
         fromlist = map(lambda (name, alias): name, node.names)
+        # Handle 'from x import *' statements.
+        if node.names[0][0] == '*':
+            # There can only be one name w/ from ... import *
+            assert len(node.names) == 1
+            self.namespace = 0
+            self.emit('LOAD_GLOBAL', '#@import_star')
+            self.emit('LOAD_CONST', level)
+            self.emit('LOAD_CONST', tuple(fromlist))
+            self.emit('IMPORT_NAME', node.modname)
+            self.emit('CALL_FUNCTION', 1)
+            self.emit('POP_TOP')
+            return
+        self.emit('LOAD_GLOBAL', '#@import_from')
         self.emit('LOAD_CONST', level)
         self.emit('LOAD_CONST', tuple(fromlist))
         self.emit('IMPORT_NAME', node.modname)
-        self.emit('LOAD_GLOBAL', '#@import_from')
-        self.emit('ROT_TWO')
         for name, alias in node.names:
-            if name == '*':
-                self.namespace = 0
-                self.emit('IMPORT_STAR')
-                # There can only be one name w/ from ... import *
-                assert len(node.names) == 1
-                return
-            else:
-                self.emit('DUP_TOPX', 2)
-                self.emit('LOAD_CONST', name)
-                self.emit('CALL_FUNCTION', 2)
-                self._resolveDots(name)
-                self.storeName(alias or name)
+            self.emit('DUP_TOPX', 2)
+            self.emit('LOAD_CONST', name)
+            self.emit('CALL_FUNCTION', 2)
+            self._resolveDots(name)
+            self.storeName(alias or name)
         self.emit('POP_TOP')  # Remove the imported module.
         self.emit('POP_TOP')  # Remove the #@import_from function.
 

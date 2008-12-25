@@ -1147,6 +1147,91 @@ PyDoc_STRVAR(import_from_doc,
 \n\
 Simulate the removed IMPORT_NAME opcode. Internal use only.");
 
+/* Helper for builtin_import_star below. */
+static int
+import_all_from(PyObject *locals, PyObject *v)
+{
+	PyObject *all = PyObject_GetAttrString(v, "__all__");
+	PyObject *dict, *name, *value;
+	int skip_leading_underscores = 0;
+	int pos, err;
+
+	if (all == NULL) {
+		if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+			return -1; /* Unexpected error */
+		PyErr_Clear();
+		dict = PyObject_GetAttrString(v, "__dict__");
+		if (dict == NULL) {
+			if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+				return -1;
+			PyErr_SetString(PyExc_ImportError,
+			"from-import-* object has no __dict__ and no __all__");
+			return -1;
+		}
+		all = PyMapping_Keys(dict);
+		Py_DECREF(dict);
+		if (all == NULL)
+			return -1;
+		skip_leading_underscores = 1;
+	}
+
+	for (pos = 0, err = 0; ; pos++) {
+		name = PySequence_GetItem(all, pos);
+		if (name == NULL) {
+			if (!PyErr_ExceptionMatches(PyExc_IndexError))
+				err = -1;
+			else
+				PyErr_Clear();
+			break;
+		}
+		if (skip_leading_underscores &&
+		    PyString_Check(name) &&
+		    PyString_AS_STRING(name)[0] == '_')
+		{
+			Py_DECREF(name);
+			continue;
+		}
+		value = PyObject_GetAttr(v, name);
+		if (value == NULL)
+			err = -1;
+		else if (PyDict_CheckExact(locals))
+			err = PyDict_SetItem(locals, name, value);
+		else
+			err = PyObject_SetItem(locals, name, value);
+		Py_DECREF(name);
+		Py_XDECREF(value);
+		if (err != 0)
+			break;
+	}
+	Py_DECREF(all);
+	return err;
+}
+
+static PyObject *
+builtin_import_star(PyObject *self, PyObject *module)
+{
+	int err;
+	PyObject *locals;
+	PyFrameObject *frame = PyThreadState_Get()->frame;
+
+	PyFrame_FastToLocals(frame);
+	if ((locals = frame->f_locals) == NULL) {
+		PyErr_SetString(PyExc_SystemError,
+			"no locals found during 'import *'");
+		return NULL;
+	}
+	err = import_all_from(locals, module);
+	PyFrame_LocalsToFast(frame, 0);
+	if (err)
+		return NULL;
+	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(import_star_doc,
+"#@import_star(module) -> None\n\
+\n\
+Implement 'from foo import *'. Internal use only.");
+
 static PyObject *
 builtin_make_function(PyObject *self, PyObject *args)
 {
@@ -2926,6 +3011,7 @@ static PyMethodDef builtin_methods[] = {
  	{"#@displayhook",	builtin_displayhook,     METH_VARARGS, displayhook_doc},
 	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
 	{"#@import_from",	builtin_import_from,	    METH_VARARGS, import_from_doc},
+	{"#@import_star",	(PyCFunction)builtin_import_star,	    METH_O, import_star_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
 	{"#@make_function",	builtin_make_function,	    METH_VARARGS, make_function_doc},
  	{"#@print_stmt",    (PyCFunction)builtin_print_stmt,      METH_VARARGS | METH_KEYWORDS, print_doc},
