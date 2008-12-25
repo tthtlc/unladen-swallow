@@ -881,9 +881,11 @@ class CodeGenerator:
         self.set_lineno(node)
         level = 0 if self.graph.checkFlag(CO_FUTURE_ABSIMPORT) else -1
         for name, alias in node.names:
+            self.emit('LOAD_GLOBAL', '#@import_name')
             self.emit('LOAD_CONST', level)
             self.emit('LOAD_CONST', None)
-            self.emit('IMPORT_NAME', name)
+            self.emit('LOAD_CONST', name)
+            self.emit('CALL_FUNCTION', 3)
             mod = name.split(".")[0]
             if alias:
                 self._resolveDots(name)
@@ -903,16 +905,20 @@ class CodeGenerator:
             assert len(node.names) == 1
             self.namespace = 0
             self.emit('LOAD_GLOBAL', '#@import_star')
+            self.emit('LOAD_GLOBAL', '#@import_name')
             self.emit('LOAD_CONST', level)
             self.emit('LOAD_CONST', tuple(fromlist))
-            self.emit('IMPORT_NAME', node.modname)
+            self.emit('LOAD_CONST', node.modname)
+            self.emit('CALL_FUNCTION', 3)
             self.emit('CALL_FUNCTION', 1)
             self.emit('POP_TOP')
             return
         self.emit('LOAD_GLOBAL', '#@import_from')
+        self.emit('LOAD_GLOBAL', '#@import_name')
         self.emit('LOAD_CONST', level)
         self.emit('LOAD_CONST', tuple(fromlist))
-        self.emit('IMPORT_NAME', node.modname)
+        self.emit('LOAD_CONST', node.modname)
+        self.emit('CALL_FUNCTION', 3)
         for name, alias in node.names:
             self.emit('DUP_TOPX', 2)
             self.emit('LOAD_CONST', name)

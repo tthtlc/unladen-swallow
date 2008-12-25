@@ -813,8 +813,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return 0;
 		case COMPARE_OP:
 			return -1;
-		case IMPORT_NAME:
-			return 0;
 
 		case JUMP_FORWARD:
 		case JUMP_IF_FALSE:
@@ -1925,7 +1923,7 @@ compiler_try_except(struct compiler *c, stmt_ty s)
 static int
 compiler_import_as(struct compiler *c, identifier name, identifier asname)
 {
-	/* The IMPORT_NAME opcode was already generated.  This function
+	/* The #@import_name call was already generated.  This function
 	   merely needs to bind the result to a name.
 
 	   If there is a dot in name, we need to split it and emit a 
@@ -1977,10 +1975,13 @@ compiler_import(struct compiler *c, stmt_ty s)
 		if (level == NULL)
 			return 0;
 
+		if (!compiler_load_global(c, "#@import_name"))
+			return 0;
 		ADDOP_O(c, LOAD_CONST, level, consts);
 		Py_DECREF(level);
 		ADDOP_O(c, LOAD_CONST, Py_None, consts);
-		ADDOP_NAME(c, IMPORT_NAME, alias->name, names);
+		ADDOP_O(c, LOAD_CONST, alias->name, consts);
+		ADDOP_I(c, CALL_FUNCTION, 3);
 
 		if (alias->asname) {
 			r = compiler_import_as(c, alias->name, alias->asname);
@@ -2053,11 +2054,14 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 		assert(n == 1);
 		if (!compiler_load_global(c, "#@import_star"))
 			return 0;
+		if (!compiler_load_global(c, "#@import_name"))
+			return 0;
 		ADDOP_O(c, LOAD_CONST, level, consts);
 		Py_DECREF(level);
 		ADDOP_O(c, LOAD_CONST, names, consts);
 		Py_DECREF(names);
-		ADDOP_NAME(c, IMPORT_NAME, s->v.ImportFrom.module, names);
+		ADDOP_O(c, LOAD_CONST, s->v.ImportFrom.module, consts);
+		ADDOP_I(c, CALL_FUNCTION, 3);
 		ADDOP_I(c, CALL_FUNCTION, 1);
 		ADDOP(c, POP_TOP);
 		return 1;
@@ -2065,11 +2069,14 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 	/* Handle all other imports. */
 	if (!compiler_load_global(c, "#@import_from"))
 		return 0;
+	if (!compiler_load_global(c, "#@import_name"))
+		return 0;
 	ADDOP_O(c, LOAD_CONST, level, consts);
 	Py_DECREF(level);
 	ADDOP_O(c, LOAD_CONST, names, consts);
 	Py_DECREF(names);
-	ADDOP_NAME(c, IMPORT_NAME, s->v.ImportFrom.module, names);
+	ADDOP_O(c, LOAD_CONST, s->v.ImportFrom.module, consts);
+	ADDOP_I(c, CALL_FUNCTION, 3);
 	for (i = 0; i < n; i++) {
 		alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		identifier store_name;

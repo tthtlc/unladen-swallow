@@ -13,5 +13,5 @@ Opcodes targeted for removal:
 	- PRINT_* (done)
 	- IMPORT_FROM (done)
 	- MAKE_CLOSURE
-	- IMPORT_STAR
-	- IMPORT_NAME
+	- IMPORT_STAR (done)
+	- IMPORT_NAME (done)

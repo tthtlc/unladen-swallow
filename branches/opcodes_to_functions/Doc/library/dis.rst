@@ -571,15 +571,6 @@ the more significant byte last.
    ``cmp_op[opname]``.
 
 
-.. opcode:: IMPORT_NAME (namei)
-
-   Imports the module ``co_names[namei]``.  TOS and TOS1 are popped and provide
-   the *fromlist* and *level* arguments of :func:`__import__`.  The module
-   object is pushed onto the stack.  The current namespace is not affected:
-   for a proper import statement, a subsequent ``STORE_FAST`` instruction
-   modifies the namespace.
-
-
 .. opcode:: JUMP_FORWARD (delta)
 
    Increments bytecode counter by *delta*.

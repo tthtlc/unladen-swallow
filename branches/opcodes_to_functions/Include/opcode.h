@@ -102,8 +102,8 @@ extern "C" {
 #define BUILD_MAP	104	/* Always zero for now */
 #define LOAD_ATTR	105	/* Index in name list */
 #define COMPARE_OP	106	/* Comparison operator */
-#define IMPORT_NAME	107	/* Index in name list */
-/* #define IMPORT_FROM	108	 Index in name list. Removed in favor of #@import_from */
+/* #define IMPORT_NAME	107	 Removed in favor of #@import_name */
+/* #define IMPORT_FROM	108	 Removed in favor of #@import_from */
 
 #define JUMP_FORWARD	110	/* Number of bytes to skip */
 #define JUMP_IF_FALSE	111	/* "" */

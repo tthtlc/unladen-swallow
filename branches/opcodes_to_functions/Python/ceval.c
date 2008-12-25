@@ -1950,50 +1950,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			PREDICT(JUMP_IF_TRUE);
 			continue;
 
-		case IMPORT_NAME:
-			w = GETITEM(names, oparg);
-			x = PyDict_GetItemString(f->f_builtins, "__import__");
-			if (x == NULL) {
-				PyErr_SetString(PyExc_ImportError,
-						"__import__ not found");
-				break;
-			}
-			Py_INCREF(x);
-			v = POP();
-			u = TOP();
-			if (PyInt_AsLong(u) != -1 || PyErr_Occurred())
-				w = PyTuple_Pack(5,
-					    w,
-					    f->f_globals,
-					    f->f_locals == NULL ?
-						  Py_None : f->f_locals,
-					    v,
-					    u);
-			else
-				w = PyTuple_Pack(4,
-					    w,
-					    f->f_globals,
-					    f->f_locals == NULL ?
-						  Py_None : f->f_locals,
-					    v);
-			Py_DECREF(v);
-			Py_DECREF(u);
-			if (w == NULL) {
-				u = POP();
-				Py_DECREF(x);
-				x = NULL;
-				break;
-			}
-			READ_TIMESTAMP(intr0);
-			v = x;
-			x = PyEval_CallObject(v, w);
-			Py_DECREF(v);
-			READ_TIMESTAMP(intr1);
-			Py_DECREF(w);
-			SET_TOP(x);
-			if (x != NULL) continue;
-			break;
-
 		case JUMP_FORWARD:
 			JUMPBY(oparg);
 			goto fast_next_opcode;

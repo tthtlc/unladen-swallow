@@ -1147,6 +1147,52 @@ PyDoc_STRVAR(import_from_doc,
 \n\
 Simulate the removed IMPORT_NAME opcode. Internal use only.");
 
+
+static PyObject *
+builtin_import_name(PyObject *self, PyObject *args)
+{
+	PyObject *module_name, *import, *import_args, *names, *level, *module;
+	PyFrameObject *frame = PyThreadState_Get()->frame;
+
+	if (!PyArg_UnpackTuple(args, "#@import_name", 3, 3,
+						   &level, &names, &module_name))
+		return NULL;
+
+	import = PyDict_GetItemString(frame->f_builtins, "__import__");
+	if (import == NULL) {
+		PyErr_SetString(PyExc_ImportError, "__import__ not found");
+		return NULL;
+	}
+	Py_INCREF(import);
+	if (PyInt_AsLong(level) != -1 || PyErr_Occurred())
+		import_args = PyTuple_Pack(5,
+			    module_name,
+			    frame->f_globals,
+			    frame->f_locals == NULL ? Py_None : frame->f_locals,
+			    names,
+			    level);
+	else
+		import_args = PyTuple_Pack(4,
+			    module_name,
+			    frame->f_globals,
+			    frame->f_locals == NULL ? Py_None : frame->f_locals,
+			    names);
+	if (import_args == NULL) {
+		Py_DECREF(import);
+		return NULL;
+	}
+	module = PyEval_CallObject(import, import_args);
+	Py_DECREF(import);
+	Py_DECREF(import_args);
+	return module;
+}
+
+PyDoc_STRVAR(import_name_doc,
+"#@import_name(level, names, module_name) -> module_name\n\
+\n\
+Simulate the removed IMPORT_NAME opcode. Internal use only.");
+
+
 /* Helper for builtin_import_star below. */
 static int
 import_all_from(PyObject *locals, PyObject *v)
@@ -3011,6 +3057,7 @@ static PyMethodDef builtin_methods[] = {
  	{"#@displayhook",	builtin_displayhook,     METH_VARARGS, displayhook_doc},
 	{"#@exec",	        builtin_exec,	    METH_VARARGS, exec_doc},
 	{"#@import_from",	builtin_import_from,	    METH_VARARGS, import_from_doc},
+	{"#@import_name",	builtin_import_name,	    METH_VARARGS, import_name_doc},
 	{"#@import_star",	(PyCFunction)builtin_import_star,	    METH_O, import_star_doc},
  	{"#@locals",		(PyCFunction)builtin_locals,     METH_NOARGS, locals_doc},
 	{"#@make_function",	builtin_make_function,	    METH_VARARGS, make_function_doc},
