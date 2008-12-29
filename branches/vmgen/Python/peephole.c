@@ -353,7 +353,8 @@ translate_inst(PyPInst* inst)
 	case CALL_FUNCTION_VAR_KW:
 		REPLACE_OP(VMG_CALL_FUNCTION_VAR_KW);
 		PyPInst_SET_ARG(inst + 1,
-				(PyPInst_GET_ARG(inst + 1) << 16) | cpython_code);
+				(PyPInst_GET_ARG(inst + 1) << 16) |
+				(cpython_code - CALL_FUNCTION));
 		break;
 
 	default:

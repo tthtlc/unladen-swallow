@@ -994,11 +994,11 @@ if (x != NULL) NEXT();
 ERROR();
 
 CALL_FUNCTION_VAR_KW ( #i -- )
-int opcode = i & 0x0000FFFF;
+int var_kw = i & 0x0000FFFF;
 int oparg  = i>>16;
 int na     = oparg & 0xff;
 int nk     = (oparg>>8) & 0xff;
-int flags  = (opcode - CALL_FUNCTION) & 3;
+int flags  = var_kw & 3;
 int n      = na + 2 * nk;
 PyObject **pfunc, *func, **sp;
 if (flags & CALL_FLAG_VAR)

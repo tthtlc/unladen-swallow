@@ -29,7 +29,6 @@ del op
 for i, name in enumerate(_opcode.opcodes):
     opname[i] = name
     opmap[name] = i
-    opmap[name.upper()] = i
 del i, name
 
 opdesc = {}
