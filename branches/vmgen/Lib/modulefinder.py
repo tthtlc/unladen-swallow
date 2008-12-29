@@ -21,7 +21,11 @@ IMPORT_NAME = chr(dis.opname.index('IMPORT_NAME'))
 STORE_NAME = chr(dis.opname.index('STORE_NAME'))
 STORE_GLOBAL = chr(dis.opname.index('STORE_GLOBAL'))
 STORE_OPS = [STORE_NAME, STORE_GLOBAL]
-HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
+wordcode = 0
+try:
+    HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
+except AttributeError:
+    wordcode = 1
 
 # Modulefinder does a good job at simulating Python's, but it can not
 # handle __path__ modifications packages make at runtime.  Therefore there
@@ -392,9 +396,43 @@ class ModuleFinder:
             else:
                 code = code[1:]
 
+    def scan_opcodes_wordcode(self, co,
+                              unpack = struct.unpack):
+        # Scan the code, and yield 'interesting' opcode combinations
+        # "wordcode" version (has 1-element arguments)
+        code = list(co.co_code)
+        names = co.co_names
+        consts = co.co_consts
+        LOAD_LOAD_AND_IMPORT = map(lambda x: ord(x) << 1,
+                                   [LOAD_CONST, LOAD_CONST, IMPORT_NAME])
+        REAL_STORE_OPS = [ord(o) for o in STORE_OPS]
+        while code:
+            c = dis.get_opcode(code[0])
+            if c in REAL_STORE_OPS:
+                oparg = dis.get_argument(code[1])
+                yield "store", (names[oparg],)
+                code = code[2:]
+                continue
+            if code[:6:2] == LOAD_LOAD_AND_IMPORT:
+                oparg_1, oparg_2, oparg_3 = map(dis.get_argument, code[1:6:2])
+                level = consts[oparg_1]
+                if level == -1: # normal import
+                    yield "import", (consts[oparg_2], names[oparg_3])
+                elif level == 0: # absolute import
+                    yield "absolute_import", (consts[oparg_2], names[oparg_3])
+                else: # relative import
+                    yield "relative_import", (level, consts[oparg_2], names[oparg_3])
+                code = code[6:]
+                continue
+            code = code[1:]
+            while code and dis.is_argument(code[0]):
+                code = code[1:]
+
     def scan_code(self, co, m):
         code = co.co_code
-        if sys.version_info >= (2, 5):
+        if wordcode:
+            scanner = self.scan_opcodes_wordcode
+        elif sys.version_info >= (2, 5):
             scanner = self.scan_opcodes_25
         else:
             scanner = self.scan_opcodes
