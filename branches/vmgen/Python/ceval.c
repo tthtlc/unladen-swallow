@@ -12,6 +12,7 @@
 #include "Python.h"
 
 #include "code.h"
+#include "instructionsobject.h"
 #include "frameobject.h"
 #include "eval.h"
 #include "opcode.h"
@@ -128,7 +129,7 @@ static void format_exc_check_arg(PyObject *, char *, PyObject *);
 static PyObject * string_concatenate(PyObject *, PyObject *,
                                      PyFrameObject *, int, int );
 static void translate_code(Inst **, unsigned char *, int);
-static void disassemble_bytecode(PyPInstVec *code);
+static void disassemble_bytecode(PyInstructionsObject *code);
 static void disassemble_tcode(Inst *, Inst *);
 
 #define NAME_ERROR_MSG \
@@ -806,8 +807,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
         if (first_instr == NULL) {
                 Py_ssize_t len, i;
-                PyPInst *pinsts = co->co_code->instructions;
-                len = co->co_code->size;
+                PyPInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
+                len = Py_SIZE(co->co_code);
                 MAYBE(disassemble_bytecode(co->co_code));
                 first_instr = (Inst *) calloc(len, sizeof(Inst));
                 for (i = 0; i < len; ++i) {
@@ -1342,11 +1343,11 @@ fail: /* Jump here from prelude on failure */
 /* Disassemblers */
 
 static void
-disassemble_bytecode(PyPInstVec *code)
+disassemble_bytecode(PyInstructionsObject *code)
 {
         int opcode = 0, oparg = 0;
-        PyPInst *current = code->instructions;
-        PyPInst *end = current + code->size;
+        PyPInst *current = code->inst;
+        PyPInst *end = current + Py_SIZE(code);
 
         while (current < end) {
                 opcode = PyPInst_GET_OPCODE(current++);

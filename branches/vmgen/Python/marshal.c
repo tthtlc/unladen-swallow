@@ -9,6 +9,7 @@
 #include "Python.h"
 #include "longintrepr.h"
 #include "code.h"
+#include "instructionsobject.h"
 #include "marshal.h"
 
 /* High water mark to determine when the marshalled object is dangerously deep
@@ -357,15 +358,12 @@ w_object(PyObject *v, WFILE *p)
 	}
 	else if (PyCode_Check(v)) {
 		PyCodeObject *co = (PyCodeObject *)v;
-                PyObject *temp_code_list;
 		w_byte(TYPE_CODE, p);
 		w_long(co->co_argcount, p);
 		w_long(co->co_nlocals, p);
 		w_long(co->co_stacksize, p);
 		w_long(co->co_flags, p);
-                temp_code_list = _PyPInstVec_ToList(co->co_code);
-		w_object(temp_code_list, p);
-                Py_DECREF(temp_code_list);
+		w_object(co->co_code, p);
 		w_object(co->co_consts, p);
 		w_object(co->co_names, p);
 		w_object(co->co_varnames, p);
@@ -389,6 +387,11 @@ w_object(PyObject *v, WFILE *p)
 		}
 		w_long((long)n, p);
 		w_string(s, (int)n, p);
+	}
+	else if (PyInstructions_Check(v)) {
+		PyObject *temp_list = PySequence_List(v);
+		w_object(temp_list, p);
+		Py_DECREF(temp_list);
 	}
 	else {
 		w_byte(TYPE_UNKNOWN, p);
@@ -906,7 +909,7 @@ r_object(RFILE *p)
 			int stacksize;
 			int flags;
 			PyObject *code_list = NULL;
-			PyPInstVec *code = NULL;
+			PyObject *code = NULL;
 			PyObject *consts = NULL;
 			PyObject *names = NULL;
 			PyObject *varnames = NULL;
@@ -927,7 +930,7 @@ r_object(RFILE *p)
 			code_list = r_object(p);
 			if (code_list == NULL)
 				goto code_error;
-			code = _PyPInstVec_FromSequence(code_list);
+			code = PyInstructions_FromSequence(code_list);
 			if (code == NULL)
 				goto code_error;
 			consts = r_object(p);
@@ -961,11 +964,10 @@ r_object(RFILE *p)
 					code, consts, names, varnames,
 					freevars, cellvars, filename, name,
 					firstlineno, lnotab);
-			code = NULL;
 
 		  code_error:
 			Py_XDECREF(code_list);
-                        PyObject_FREE(code);
+			Py_XDECREF(code);
 			Py_XDECREF(consts);
 			Py_XDECREF(names);
 			Py_XDECREF(varnames);

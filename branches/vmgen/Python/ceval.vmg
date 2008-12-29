@@ -335,8 +335,9 @@ print_item_to ( a1 -- )
 a2 = stream = a1;
 goto print_item_fallthrough;
 
-print_item ( a1 -- dec:a1  next:error )
+print_item ( --  next:error )
 print_item_fallthrough:
+a1 = POP();
 if (stream == NULL || stream == Py_None) {
         a2 = PySys_GetObject("stdout");
         if (a2 == NULL) {
@@ -366,6 +367,7 @@ if (err == 0) {
         } else
                 PyFile_SoftSpace(a2, 1);
 }
+Py_XDECREF(a1);
 Py_XDECREF(a2);
 Py_XDECREF(stream);
 stream = NULL;

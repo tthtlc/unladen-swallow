@@ -29,6 +29,7 @@
 #include "ast.h"
 #include "code.h"
 #include "compile.h"
+#include "instructionsobject.h"
 #include "symtable.h"
 #include "opcode.h"
 
@@ -3399,7 +3400,7 @@ compiler_visit_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 */
 
 struct assembler {
-	PyPInstVec *a_code;    /* contains opcode.h, not vmgen codes */
+	PyInstructionsObject *a_code;    /* contains opcode.h, not vmgen codes */
 	int a_offset;	       /* offset into bytecode */
 	int a_nblocks;	       /* number of reachable blocks */
 	basicblock **a_postorder; /* list of blocks in dfs postorder */
@@ -3482,8 +3483,8 @@ assemble_init(struct assembler *a, int nblocks, int firstlineno)
 {
 	memset(a, 0, sizeof(struct assembler));
 	a->a_lineno = firstlineno;
-	a->a_code = NULL;
-	if (_PyPInstVec_Resize(&a->a_code, DEFAULT_CODE_SIZE) < 0)
+	a->a_code = _PyInstructions_New(DEFAULT_CODE_SIZE);
+	if (a->a_code == NULL)
 		return 0;
 	a->a_lnotab = PyString_FromStringAndSize(NULL, DEFAULT_LNOTAB_SIZE);
 	if (!a->a_lnotab)
@@ -3504,7 +3505,7 @@ assemble_init(struct assembler *a, int nblocks, int firstlineno)
 static void
 assemble_free(struct assembler *a)
 {
-	PyObject_FREE(a->a_code);
+	Py_XDECREF(a->a_code);
 	Py_XDECREF(a->a_lnotab);
 	if (a->a_postorder)
 		PyObject_Free(a->a_postorder);
@@ -3679,7 +3680,7 @@ static int
 assemble_emit(struct assembler *a, struct instr *i)
 {
 	int size, arg = 0, ext = 0;
-	Py_ssize_t len = a->a_code->size;
+	Py_ssize_t len = Py_SIZE(a->a_code);
 	PyPInst *code;
 
 	size = instrsize(i);
@@ -3692,10 +3693,10 @@ assemble_emit(struct assembler *a, struct instr *i)
 	if (a->a_offset + size >= len) {
 		if (len > PY_SSIZE_T_MAX / 2)
 			return 0;
-		if (_PyPInstVec_Resize(&a->a_code, len * 2) < 0)
+		if (_PyInstructions_Resize(&a->a_code, len * 2) < 0)
 		    return 0;
 	}
-	code = a->a_code->instructions + a->a_offset;
+	code = a->a_code->inst + a->a_offset;
 	a->a_offset += size;
 	assert(size != 6);  /* XXX: No more reason to have EXTENDED_ARGs. */
 	if (size == 6) {
@@ -3840,6 +3841,7 @@ makecode(struct compiler *c, struct assembler *a)
 {
 	PyObject *tmp;
 	PyCodeObject *co = NULL;
+	PyObject *code = NULL;
 	PyObject *consts = NULL;
 	PyObject *names = NULL;
 	PyObject *varnames = NULL;
@@ -3875,8 +3877,8 @@ makecode(struct compiler *c, struct assembler *a)
 	if (flags < 0)
 		goto error;
 
-	PyCode_Optimize(&a->a_code, consts, names, a->a_lnotab);
-	if (!a->a_code)
+	code = PyCode_Optimize((PyObject *)a->a_code, consts, names, a->a_lnotab);
+	if (!code)
 		goto error;
 
 	tmp = PyList_AsTuple(consts); /* PyCode_New requires a tuple */
@@ -3886,12 +3888,11 @@ makecode(struct compiler *c, struct assembler *a)
 	consts = tmp;
 
 	co = PyCode_New(c->u->u_argcount, nlocals, stackdepth(c), flags,
-			a->a_code, consts, names, varnames,
+			code, consts, names, varnames,
 			freevars, cellvars,
 			filename, c->u->u_name,
 			c->u->u_firstlineno,
 			a->a_lnotab);
-	a->a_code = NULL;  /* PyCode_New takes ownership */
  error:
 	Py_XDECREF(consts);
 	Py_XDECREF(names);
@@ -3988,7 +3989,7 @@ assemble(struct compiler *c, int addNone)
 
 	if (_PyString_Resize(&a.a_lnotab, a.a_lnotab_off) < 0)
 		goto error;
-	if (_PyPInstVec_Resize(&a.a_code, a.a_offset) < 0)
+	if (_PyInstructions_Resize(&a.a_code, a.a_offset) < 0)
 		goto error;
 
 	co = makecode(c, &a);

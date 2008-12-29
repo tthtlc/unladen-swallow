@@ -1,5 +1,6 @@
 #include "Python.h"
 #include "code.h"
+#include "instructionsobject.h"
 #include "structmember.h"
 
 #define NAME_CHARS \
@@ -42,7 +43,7 @@ intern_strings(PyObject *tuple)
 
 PyCodeObject *
 PyCode_New(int argcount, int nlocals, int stacksize, int flags,
-	   PyPInstVec *code, PyObject *consts, PyObject *names,
+	   PyObject *code, PyObject *consts, PyObject *names,
 	   PyObject *varnames, PyObject *freevars, PyObject *cellvars,
 	   PyObject *filename, PyObject *name, int firstlineno,
 	   PyObject *lnotab)
@@ -51,7 +52,7 @@ PyCode_New(int argcount, int nlocals, int stacksize, int flags,
 	Py_ssize_t i;
 	/* Check argument types */
 	if (argcount < 0 || nlocals < 0 ||
-	    code == NULL ||
+	    code == NULL || !PyInstructions_Check(code) ||
 	    consts == NULL || !PyTuple_Check(consts) ||
 	    names == NULL || !PyTuple_Check(names) ||
 	    varnames == NULL || !PyTuple_Check(varnames) ||
@@ -82,9 +83,8 @@ PyCode_New(int argcount, int nlocals, int stacksize, int flags,
 		co->co_nlocals = nlocals;
 		co->co_stacksize = stacksize;
 		co->co_flags = flags;
-		/* Take ownership of code. */
+		Py_INCREF(code);
 		co->co_code = code;
-		code = NULL;
 		Py_INCREF(consts);
 		co->co_consts = consts;
 		Py_INCREF(names);
@@ -105,7 +105,6 @@ PyCode_New(int argcount, int nlocals, int stacksize, int flags,
                 co->co_zombieframe = NULL;
                 co->co_tcode = NULL;
 	}
-	PyObject_FREE(code);
 	return co;
 }
 
@@ -188,8 +187,7 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 	int stacksize;
 	int flags;
 	PyObject *co = NULL;
-	PyObject *codelist;
-	PyPInstVec *code = NULL;
+	PyObject *code; PyObject *ourcode = NULL;
 	PyObject *consts;
 	PyObject *names, *ournames = NULL;
 	PyObject *varnames, *ourvarnames = NULL;
@@ -202,7 +200,7 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
 	if (!PyArg_ParseTuple(args, "iiiiOO!O!O!SSiS|O!O!:code",
 			      &argcount, &nlocals, &stacksize, &flags,
-			      &codelist,
+			      &code,
 			      &PyTuple_Type, &consts,
 			      &PyTuple_Type, &names,
 			      &PyTuple_Type, &varnames,
@@ -226,8 +224,8 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 		goto cleanup;
 	}
 
-	code = _PyPInstVec_FromSequence(codelist);
-        if (code == NULL)
+	ourcode = PyInstructions_FromSequence(code);
+        if (ourcode == NULL)
 		goto cleanup;
 	ournames = validate_and_copy_tuple(names);
 	if (ournames == NULL)
@@ -249,12 +247,11 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 		goto cleanup;
 
 	co = (PyObject *)PyCode_New(argcount, nlocals, stacksize, flags,
-				    code, consts, ournames, ourvarnames,
+				    ourcode, consts, ournames, ourvarnames,
 				    ourfreevars, ourcellvars, filename,
 				    name, firstlineno, lnotab);
-	code = NULL;  /* PyCode_New took ownership. */
   cleanup:
-	PyObject_FREE(code);
+	Py_XDECREF(ourcode);
 	Py_XDECREF(ournames);
 	Py_XDECREF(ourvarnames);
 	Py_XDECREF(ourfreevars);
@@ -265,7 +262,7 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 static void
 code_dealloc(PyCodeObject *co)
 {
-	PyObject_FREE(co->co_code);
+	Py_XDECREF(co->co_code);
 	Py_XDECREF(co->co_consts);
 	Py_XDECREF(co->co_names);
 	Py_XDECREF(co->co_varnames);
@@ -301,25 +298,6 @@ code_repr(PyCodeObject *co)
 	return PyString_FromString(buf);
 }
 
-static inline unsigned int pinst_to_int(PyPInst inst) {
-	return inst.opcode_or_arg << 1 | inst.is_arg;
-}
-
-static int
-pinstvec_compare(PyPInstVec *l, PyPInstVec *r) {
-	Py_ssize_t min_size = l->size < r->size ? l->size : r->size;
-	Py_ssize_t i;
-	for (i = 0; i < min_size; i++) {
-		unsigned int l_inst = pinst_to_int(l->instructions[i]);
-		unsigned int r_inst = pinst_to_int(r->instructions[i]);
-		if (l_inst < r_inst) return -1;
-		if (l_inst > r_inst) return 1;
-	}
-	if (l->size < r->size) return -1;
-	if (l->size > r->size) return 1;
-	return 0;
-}
-
 static int
 code_compare(PyCodeObject *co, PyCodeObject *cp)
 {
@@ -334,7 +312,7 @@ code_compare(PyCodeObject *co, PyCodeObject *cp)
 	if (cmp) goto normalize;
 	cmp = co->co_firstlineno - cp->co_firstlineno;
 	if (cmp) goto normalize;
-	cmp = pinstvec_compare(co->co_code, cp->co_code);
+	cmp = PyObject_Compare(co->co_code, cp->co_code);
 	if (cmp) return cmp;
 	cmp = PyObject_Compare(co->co_consts, cp->co_consts);
 	if (cmp) return cmp;
@@ -391,7 +369,7 @@ code_richcompare(PyObject *self, PyObject *other, int op)
 	if (!eq) goto unequal;
 	eq = co->co_firstlineno == cp->co_firstlineno;
 	if (!eq) goto unequal;
-	eq = pinstvec_compare(co->co_code, cp->co_code) == 0;
+	eq = PyObject_RichCompareBool(co->co_code, cp->co_code, Py_EQ);
 	if (eq <= 0) goto unequal;
 	eq = PyObject_RichCompareBool(co->co_consts, cp->co_consts, Py_EQ);
 	if (eq <= 0) goto unequal;
@@ -424,23 +402,12 @@ code_richcompare(PyObject *self, PyObject *other, int op)
 }
 
 static long
-pinstvec_hash(PyPInstVec *vec) {
-	long result = vec->size;
-	Py_ssize_t i;
-	for (i = 0; i < vec->size; i++) {
-		result *= 1000003;
-		result ^= pinst_to_int(vec->instructions[i]);
-	}
-	return result;
-}
-
-static long
 code_hash(PyCodeObject *co)
 {
 	long h, h0, h1, h2, h3, h4, h5, h6;
 	h0 = PyObject_Hash(co->co_name);
 	if (h0 == -1) return -1;
-	h1 = pinstvec_hash(co->co_code);
+	h1 = PyObject_Hash(co->co_code);
 	if (h1 == -1) return -1;
 	h2 = PyObject_Hash(co->co_consts);
 	if (h2 == -1) return -1;
@@ -693,98 +660,4 @@ PyCode_CheckLineNumber(PyCodeObject* co, int lasti, PyAddrPair *bounds)
         }
 
         return line;
-}
-
-
-/* PyPInstVec support */
-
-/* This can also be used to allocate PyPInstVec instances by passing
-   *vec==NULL. On error, frees *vec and sets it to NULL. */
-int
-_PyPInstVec_Resize(PyPInstVec **vec, Py_ssize_t new_size) {
-	PyPInstVec *const old = *vec;
-	if (new_size < 0) {
-		*vec = NULL;
-		PyObject_FREE(old);
-		PyErr_BadInternalCall();
-		return -1;
-	}
-	*vec = (PyPInstVec*)PyObject_REALLOC(
-			old, sizeof(PyPInstVec) + new_size * sizeof(PyPInst));
-	if (*vec == NULL) {
-		PyObject_FREE(old);
-		PyErr_NoMemory();
-		return -1;
-	}
-	(*vec)->size = new_size;
-	return 0;
-}
-
-PyPInstVec *
-_PyPInstVec_FromSequence(PyObject *seq) {
-	Py_ssize_t codelen;
-	PyPInstVec *code = NULL;
-	Py_ssize_t i;
-	if (!PySequence_Check(seq)) {
-		PyErr_SetString(
-			PyExc_ValueError,
-			"code: 'code' must be a sequence of integral types.");
-		return NULL;
-	}
-	if ((codelen = PySequence_Size(seq)) < 0 ||
-	    _PyPInstVec_Resize(&code, codelen) < 0) {
-		goto error;
-	}
-	for (i = 0; i < codelen; i++) {
-		PyObject *item;
-		unsigned int value;
-		item = PySequence_GetItem(seq, i);
-		if (item == NULL) {
-			PyErr_Format(
-				PyExc_ValueError,
-				"code: Failed to extract %zdth element from"
-				" 'code' sequence.", i);
-			goto error;
-		}
-		value = PyNumber_AsSsize_t(item, PyExc_OverflowError);
-		if (value == -1 && PyErr_Occurred()) {
-			PyErr_Format(
-				PyExc_ValueError,
-				"code: %zdth element wasn't integral between"
-				" 0 and 2^32.", i);
-			goto error;
-		}
-		code->instructions[i].is_arg = value & 1;
-		/* Not much checking here. The user can crash us in
-		   plenty of ways even with all valid opcodes. */
-		code->instructions[i].opcode_or_arg = value >> 1;
-	}
-
-	return code;
-
-error:
-	PyObject_FREE(code);
-	return NULL;
-}
-
-PyObject *
-_PyPInstVec_ToList(PyPInstVec *vec) {
-        Py_ssize_t i;
-        PyObject *list = PyList_New(vec->size);
-        if (list == NULL)
-                return NULL;
-        for (i = 0; i < vec->size; i++) {
-                PyObject *pyint_value;
-                unsigned int value = pinst_to_int(vec->instructions[i]);
-                pyint_value = PyInt_FromSize_t(value);
-                if (pyint_value == NULL)
-                        goto error;
-                if (-1 == PyList_SetItem(list, i, pyint_value))
-                        goto error;
-        }
-        return list;
-
-error:
-        Py_DECREF(list);
-        return NULL;
 }

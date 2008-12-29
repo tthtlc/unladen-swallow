@@ -9,59 +9,6 @@ extern "C" {
 typedef void *Opcode;
 typedef int Oparg;
 
-/* Opcode/arg list in a format that can be persisted to .pyc
-   files. That is, it contains no pointers. Usually when !is_arg,
-   opcode_or_arg will be a vmgen operation index, but from the start
-   of compilation until most of the way through PyCode_Optimize() it's
-   a value from opcode.h instead. */
-typedef struct {
-    unsigned int is_arg : 1;
-    unsigned int opcode_or_arg : 31;
-} PyPInst;
-
-static inline int PyPInst_GET_OPCODE(PyPInst* inst) {
-    assert(inst->is_arg == 0);
-    return inst->opcode_or_arg;
-}
-
-static inline int PyPInst_GET_ARG(PyPInst* inst) {
-    assert(inst->is_arg == 1);
-    return inst->opcode_or_arg;
-}
-
-static inline void PyPInst_SET_OPCODE(PyPInst* inst, unsigned int opcode) {
-    inst->is_arg = 0;
-    inst->opcode_or_arg = opcode;
-}
-
-static inline void PyPInst_SET_ARG(PyPInst* inst, unsigned int arg) {
-    inst->is_arg = 1;
-    inst->opcode_or_arg = arg;
-}
-
-typedef struct {
-    Py_ssize_t size;
-    PyPInst instructions[0];
-    /* 'instructions' always contains enough space for 'size'
-       elements. */
-} PyPInstVec;
-
-/* This can also be used to allocate PyPInstVec instances by passing
-   *vec==NULL. On error, frees *vec, sets it to NULL, and returns -1. */
-int _PyPInstVec_Resize(PyPInstVec **vec, Py_ssize_t new_size);
-/* Returns a new PyPInstVec.  On error, returns NULL and sets the
-   current exception.  The sequence is expected to contain integral
-   elements.  Each element 'x' will be converted to a PyPInst as follows:
-     pinst.is_arg = x & 1;
-     pinst.opcode_or_arg = x >> 1;
-   */
-PyPInstVec *_PyPInstVec_FromSequence(PyObject *seq);
-/* Returns a new list object.  On error, returns NULL and sets the
-   current exception.  Each list element will be assigned
-     pinst.opcode_or_arg << 1 | pinst.is_arg
-   */
-PyObject *_PyPInstVec_ToList(PyPInstVec *vec);
-
 /* The same information as PyPInst, but optimized for a threaded
    interpreter.  opcode is now the address of the label in
    PyEval_EvalFrameEx that interprets the operation. This struct also
@@ -80,7 +27,7 @@ typedef struct {
     int co_nlocals;		/* #local variables */
     int co_stacksize;		/* #entries needed for evaluation stack */
     int co_flags;		/* CO_..., see below */
-    PyPInstVec *co_code;	/* instruction opcodes and arguments */
+    PyObject *co_code;		/* PyInstructions object: the actual code */
     PyObject *co_consts;	/* list (constants used) */
     PyObject *co_names;		/* list of strings (names used) */
     PyObject *co_varnames;	/* tuple of strings (local variable names) */
@@ -135,7 +82,7 @@ PyAPI_DATA(PyTypeObject) PyCode_Type;
 
 /* Public interface */
 PyAPI_FUNC(PyCodeObject *) PyCode_New(
-	int, int, int, int, PyPInstVec *, PyObject *, PyObject *, PyObject *,
+	int, int, int, int, PyObject *, PyObject *, PyObject *, PyObject *,
 	PyObject *, PyObject *, PyObject *, PyObject *, int, PyObject *); 
         /* same as struct above */
 PyAPI_FUNC(int) PyCode_Addr2Line(PyCodeObject *, int);
@@ -160,8 +107,8 @@ typedef struct _addr_pair {
 PyAPI_FUNC(int) PyCode_CheckLineNumber(PyCodeObject* co,
                                        int lasti, PyAddrPair *bounds);
 
-PyAPI_FUNC(void) PyCode_Optimize(PyPInstVec **code, PyObject* consts,
-                                 PyObject *names, PyObject *lineno_obj);
+PyAPI_FUNC(PyObject*) PyCode_Optimize(PyObject *code, PyObject* consts,
+                                      PyObject *names, PyObject *lineno_obj);
 
 #ifdef __cplusplus
 }

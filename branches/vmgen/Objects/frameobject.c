@@ -3,6 +3,7 @@
 #include "Python.h"
 
 #include "code.h"
+#include "instructionsobject.h"
 #include "frameobject.h"
 #include "opcode.h"
 #include "structmember.h"
@@ -137,8 +138,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	}
 
 	/* We're now ready to look at the bytecode. */
-	code = f->f_code->co_code->instructions;
-	code_len = f->f_code->co_code->size;
+	code = ((PyInstructionsObject *)f->f_code->co_code)->inst;
+	code_len = Py_SIZE(f->f_code->co_code);
 	min_addr = MIN(new_lasti, f->f_lasti);
 	max_addr = MAX(new_lasti, f->f_lasti);
 

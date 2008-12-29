@@ -319,6 +319,7 @@ OBJECT_OBJS=	\
 		Objects/floatobject.o \
 		Objects/frameobject.o \
 		Objects/funcobject.o \
+		Objects/instructionsobject.o \
 		Objects/intobject.o \
 		Objects/iterobject.o \
 		Objects/listobject.o \
@@ -637,6 +638,7 @@ PYTHON_HEADERS= \
 		Include/funcobject.h \
 		Include/genobject.h \
 		Include/import.h \
+		Include/instructionsobject.h \
 		Include/intobject.h \
 		Include/intrcheck.h \
 		Include/iterobject.h \

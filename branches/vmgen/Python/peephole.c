@@ -8,6 +8,7 @@
 #include "ast.h"
 #include "code.h"
 #include "compile.h"
+#include "instructionsobject.h"
 #include "symtable.h"
 #include "opcode.h"
 
@@ -204,7 +205,7 @@ fold_unaryops_on_constants(PyPInst *inststr, PyObject *consts)
 
 	/* Create new constant */
 	v = PyList_GET_ITEM(consts, GETARG(inststr, 0));
-	opcode = GETOP(inststr[3]);
+	opcode = GETOP(inststr[2]);
 	switch (opcode) {
 		case UNARY_NEGATIVE:
 			/* Preserve the sign of -0.0 */
@@ -389,14 +390,14 @@ dump_inststr(PyPInst* inststr, Py_ssize_t len) {
    NOPs.  Later those NOPs are removed and the jump addresses retargeted in 
    a single pass.  Line numbering is adjusted accordingly. */
 
-void
-PyCode_Optimize(PyPInstVec **code, PyObject* consts, PyObject *names,
+PyObject *
+PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
                 PyObject *lineno_obj)
 {
 	Py_ssize_t i, j, codelen;
 	int nops, h;
 	int tgt, tgttgt, opcode;
-	PyPInstVec *modcode = NULL;
+	PyInstructionsObject *modcode;
 	PyPInst *inststr;
 	unsigned char *lineno;
 	int *addrmap = NULL;
@@ -424,17 +425,17 @@ PyCode_Optimize(PyPInstVec **code, PyObject* consts, PyObject *names,
 		goto exitUnchanged;
 
 	/* Avoid situations where jump retargeting could overflow */
-	codelen = (*code)->size;
+	codelen = Py_SIZE(code);
 	if (codelen > 32700)
 		goto exitUnchanged;
 
 	/* Make a modifiable copy of the code string */
-	if (_PyPInstVec_Resize(&modcode, codelen) < 0)
+	modcode = _PyInstructions_New(codelen);
+	if (modcode == NULL)
 		goto exitUnchanged;
-	inststr = modcode->instructions;
-	memcpy(inststr,
-	       (*code)->instructions,
-	       codelen * sizeof((*code)->instructions[0]));
+	inststr = modcode->inst;
+	memcpy(inststr, ((PyInstructionsObject *)code)->inst,
+	       codelen * sizeof(modcode->inst[0]));
 
 	/* Verify that RETURN_VALUE terminates the codestring.	This allows
 	   the various transformation patterns to look ahead several
@@ -449,7 +450,7 @@ PyCode_Optimize(PyPInstVec **code, PyObject* consts, PyObject *names,
 	if (addrmap == NULL)
 		goto exitUnchanged;
 
-	blocks = markblocks(inststr, modcode->size);
+	blocks = markblocks(inststr, Py_SIZE(modcode));
 	if (blocks == NULL)
 		goto exitUnchanged;
 	assert(PyList_Check(consts));
@@ -743,24 +744,21 @@ PyCode_Optimize(PyPInstVec **code, PyObject* consts, PyObject *names,
 	}
 	assert(h + nops == codelen);
 
-	if (_PyPInstVec_Resize(&modcode, h) < 0)
+	if (_PyInstructions_Resize(&modcode, h) < 0)
 		goto exitUnchanged;
-	PyObject_FREE(*code);
-	*code = modcode;
 	PyMem_Free(addrmap);
 	PyMem_Free(blocks);
-	return;
+	return (PyObject *)modcode;
 
  exitUnchanged:
 	if (blocks != NULL)
 		PyMem_Free(blocks);
 	if (addrmap != NULL)
 		PyMem_Free(addrmap);
-	if (modcode != NULL)
-		PyObject_FREE(modcode);
+	Py_XDECREF(modcode);
 
-        codelen = (*code)->size;
-        inststr = (*code)->instructions;
+        codelen = Py_SIZE(code);
+        inststr = ((PyInstructionsObject *)code)->inst;
 	/* Convert from opcode.h bytecodes to vmgen indices, even if
            we're not changing anything else. */
 	for (i = 0; i < codelen; ++i) {
@@ -769,6 +767,8 @@ PyCode_Optimize(PyPInstVec **code, PyObject* consts, PyObject *names,
 			translate_inst(inst);
 		}
 	}
+	Py_INCREF(code);
+	return code;
 }
 
 
