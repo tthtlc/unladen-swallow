@@ -68,6 +68,7 @@ PyObject *
 PyInstructions_FromSequence(PyObject *seq) {
     Py_ssize_t codelen;
     PyInstructionsObject *code = NULL;
+    PyObject *item = NULL;
     Py_ssize_t i;
     if (!PySequence_Check(seq)) {
         PyErr_SetString(
@@ -80,7 +81,6 @@ PyInstructions_FromSequence(PyObject *seq) {
         goto error;
     }
     for (i = 0; i < codelen; i++) {
-        PyObject *item;
         unsigned int value;
         item = PySequence_GetItem(seq, i);
         if (item == NULL) {
@@ -100,11 +100,13 @@ PyInstructions_FromSequence(PyObject *seq) {
         /* Not much checking here. The user can crash us in
            plenty of ways even with all valid opcodes. */
         code->inst[i].opcode_or_arg = value >> 1;
+        Py_CLEAR(item);
     }
 
     return (PyObject *)code;
 
  error:
+    Py_XDECREF(item);
     Py_XDECREF(code);
     return NULL;
 }
