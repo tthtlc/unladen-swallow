@@ -301,8 +301,8 @@ translate_inst(PyPInst* inst)
 	case DUP_TOPX:
 		oparg = PyPInst_GET_ARG(inst + 1);
 		switch (oparg) {
-			case 3: REPLACE_OP(VMG_dup_top_three); break;
-			case 2: REPLACE_OP(VMG_dup_top_two);   break;
+			case 3: REPLACE_OP(VMG_DUP_TOP_THREE); break;
+			case 2: REPLACE_OP(VMG_DUP_TOP_TWO);   break;
 			default:
 				Py_FatalError("invalid argument to DUP_TOPX"
 					      " (bytecode corruption?)");
@@ -312,10 +312,10 @@ translate_inst(PyPInst* inst)
 	case RAISE_VARARGS:
 		oparg = PyPInst_GET_ARG(inst + 1);
 		switch (oparg) {
-			case 3: REPLACE_OP(VMG_raise_varargs_three); break;
-			case 2: REPLACE_OP(VMG_raise_varargs_two);   break;
-			case 1: REPLACE_OP(VMG_raise_varargs_one);   break;
-			case 0: REPLACE_OP(VMG_raise_varargs_zero);  break;
+			case 3: REPLACE_OP(VMG_RAISE_VARARGS_THREE); break;
+			case 2: REPLACE_OP(VMG_RAISE_VARARGS_TWO);   break;
+			case 1: REPLACE_OP(VMG_RAISE_VARARGS_ONE);   break;
+			case 0: REPLACE_OP(VMG_RAISE_VARARGS_ZERO);  break;
 			default:
 				printf("bad RAISE_VARARGS oparg: %d\n", oparg);
 				abort();
@@ -325,8 +325,8 @@ translate_inst(PyPInst* inst)
 	case BUILD_SLICE:
 		oparg = PyPInst_GET_ARG(inst + 1);
 		switch (oparg) {
-			case 3: REPLACE_OP(VMG_build_slice_three); break;
-			case 2: REPLACE_OP(VMG_build_slice_two);   break;
+			case 3: REPLACE_OP(VMG_BUILD_SLICE_THREE); break;
+			case 2: REPLACE_OP(VMG_BUILD_SLICE_TWO);   break;
 			default:
 				printf("bad BUILD_SLICE oparg: %d\n", oparg);
 				abort();
@@ -334,24 +334,24 @@ translate_inst(PyPInst* inst)
 		PyPInst_SET_OPCODE(inst + 1, NOP);
 		break;
 		/* Decode SLICE */
-	case SLICE+0: REPLACE_OP(VMG_slice_none);  break;
-	case SLICE+1: REPLACE_OP(VMG_slice_left);  break;
-	case SLICE+2: REPLACE_OP(VMG_slice_right); break;
-	case SLICE+3: REPLACE_OP(VMG_slice_both);  break;
-	case STORE_SLICE+0: REPLACE_OP(VMG_store_slice_none);  break;
-	case STORE_SLICE+1: REPLACE_OP(VMG_store_slice_left);  break;
-	case STORE_SLICE+2: REPLACE_OP(VMG_store_slice_right); break;
-	case STORE_SLICE+3: REPLACE_OP(VMG_store_slice_both);  break;
-	case DELETE_SLICE+0: REPLACE_OP(VMG_delete_slice_none);  break;
-	case DELETE_SLICE+1: REPLACE_OP(VMG_delete_slice_left);  break;
-	case DELETE_SLICE+2: REPLACE_OP(VMG_delete_slice_right); break;
-	case DELETE_SLICE+3: REPLACE_OP(VMG_delete_slice_both);  break;
+	case SLICE+0: REPLACE_OP(VMG_SLICE_NONE);  break;
+	case SLICE+1: REPLACE_OP(VMG_SLICE_LEFT);  break;
+	case SLICE+2: REPLACE_OP(VMG_SLICE_RIGHT); break;
+	case SLICE+3: REPLACE_OP(VMG_SLICE_BOTH);  break;
+	case STORE_SLICE+0: REPLACE_OP(VMG_STORE_SLICE_NONE);  break;
+	case STORE_SLICE+1: REPLACE_OP(VMG_STORE_SLICE_LEFT);  break;
+	case STORE_SLICE+2: REPLACE_OP(VMG_STORE_SLICE_RIGHT); break;
+	case STORE_SLICE+3: REPLACE_OP(VMG_STORE_SLICE_BOTH);  break;
+	case DELETE_SLICE+0: REPLACE_OP(VMG_DELETE_SLICE_NONE);  break;
+	case DELETE_SLICE+1: REPLACE_OP(VMG_DELETE_SLICE_LEFT);  break;
+	case DELETE_SLICE+2: REPLACE_OP(VMG_DELETE_SLICE_RIGHT); break;
+	case DELETE_SLICE+3: REPLACE_OP(VMG_DELETE_SLICE_BOTH);  break;
 		/* Store bytecode in oparg...
 		   XXX this doesn't work with extended arguments */
 	case CALL_FUNCTION_VAR:
 	case CALL_FUNCTION_KW:
 	case CALL_FUNCTION_VAR_KW:
-		REPLACE_OP(VMG_call_function_var_kw);
+		REPLACE_OP(VMG_CALL_FUNCTION_VAR_KW);
 		PyPInst_SET_ARG(inst + 1,
 				(PyPInst_GET_ARG(inst + 1) << 16) | cpython_code);
 		break;
@@ -700,7 +700,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 		if (inststr[i].is_arg)
 			continue;
 		addrmap[i] = i - nops;
-		if (GETOP(inststr[i]) == VMG_nop)
+		if (GETOP(inststr[i]) == VMG_NOP)
 			nops++;
 	}
 	cum_orig_line = 0;
@@ -717,23 +717,23 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	for (i=0, h=0 ; i<codelen ; ) {
 		opcode = GETOP(inststr[i]);
 		switch (opcode) {
-			case VMG_nop:
+			case VMG_NOP:
 				i++;
 				continue;
 
-			case VMG_jump_absolute:
-			case VMG_continue_loop:
+			case VMG_JUMP_ABSOLUTE:
+			case VMG_CONTINUE_LOOP:
 				j = addrmap[GETARG(inststr, i)];
 				SETARG(inststr, i, j);
 				break;
 
-			case VMG_for_iter:
-			case VMG_jump_forward:
-			case VMG_jump_if_false:
-			case VMG_jump_if_true:
-			case VMG_setup_loop:
-			case VMG_setup_except:
-			case VMG_setup_finally:
+			case VMG_FOR_ITER:
+			case VMG_JUMP_FORWARD:
+			case VMG_JUMP_IF_FALSE:
+			case VMG_JUMP_IF_TRUE:
+			case VMG_SETUP_LOOP:
+			case VMG_SETUP_EXCEPT:
+			case VMG_SETUP_FINALLY:
 				j = addrmap[GETARG(inststr, i) + i + 2] - addrmap[i] - 2;
 				SETARG(inststr, i, j);
 				break;

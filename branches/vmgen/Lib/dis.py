@@ -68,7 +68,7 @@ def disassemble(co, lasti=-1):
     free = None
     while i < n:
         c = code[i]
-        op = ord(c)
+        op = get_opcode(c)
         if i in linestarts:
             if i > 0:
                 print
@@ -83,12 +83,9 @@ def disassemble(co, lasti=-1):
         print repr(i).rjust(4),
         print opname[op].ljust(20),
         i = i+1
-        if op >= HAVE_ARGUMENT:
-            oparg = ord(code[i]) + ord(code[i+1])*256 + extended_arg
-            extended_arg = 0
-            i = i+2
-            if op == EXTENDED_ARG:
-                extended_arg = oparg*65536L
+        if i < n and is_argument(code[i]):
+            oparg = get_argument(code[i])
+            i = i+1
             print repr(oparg).rjust(5),
             if op in hasconst:
                 print '(' + repr(co.co_consts[oparg]) + ')',
@@ -113,7 +110,7 @@ def disassemble_string(code, lasti=-1, varnames=None, names=None,
     i = 0
     while i < n:
         c = code[i]
-        op = ord(c)
+        op = get_opcode(c)
         if i == lasti: print '-->',
         else: print '   ',
         if i in labels: print '>>',
@@ -121,9 +118,9 @@ def disassemble_string(code, lasti=-1, varnames=None, names=None,
         print repr(i).rjust(4),
         print opname[op].ljust(15),
         i = i+1
-        if op >= HAVE_ARGUMENT:
-            oparg = ord(code[i]) + ord(code[i+1])*256
-            i = i+2
+        if i < n and is_argument(code[i]):
+            oparg = get_argument(code[i])
+            i = i+1
             print repr(oparg).rjust(5),
             if op in hasconst:
                 if constants:
@@ -159,11 +156,11 @@ def findlabels(code):
     i = 0
     while i < n:
         c = code[i]
-        op = ord(c)
+        op = get_opcode(c)
         i = i+1
-        if op >= HAVE_ARGUMENT:
-            oparg = ord(code[i]) + ord(code[i+1])*256
-            i = i+2
+        if i < n and is_argument(code[i]):
+            oparg = get_argument(code[i])
+            i = i+1
             label = -1
             if op in hasjrel:
                 label = i+oparg

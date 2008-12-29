@@ -36,9 +36,9 @@
 \ _. Instructions
 
 \ _ , Superinstruction Prefix Approved Opcodes (TM)
-nop ( -- )
+NOP ( -- )
 
-load_fast ( #i -- a  inc:a )
+LOAD_FAST ( #i -- a  inc:a )
 x = a = GETLOCAL(i);
 if (a == NULL) {
         format_exc_check_arg(
@@ -50,34 +50,34 @@ if (a == NULL) {
         ERROR();
 }
 
-load_const ( #i -- a  inc:a )
+LOAD_CONST ( #i -- a  inc:a )
 x = a = GETITEM(consts, i);
 
-store_fast ( #i a -- )
+STORE_FAST ( #i a -- )
 SETLOCAL(i, a);
 
-pop_top ( a -- dec:a )
+POP_TOP ( a -- dec:a )
 
-rot_two ( a1 a2 -- a2 a1 )
+ROT_TWO ( a1 a2 -- a2 a1 )
 
-rot_three ( a1 a2 a3 -- a3 a1 a2 )
+ROT_THREE ( a1 a2 a3 -- a3 a1 a2 )
 
-rot_four ( a1 a2 a3 a4 -- a4 a1 a2 a3 )
+ROT_FOUR ( a1 a2 a3 a4 -- a4 a1 a2 a3 )
 
-dup_top ( a -- a a  inc:a )
+DUP_TOP ( a -- a a  inc:a )
 
-dup_top_two ( a1 a2 -- a1 a2 a1 a2  inc:a1 inc:a2 )
+DUP_TOP_TWO ( a1 a2 -- a1 a2 a1 a2  inc:a1 inc:a2 )
 
-dup_top_three ( a1 a2 a3 -- a1 a2 a3 a1 a2 a3  inc:a1 inc:a2 inc:a3 )
+DUP_TOP_THREE ( a1 a2 a3 -- a1 a2 a3 a1 a2 a3  inc:a1 inc:a2 inc:a3 )
 
 \ _ , UNARY
-unary_positive ( a1 -- a2   dec:a1  next:a2 )
+UNARY_POSITIVE ( a1 -- a2   dec:a1  next:a2 )
 a2 = PyNumber_Positive(a1);
 
-unary_negative ( a1 -- a2  dec:a1  next:a2 )
+UNARY_NEGATIVE ( a1 -- a2  dec:a1  next:a2 )
 a2 = PyNumber_Negative(a1);
 
-unary_not ( -- )
+UNARY_NOT ( -- )
 a1 = TOP();
 err = PyObject_IsTrue(a1);
 Py_DECREF(a1);
@@ -94,35 +94,35 @@ if (err == 0) {
 STACKADJ(-1);
 ERROR();
 
-unary_convert ( a1 -- a2  dec:a1  next:a2 )
+UNARY_CONVERT ( a1 -- a2  dec:a1  next:a2 )
 a2 = PyObject_Repr(a1);
 
-unary_invert ( a1 -- a2  dec:a1  next:a2 )
+UNARY_INVERT ( a1 -- a2  dec:a1  next:a2 )
 a2 = PyNumber_Invert(a1);
 
 \ _ , BINARY
-binary_power ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_POWER ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Power(a1, a2, Py_None);
 
-binary_multiply ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_MULTIPLY ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Multiply(a1, a2);
 
-binary_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_DIVIDE ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 if (!_Py_QnewFlag)
         a = PyNumber_Divide(a1, a2);
 else
         a = PyNumber_TrueDivide(a1, a2);
 
-binary_true_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_TRUE_DIVIDE ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_TrueDivide(a1, a2);
 
-binary_floor_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_FLOOR_DIVIDE ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_FloorDivide(a1, a2);
 
-binary_modulo ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_MODULO ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Remainder(a1, a2);
 
-binary_add ( a1 a2 -- a   next:a )
+BINARY_ADD ( a1 a2 -- a   next:a )
 if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
         /* INLINE: int + int */
         register long u, v, i;
@@ -145,7 +145,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 }
 Py_DECREF(a2);
 
-binary_subtract ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_SUBTRACT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
         /* INLINE: int - int */
         register long u, v, i;
@@ -159,7 +159,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else
         a = PyNumber_Subtract(a1, a2);
 
-binary_subscr ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_SUBSCR ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 if (PyList_CheckExact(a1) && PyInt_CheckExact(a2)) {
         /* INLINE: list[int] */
         Py_ssize_t i = PyInt_AsSsize_t(a2);
@@ -173,48 +173,48 @@ if (PyList_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else
         a = PyObject_GetItem(a1, a2);
 
-binary_lshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_LSHIFT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Lshift(a1, a2);
 
-binary_rshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_RSHIFT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Rshift(a1, a2);
 
-binary_and ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_AND ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_And(a1, a2);
 
-binary_xor ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_XOR ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Xor(a1, a2);
 
-binary_or ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BINARY_OR ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_Or(a1, a2);
 
 \ _ , LIST_APPEND
-list_append ( a1 a2 -- dec:a1 dec:a2  next:error )
+LIST_APPEND ( a1 a2 -- dec:a1 dec:a2  next:error )
 err = PyList_Append(a1, a2);
 
 \ _ , INPLACE
-inplace_power ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_POWER ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlacePower(a1, a2, Py_None);
 
-inplace_multiply ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_MULTIPLY ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceMultiply(a1, a2);
 
-inplace_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_DIVIDE ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 if (!_Py_QnewFlag)
         a = PyNumber_InPlaceDivide(a1, a2);
 else
         a = PyNumber_InPlaceTrueDivide(a1, a2);
 
-inplace_true_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_TRUE_DIVIDE ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceTrueDivide(a1, a2);
 
-inplace_floor_divide ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_FLOOR_DIVIDE ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceFloorDivide(a1, a2);
 
-inplace_modulo ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_MODULO ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceRemainder(a1, a2);
 
-inplace_add ( a1 a2 -- a   next:a )
+INPLACE_ADD ( a1 a2 -- a   next:a )
 if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
         /* INLINE: int + int */
         register long u, v, i;
@@ -237,7 +237,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 }
 Py_DECREF(a2);
 
-inplace_subtract ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_SUBTRACT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
         /* INLINE: int - int */
         register long u, v, i;
@@ -251,67 +251,67 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else
         a = PyNumber_InPlaceSubtract(a1, a2);
 
-inplace_lshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_LSHIFT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceLshift(a1, a2);
 
-inplace_rshift ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_RSHIFT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceRshift(a1, a2);
 
-inplace_and ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_AND ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceAnd(a1, a2);
 
-inplace_xor ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_XOR ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceXor(a1, a2);
 
-inplace_or ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+INPLACE_OR ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PyNumber_InPlaceOr(a1, a2);
 
 \ _ , SLICE
-slice_none ( a1 -- a2  dec:a1  next:a2 )
+SLICE_NONE ( a1 -- a2  dec:a1  next:a2 )
 a2 = apply_slice(a1, NULL, NULL);
 
-slice_left ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+SLICE_LEFT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = apply_slice(a1, a2, NULL);
 
-slice_right ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+SLICE_RIGHT ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = apply_slice(a1, NULL, a2);
 
-slice_both ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:a )
+SLICE_BOTH ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:a )
 a = apply_slice(a1, a2, a3);
 
-store_slice_none ( a1 a2 -- dec:a1 dec:a2  next:error )
+STORE_SLICE_NONE ( a1 a2 -- dec:a1 dec:a2  next:error )
 err = assign_slice(a2, NULL, NULL, a1);
 
-store_slice_left ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+STORE_SLICE_LEFT ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
 err = assign_slice(a2, a3, NULL, a1);
 
-store_slice_right ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+STORE_SLICE_RIGHT ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
 err = assign_slice(a2, NULL, a3, a1);
 
-store_slice_both ( a1 a2 a3 a4 -- dec:a1 dec:a2 dec:a3 dec:a4  next:error )
+STORE_SLICE_BOTH ( a1 a2 a3 a4 -- dec:a1 dec:a2 dec:a3 dec:a4  next:error )
 err = assign_slice(a2, a3, a4, a1); /* a2[a3:a4] = a1 */
 
-delete_slice_none ( a1 -- dec:a1  next:error )
+DELETE_SLICE_NONE ( a1 -- dec:a1  next:error )
 err = assign_slice(a1, NULL, NULL, (PyObject *) NULL);
 
-delete_slice_left ( a1 a2 -- dec:a1 dec:a2  next:error )
+DELETE_SLICE_LEFT ( a1 a2 -- dec:a1 dec:a2  next:error )
 err = assign_slice(a1, a2, NULL, (PyObject *) NULL);
 
-delete_slice_right ( a1 a2 -- dec:a1 dec:a2  next:error )
+DELETE_SLICE_RIGHT ( a1 a2 -- dec:a1 dec:a2  next:error )
 err = assign_slice(a1, NULL, a2, (PyObject *) NULL);
 
-delete_slice_both ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+DELETE_SLICE_BOTH ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
 err = assign_slice(a1, a2, a3, (PyObject *) NULL); /* del a1[a2:a3] */
 
 \ _ , SUBSCR
-store_subscr ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
+STORE_SUBSCR ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:error )
 err = PyObject_SetItem(a2, a3, a1);
 
-delete_subscr ( a1 a2 -- dec:a1 dec:a2  next:error )
+DELETE_SUBSCR ( a1 a2 -- dec:a1 dec:a2  next:error )
 err = PyObject_DelItem(a1, a2);
 
 \ _ , PRINT
-print_expr ( a1 -- dec:a1  next:on_error )
+PRINT_EXPR ( a1 -- dec:a1  next:on_error )
 a2 = PySys_GetObject("displayhook");
 if (a2 == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "lost sys.displayhook");
@@ -331,11 +331,11 @@ if (err == 0) {
 }
 Py_XDECREF(x);
 
-print_item_to ( a1 -- )
+PRINT_ITEM_TO ( a1 -- )
 a2 = stream = a1;
 goto print_item_fallthrough;
 
-print_item ( --  next:error )
+PRINT_ITEM ( --  next:error )
 print_item_fallthrough:
 a1 = POP();
 if (stream == NULL || stream == Py_None) {
@@ -372,11 +372,11 @@ Py_XDECREF(a2);
 Py_XDECREF(stream);
 stream = NULL;
 
-print_newline_to ( a1 -- )
+PRINT_NEWLINE_TO ( a1 -- )
 a2 = stream = a1;
 goto print_newline_fallthrough;
 
-print_newline ( -- next:on_error )
+PRINT_NEWLINE ( -- next:on_error )
 print_newline_fallthrough:
 if (stream == NULL || stream == Py_None) {
         a2 = PySys_GetObject("stdout");
@@ -399,20 +399,20 @@ Py_XDECREF(stream);
 stream = NULL;
 
 \ _ , RAISE_VARARGS
-raise_varargs_zero ( -- next:on_error )
+RAISE_VARARGS_ZERO ( -- next:on_error )
 why = do_raise(NULL, NULL, NULL);
 
-raise_varargs_one ( a1 -- next:on_error )
+RAISE_VARARGS_ONE ( a1 -- next:on_error )
 why = do_raise(a1, NULL, NULL);
 
-raise_varargs_two ( a1 a2 -- next:on_error )
+RAISE_VARARGS_TWO ( a1 a2 -- next:on_error )
 why = do_raise(a1, a2, NULL);
 
-raise_varargs_three ( a1 a2 a3 -- next:on_error )
+RAISE_VARARGS_THREE ( a1 a2 a3 -- next:on_error )
 why = do_raise(a1, a2, a3);
 
 \ _ , LOAD
-load_locals ( -- )
+LOAD_LOCALS ( -- )
 if ((x = f->f_locals) != NULL) {
         Py_INCREF(x);
         PUSH(x);
@@ -421,7 +421,7 @@ if ((x = f->f_locals) != NULL) {
 PyErr_SetString(PyExc_SystemError, "no locals");
 ERROR();
 
-load_name ( #i -- )
+LOAD_NAME ( #i -- )
 a2 = GETITEM(names, i);
 if ((a1 = f->f_locals) == NULL) {
         PyErr_Format(PyExc_SystemError,
@@ -455,7 +455,7 @@ if (x == NULL) {
 PUSH(x);
 NEXT();
 
-load_global ( #i -- )
+LOAD_GLOBAL ( #i -- )
 a1 = GETITEM(names, i);
 if (PyString_CheckExact(a1)) {
         /* Inline the PyDict_GetItem() calls.
@@ -507,10 +507,10 @@ Py_INCREF(x);
 PUSH(x);
 NEXT();
 
-load_closure ( #i -- a  inc:a  next:a )
+LOAD_CLOSURE ( #i -- a  inc:a  next:a )
 a = freevars[i];
 
-load_deref ( #i -- )
+LOAD_DEREF ( #i -- )
 x = freevars[i];
 a2 = PyCell_Get(x);
 if (a2 != NULL) {
@@ -538,26 +538,26 @@ if (i < PyTuple_GET_SIZE(co->co_cellvars)) {
 }
 ERROR();
 
-load_attr ( #i a1 -- a3  dec:a1  next:a3 )
+LOAD_ATTR ( #i a1 -- a3  dec:a1  next:a3 )
 a2 = GETITEM(names, i);
 a3 = PyObject_GetAttr(a1, a2);
 
 \ _ , VALUE
-return_value ( a -- next:fast_block_end )
+RETURN_VALUE ( a -- next:fast_block_end )
 retval = a;
 why = WHY_RETURN;
 
-yield_value ( a -- next:fast_yield )
+YIELD_VALUE ( a -- next:fast_yield )
 retval = a;
 f->f_stacktop = stack_pointer;
 why = WHY_YIELD;
 
 \ _ , EXEC_STMT
-exec_stmt ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:on_error )
+EXEC_STMT ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:on_error )
 err = exec_statement(f, a1, a2, a3);
 
 \ _ , POP_BLOCK
-pop_block ( -- next:next_opcode )
+POP_BLOCK ( -- next:next_opcode )
 PyTryBlock *b = PyFrame_BlockPop(f);
 while (STACK_LEVEL() > b->b_level) {
         a1 = POP();
@@ -565,7 +565,7 @@ while (STACK_LEVEL() > b->b_level) {
 }
 
 \ _ , END_FINALLY
-end_finally ( a1 -- next:on_error )
+END_FINALLY ( a1 -- next:on_error )
 if (PyInt_Check(a1)) {
         why = (enum why_code) PyInt_AS_LONG(a1);
         assert(why != WHY_YIELD);
@@ -584,10 +584,10 @@ if (PyInt_Check(a1)) {
 Py_DECREF(a1);
 
 \ _ , BUILD
-build_class ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:on_error )
+BUILD_CLASS ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:on_error )
 x = a = build_class(a3, a2, a1);
 
-build_tuple ( #i -- )
+BUILD_TUPLE ( #i -- )
 x = PyTuple_New(i);
 if (x != NULL) {
         for (; --i >= 0;) {
@@ -599,7 +599,7 @@ if (x != NULL) {
 }
 ERROR();
 
-build_list ( #i -- )
+BUILD_LIST ( #i -- )
 x = PyList_New(i);
 if (x != NULL) {
         for (; --i >= 0;) {
@@ -611,22 +611,22 @@ if (x != NULL) {
 }
 ERROR();
 
-build_map ( #i -- a  next:a )
+BUILD_MAP ( #i -- a  next:a )
 a = _PyDict_NewPresized(i);
 
-store_map ( a1 a2 a3 -- a1  dec:a2 dec:a3 next:error )
+STORE_MAP ( a1 a2 a3 -- a1  dec:a2 dec:a3 next:error )
 /* a1 == dict, a2 == value, a3 == key */
 assert (PyDict_CheckExact(a1));
 err = PyDict_SetItem(a1, a3, a2);  /* a1[a3] = a2 */
 
-build_slice_two ( a1 a2 -- a  dec:a1 dec:a2  next:a )
+BUILD_SLICE_TWO ( a1 a2 -- a  dec:a1 dec:a2  next:a )
 a = PySlice_New(a1, a2, NULL);
 
-build_slice_three ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:a )
+BUILD_SLICE_THREE ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:a )
 a = PySlice_New(a1, a2, a3);
 
 \ _ , STORE
-store_name ( #i -- )
+STORE_NAME ( #i -- )
 a2 = GETITEM(names, i);
 a1 = POP();
 if ((x = f->f_locals) != NULL) {
@@ -643,20 +643,20 @@ PyErr_Format(PyExc_SystemError,
              PyObject_REPR(a2));
 ERROR();
 
-store_attr ( #i a1 a2 -- dec:a1 dec:a2  next:error )
+STORE_ATTR ( #i a1 a2 -- dec:a1 dec:a2  next:error )
 a3 = GETITEM(names, i);
 err = PyObject_SetAttr(a2, a3, a1); /* a2.a3 = a1 */
 
-store_global ( #i a1 -- dec:a1  next:error )
+STORE_GLOBAL ( #i a1 -- dec:a1  next:error )
 a2 = GETITEM(names, i);
 err = PyDict_SetItem(f->f_globals, a2, a1);
 
-store_deref ( #i a -- dec:a  next:next_opcode )
+STORE_DEREF ( #i a -- dec:a  next:next_opcode )
 x = freevars[i];
 PyCell_Set(x, a);
 
 \ _ , DELETE
-delete_name ( #i -- )
+DELETE_NAME ( #i -- )
 a1 = GETITEM(names, i);
 if ((x = f->f_locals) != NULL) {
         if ((err = PyObject_DelItem(x, a1)) != 0)
@@ -668,16 +668,16 @@ PyErr_Format(PyExc_SystemError,
              PyObject_REPR(a1));
 ERROR();
 
-delete_attr ( #i a1 -- dec:a1  next:on_error )
+DELETE_ATTR ( #i a1 -- dec:a1  next:on_error )
 a2 = GETITEM(names, i);
 err = PyObject_SetAttr(a1, a2, (PyObject *) NULL); /* del a1.a2 */
 
-delete_global ( #i -- next:on_error )
+DELETE_GLOBAL ( #i -- next:on_error )
 a1 = GETITEM(names, i);
 if ((err = PyDict_DelItem(f->f_globals, a1)) != 0)
         format_exc_check_arg(PyExc_NameError, GLOBAL_NAME_ERROR_MSG, a1);
 
-delete_fast ( #i -- )
+DELETE_FAST ( #i -- )
 x = GETLOCAL(i);
 if (x != NULL) {
         SETLOCAL(i, NULL);
@@ -690,7 +690,7 @@ format_exc_check_arg(
 ERROR();
 
 \ _ , UNPACK_SEQUENCE
-unpack_sequence ( #i a1 -- )
+UNPACK_SEQUENCE ( #i a1 -- )
 if (PyTuple_CheckExact(a1) && PyTuple_GET_SIZE(a1) == i) {
         PyObject **items = ((PyTupleObject *)a1)->ob_item;
         while (i--) {
@@ -717,7 +717,7 @@ Py_DECREF(a1);
 ERROR();
 
 \ _ , COMPARE_OP
-compare_op ( #i a1 a2 -- a  dec:a1 dec:a2  next:a )
+COMPARE_OP ( #i a1 a2 -- a  dec:a1 dec:a2  next:a )
 if (PyInt_CheckExact(a2) && PyInt_CheckExact(a1)) {
         /* INLINE: cmp(int, int) */
         register long u, v;
@@ -745,7 +745,7 @@ if (PyInt_CheckExact(a2) && PyInt_CheckExact(a1)) {
         a = cmp_outcome(i, a1, a2);
 
 \ _ , IMPORT
-import_name ( #i -- )
+IMPORT_NAME ( #i -- )
 a3 = GETITEM(names, i);
 x = PyDict_GetItemString(f->f_builtins, "__import__");
 if (x == NULL) {
@@ -784,7 +784,7 @@ SET_TOP(x);
 if (x != NULL) NEXT();
 ERROR();
 
-import_star ( a1 -- )
+IMPORT_STAR ( a1 -- )
 PyFrame_FastToLocals(f);
 if ((x = f->f_locals) == NULL) {
         PyErr_SetString(PyExc_SystemError, "no locals found during 'import *'");
@@ -796,15 +796,15 @@ Py_DECREF(a1);
 if (err == 0) NEXT();
 ERROR();
 
-import_from ( #i a1 -- a1 a3  next:a3 )
+IMPORT_FROM ( #i a1 -- a1 a3  next:a3 )
 a2 = GETITEM(names, i);
 a3 = import_from(a1, a2);
 
 \ _ , JUMP
-jump_forward ( #i -- )
+JUMP_FORWARD ( #i -- )
 JUMPBY(i);
 
-jump_if_false ( #i a1 -- a1 )
+JUMP_IF_FALSE ( #i a1 -- a1 )
 if (a1 == Py_True)
         ;
 else if (a1 == Py_False)
@@ -820,7 +820,7 @@ else {
         NEXT();
 }
 
-jump_if_true ( #i a1 -- a1 )
+JUMP_IF_TRUE ( #i a1 -- a1 )
 if (a1 == Py_False)
         ;
 else if (a1 == Py_True)
@@ -837,11 +837,11 @@ else {
         NEXT();
 }
 
-jump_absolute ( #i -- next:next_opcode )
+JUMP_ABSOLUTE ( #i -- next:next_opcode )
 JUMPTO(i);
 
 \ _ , ITER
-get_iter ( -- )
+GET_ITER ( -- )
 /* before: [obj]; after [getiter(obj)] */
 a1 = TOP();
 x = PyObject_GetIter(a1);
@@ -853,7 +853,7 @@ if (x != NULL) {
 STACKADJ(-1);
 ERROR();
 
-for_iter ( #i -- )
+FOR_ITER ( #i -- )
 /* before: [iter]; after: [iter, iter()] *or* [] */
 a1 = TOP();
 x = (*a1->ob_type->tp_iternext)(a1);
@@ -873,10 +873,10 @@ JUMPBY(i);
 NEXT();
 
 \ _ , LOOP
-break_loop ( -- next:fast_block_end )
+BREAK_LOOP ( -- next:fast_block_end )
 why = WHY_BREAK;
 
-continue_loop ( #i -- )
+CONTINUE_LOOP ( #i -- )
 retval = PyInt_FromLong(i);
 if (!retval) {
         x = NULL;
@@ -889,17 +889,17 @@ goto fast_block_end;
 \ NOTE: If you add any new block-setup opcodes that are not try/except/finally
 \ handlers, you may need to update the PyGen_NeedsFinalizing() function.
 
-setup_loop ( #i -- next:next_opcode )
+SETUP_LOOP ( #i -- next:next_opcode )
 PyFrame_BlockSetup(f, SETUP_LOOP, INSTR_OFFSET() + i, STACK_LEVEL());
 
-setup_except ( #i -- next:next_opcode )
+SETUP_EXCEPT ( #i -- next:next_opcode )
 PyFrame_BlockSetup(f, SETUP_EXCEPT, INSTR_OFFSET() + i, STACK_LEVEL());
 
-setup_finally ( #i -- next:next_opcode )
+SETUP_FINALLY ( #i -- next:next_opcode )
 PyFrame_BlockSetup(f, SETUP_FINALLY, INSTR_OFFSET() + i, STACK_LEVEL());
 
 \ _ , WITH_CLEANUP
-with_cleanup ( -- )
+WITH_CLEANUP ( -- )
 {
         /* At the top of the stack are 1-3 values indicating
            how/why we entered the finally clause:
@@ -985,7 +985,7 @@ with_cleanup ( -- )
 }
 
 \ _ , CALL_FUNCTION
-call_function ( #i -- )
+CALL_FUNCTION ( #i -- )
 PyObject **sp = stack_pointer;
 x = call_function(&sp, i);
 stack_pointer = sp;
@@ -993,7 +993,7 @@ PUSH(x);
 if (x != NULL) NEXT();
 ERROR();
 
-call_function_var_kw ( #i -- )
+CALL_FUNCTION_VAR_KW ( #i -- )
 int opcode = i & 0x0000FFFF;
 int oparg  = i>>16;
 int na     = oparg & 0xff;
@@ -1031,7 +1031,7 @@ if (x != NULL) NEXT();
 ERROR();
 
 \ _ , MAKE
-make_function ( #i -- )
+MAKE_FUNCTION ( #i -- )
 a1 = POP(); /* code object */
 x = PyFunction_New(a1, f->f_globals);
 Py_DECREF(a1);
@@ -1053,7 +1053,7 @@ if (x != NULL && i > 0) {
 PUSH(x);
 ERROR();
 
-make_closure ( #i -- )
+MAKE_CLOSURE ( #i -- )
 a1 = POP(); /* code object */
 x = PyFunction_New(a1, f->f_globals);
 Py_DECREF(a1);
@@ -1087,75 +1087,75 @@ PUSH(x);
 ERROR();
 
 \ _. Superinstructions
-cc = load_const load_const
+CC = LOAD_CONST LOAD_CONST
 
-cbinary_power = load_const binary_power
-ccbinary_power = load_const load_const binary_power
-cbinary_multiply = load_const binary_multiply
-ccbinary_multiply = load_const load_const binary_multiply
-cbinary_divide = load_const binary_divide
-ccbinary_divide = load_const load_const binary_divide
-cbinary_true_divide = load_const binary_true_divide
-ccbinary_true_divide = load_const load_const binary_true_divide
-cbinary_floor_divide = load_const binary_floor_divide
-ccbinary_floor_divide = load_const load_const binary_floor_divide
-cbinary_modulo = load_const binary_modulo
-ccbinary_modulo = load_const load_const binary_modulo
-cbinary_add = load_const binary_add
-ccbinary_add = load_const load_const binary_add
-cbinary_subtract = load_const binary_subtract
-ccbinary_subtract = load_const load_const binary_subtract
-cbinary_subscr = load_const binary_subscr
-ccbinary_subscr = load_const load_const binary_subscr
-cbinary_lshift = load_const binary_lshift
-ccbinary_lshift = load_const load_const binary_lshift
-cbinary_rshift = load_const binary_rshift
-ccbinary_rshift = load_const load_const binary_rshift
-cbinary_and = load_const binary_and
-ccbinary_and = load_const load_const binary_and
-cbinary_xor = load_const binary_xor
-ccbinary_xor = load_const load_const binary_xor
-cbinary_or = load_const binary_or
-ccbinary_or = load_const load_const binary_or
-clist_append = load_const list_append
-cclist_append = load_const load_const list_append
-cinplace_power = load_const inplace_power
-ccinplace_power = load_const load_const inplace_power
-cinplace_multiply = load_const inplace_multiply
-ccinplace_multiply = load_const load_const inplace_multiply
-cinplace_divide = load_const inplace_divide
-ccinplace_divide = load_const load_const inplace_divide
-cinplace_true_divide = load_const inplace_true_divide
-ccinplace_true_divide = load_const load_const inplace_true_divide
-cinplace_floor_divide = load_const inplace_floor_divide
-ccinplace_floor_divide = load_const load_const inplace_floor_divide
-cinplace_modulo = load_const inplace_modulo
-ccinplace_modulo = load_const load_const inplace_modulo
-cinplace_add = load_const inplace_add
-ccinplace_add = load_const load_const inplace_add
-cinplace_subtract = load_const inplace_subtract
-ccinplace_subtract = load_const load_const inplace_subtract
-cinplace_lshift = load_const inplace_lshift
-ccinplace_lshift = load_const load_const inplace_lshift
-cinplace_rshift = load_const inplace_rshift
-ccinplace_rshift = load_const load_const inplace_rshift
-cinplace_and = load_const inplace_and
-ccinplace_and = load_const load_const inplace_and
-cinplace_xor = load_const inplace_xor
-ccinplace_xor = load_const load_const inplace_xor
-cinplace_or = load_const inplace_or
-ccinplace_or = load_const load_const inplace_or
-cslice_left = load_const slice_left
-ccslice_left = load_const load_const slice_left
-cslice_right = load_const slice_right
-ccslice_right = load_const load_const slice_right
-cdelete_slice_left = load_const delete_slice_left
-ccdelete_slice_left = load_const load_const delete_slice_left
-cdelete_slice_right = load_const delete_slice_right
-ccdelete_slice_right = load_const load_const delete_slice_right
-cdelete_subscr = load_const delete_subscr
-ccdelete_subscr = load_const load_const delete_subscr
-cstore_attr = load_const store_attr
-ccstore_attr = load_const load_const store_attr
-ccompare_op = load_const compare_op
-cccompare_op = load_const load_const compare_op
+CBINARY_POWER = LOAD_CONST BINARY_POWER
+CCBINARY_POWER = LOAD_CONST LOAD_CONST BINARY_POWER
+CBINARY_MULTIPLY = LOAD_CONST BINARY_MULTIPLY
+CCBINARY_MULTIPLY = LOAD_CONST LOAD_CONST BINARY_MULTIPLY
+CBINARY_DIVIDE = LOAD_CONST BINARY_DIVIDE
+CCBINARY_DIVIDE = LOAD_CONST LOAD_CONST BINARY_DIVIDE
+CBINARY_TRUE_DIVIDE = LOAD_CONST BINARY_TRUE_DIVIDE
+CCBINARY_TRUE_DIVIDE = LOAD_CONST LOAD_CONST BINARY_TRUE_DIVIDE
+CBINARY_FLOOR_DIVIDE = LOAD_CONST BINARY_FLOOR_DIVIDE
+CCBINARY_FLOOR_DIVIDE = LOAD_CONST LOAD_CONST BINARY_FLOOR_DIVIDE
+CBINARY_MODULO = LOAD_CONST BINARY_MODULO
+CCBINARY_MODULO = LOAD_CONST LOAD_CONST BINARY_MODULO
+CBINARY_ADD = LOAD_CONST BINARY_ADD
+CCBINARY_ADD = LOAD_CONST LOAD_CONST BINARY_ADD
+CBINARY_SUBTRACT = LOAD_CONST BINARY_SUBTRACT
+CCBINARY_SUBTRACT = LOAD_CONST LOAD_CONST BINARY_SUBTRACT
+CBINARY_SUBSCR = LOAD_CONST BINARY_SUBSCR
+CCBINARY_SUBSCR = LOAD_CONST LOAD_CONST BINARY_SUBSCR
+CBINARY_LSHIFT = LOAD_CONST BINARY_LSHIFT
+CCBINARY_LSHIFT = LOAD_CONST LOAD_CONST BINARY_LSHIFT
+CBINARY_RSHIFT = LOAD_CONST BINARY_RSHIFT
+CCBINARY_RSHIFT = LOAD_CONST LOAD_CONST BINARY_RSHIFT
+CBINARY_AND = LOAD_CONST BINARY_AND
+CCBINARY_AND = LOAD_CONST LOAD_CONST BINARY_AND
+CBINARY_XOR = LOAD_CONST BINARY_XOR
+CCBINARY_XOR = LOAD_CONST LOAD_CONST BINARY_XOR
+CBINARY_OR = LOAD_CONST BINARY_OR
+CCBINARY_OR = LOAD_CONST LOAD_CONST BINARY_OR
+CLIST_APPEND = LOAD_CONST LIST_APPEND
+CCLIST_APPEND = LOAD_CONST LOAD_CONST LIST_APPEND
+CINPLACE_POWER = LOAD_CONST INPLACE_POWER
+CCINPLACE_POWER = LOAD_CONST LOAD_CONST INPLACE_POWER
+CINPLACE_MULTIPLY = LOAD_CONST INPLACE_MULTIPLY
+CCINPLACE_MULTIPLY = LOAD_CONST LOAD_CONST INPLACE_MULTIPLY
+CINPLACE_DIVIDE = LOAD_CONST INPLACE_DIVIDE
+CCINPLACE_DIVIDE = LOAD_CONST LOAD_CONST INPLACE_DIVIDE
+CINPLACE_TRUE_DIVIDE = LOAD_CONST INPLACE_TRUE_DIVIDE
+CCINPLACE_TRUE_DIVIDE = LOAD_CONST LOAD_CONST INPLACE_TRUE_DIVIDE
+CINPLACE_FLOOR_DIVIDE = LOAD_CONST INPLACE_FLOOR_DIVIDE
+CCINPLACE_FLOOR_DIVIDE = LOAD_CONST LOAD_CONST INPLACE_FLOOR_DIVIDE
+CINPLACE_MODULO = LOAD_CONST INPLACE_MODULO
+CCINPLACE_MODULO = LOAD_CONST LOAD_CONST INPLACE_MODULO
+CINPLACE_ADD = LOAD_CONST INPLACE_ADD
+CCINPLACE_ADD = LOAD_CONST LOAD_CONST INPLACE_ADD
+CINPLACE_SUBTRACT = LOAD_CONST INPLACE_SUBTRACT
+CCINPLACE_SUBTRACT = LOAD_CONST LOAD_CONST INPLACE_SUBTRACT
+CINPLACE_LSHIFT = LOAD_CONST INPLACE_LSHIFT
+CCINPLACE_LSHIFT = LOAD_CONST LOAD_CONST INPLACE_LSHIFT
+CINPLACE_RSHIFT = LOAD_CONST INPLACE_RSHIFT
+CCINPLACE_RSHIFT = LOAD_CONST LOAD_CONST INPLACE_RSHIFT
+CINPLACE_AND = LOAD_CONST INPLACE_AND
+CCINPLACE_AND = LOAD_CONST LOAD_CONST INPLACE_AND
+CINPLACE_XOR = LOAD_CONST INPLACE_XOR
+CCINPLACE_XOR = LOAD_CONST LOAD_CONST INPLACE_XOR
+CINPLACE_OR = LOAD_CONST INPLACE_OR
+CCINPLACE_OR = LOAD_CONST LOAD_CONST INPLACE_OR
+CSLICE_LEFT = LOAD_CONST SLICE_LEFT
+CCSLICE_LEFT = LOAD_CONST LOAD_CONST SLICE_LEFT
+CSLICE_RIGHT = LOAD_CONST SLICE_RIGHT
+CCSLICE_RIGHT = LOAD_CONST LOAD_CONST SLICE_RIGHT
+CDELETE_SLICE_LEFT = LOAD_CONST DELETE_SLICE_LEFT
+CCDELETE_SLICE_LEFT = LOAD_CONST LOAD_CONST DELETE_SLICE_LEFT
+CDELETE_SLICE_RIGHT = LOAD_CONST DELETE_SLICE_RIGHT
+CCDELETE_SLICE_RIGHT = LOAD_CONST LOAD_CONST DELETE_SLICE_RIGHT
+CDELETE_SUBSCR = LOAD_CONST DELETE_SUBSCR
+CCDELETE_SUBSCR = LOAD_CONST LOAD_CONST DELETE_SUBSCR
+CSTORE_ATTR = LOAD_CONST STORE_ATTR
+CCSTORE_ATTR = LOAD_CONST LOAD_CONST STORE_ATTR
+CCOMPARE_OP = LOAD_CONST COMPARE_OP
+CCCOMPARE_OP = LOAD_CONST LOAD_CONST COMPARE_OP

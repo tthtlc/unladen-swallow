@@ -623,9 +623,9 @@ typedef PyObject *Obj;
 
 /* XXX string_concatenate() */
 #define ADDR2OP(addr, op)                                                \
-        ({if      ((addr) == INST_ADDR(store_fast))  (op) = STORE_FAST;  \
-          else if ((addr) == INST_ADDR(store_deref)) (op) = STORE_DEREF; \
-          else if ((addr) == INST_ADDR(store_name))  (op) = STORE_NAME;  \
+        ({if      ((addr) == INST_ADDR(STORE_FAST))  (op) = STORE_FAST;  \
+          else if ((addr) == INST_ADDR(STORE_DEREF)) (op) = STORE_DEREF; \
+          else if ((addr) == INST_ADDR(STORE_NAME))  (op) = STORE_NAME;  \
           else                                       (op) = STOP_CODE;})
 
 /* Misc */
@@ -864,7 +864,7 @@ next_opcode:
            async I/O handler); see Py_AddPendingCall() and
            Py_MakePendingCalls() above. */
 
-        if (next_instr->opcode == INST_ADDR(setup_finally)) {
+        if (next_instr->opcode == INST_ADDR(SETUP_FINALLY)) {
                 /* Make the last opcode before
                    a try: finally: block uninterruptable. */
                 goto fast_next_opcode;

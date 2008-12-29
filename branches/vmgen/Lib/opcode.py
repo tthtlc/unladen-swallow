@@ -5,7 +5,8 @@ operate on bytecodes (e.g. peephole optimizers).
 """
 
 __all__ = ["cmp_op", "hasconst", "hasname", "hasjrel", "hasjabs",
-           "haslocal", "hascompare", "hasfree", "opname", "opmap", "opdesc"]
+           "haslocal", "hascompare", "hasfree", "opname", "opmap", "opdesc",
+           "is_argument", "get_opcode", "get_argument"]
 
 import _opcode
 
@@ -110,3 +111,14 @@ describe('CALL_FUNCTION_VAR_KW',
          ' and code&2 is true if there\'s a **kwargs parameter.')
 
 del describe, name_op, jrel_op, jabs_op
+
+def is_argument(instruction):
+    return bool(instruction & 1)
+
+def get_opcode(instruction):
+    assert not is_argument(instruction), '%d is argument, not opcode' % instruction
+    return instruction >> 1
+
+def get_argument(instruction):
+    assert is_argument(instruction), '%d is opcode, not argument' % instruction
+    return instruction >> 1
