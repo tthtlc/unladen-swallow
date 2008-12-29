@@ -398,7 +398,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	Py_ssize_t i, j, codelen;
 	int nops, h;
 	int tgt, tgttgt, opcode;
-	PyInstructionsObject *modcode;
+	PyInstructionsObject *modcode = NULL;
 	PyPInst *inststr;
 	unsigned char *lineno;
 	int *addrmap = NULL;

@@ -3901,6 +3901,7 @@ makecode(struct compiler *c, struct assembler *a)
 	Py_XDECREF(name);
 	Py_XDECREF(freevars);
 	Py_XDECREF(cellvars);
+	Py_XDECREF(code);
 	return co;
 }
 
