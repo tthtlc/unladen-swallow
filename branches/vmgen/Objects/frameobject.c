@@ -153,8 +153,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	 * cases (AFAIK) where a line's code can start with DUP_TOP or
 	 * POP_TOP, but if any ever appear, they'll be subject to the same
 	 * restriction (but with a different error message). */
-	if (PyPInst_GET_OPCODE(code + new_lasti) == DUP_TOP ||
-            PyPInst_GET_OPCODE(code + new_lasti) == POP_TOP) {
+	if (PyPInst_GET_OPCODE(code + new_lasti) == VMG_DUP_TOP ||
+	    PyPInst_GET_OPCODE(code + new_lasti) == VMG_POP_TOP) {
 		PyErr_SetString(PyExc_ValueError,
 		    "can't jump to 'except' line as there's no exception");
 		return -1;
@@ -175,20 +175,23 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	memset(in_finally, '\0', sizeof(in_finally));
 	blockstack_top = 0;
 	for (addr = 0; addr < code_len; addr++) {
+		if (code[addr].is_arg) {
+			continue;
+		}
 		unsigned char op = PyPInst_GET_OPCODE(code + addr);
 		switch (op) {
-		case SETUP_LOOP:
-		case SETUP_EXCEPT:
-		case SETUP_FINALLY:
+		case VMG_SETUP_LOOP:
+		case VMG_SETUP_EXCEPT:
+		case VMG_SETUP_FINALLY:
 			blockstack[blockstack_top++] = addr;
 			in_finally[blockstack_top-1] = 0;
 			break;
 
-		case POP_BLOCK:
+		case VMG_POP_BLOCK:
 			assert(blockstack_top > 0);
 			setup_op = PyPInst_GET_OPCODE(
 				code + blockstack[blockstack_top-1]);
-			if (setup_op == SETUP_FINALLY) {
+			if (setup_op == VMG_SETUP_FINALLY) {
 				in_finally[blockstack_top-1] = 1;
 			}
 			else {
@@ -196,7 +199,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 			}
 			break;
 
-		case END_FINALLY:
+		case VMG_END_FINALLY:
 			/* Ignore END_FINALLYs for SETUP_EXCEPTs - they exist
 			 * in the bytecode but don't correspond to an actual
 			 * 'finally' block.  (If blockstack_top is 0, we must
@@ -204,7 +207,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 			if (blockstack_top > 0) {
 				setup_op = PyPInst_GET_OPCODE(
 					code + blockstack[blockstack_top-1]);
-				if (setup_op == SETUP_FINALLY) {
+				if (setup_op == VMG_SETUP_FINALLY) {
 					blockstack_top--;
 				}
 			}
@@ -234,10 +237,6 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 				}
 			}
 		}
-
-		if (op >= HAVE_ARGUMENT) {
-			addr += 2;
-		}
 	}
 
 	/* Verify that the blockstack tracking code didn't get lost. */
@@ -261,24 +260,23 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	 * again - in that case we raise an exception below. */
 	delta_iblock = 0;
 	for (addr = min_addr; addr < max_addr; addr++) {
+		if (code[addr].is_arg) {
+			continue;
+		}
 		unsigned char op = PyPInst_GET_OPCODE(code + addr);
 		switch (op) {
-		case SETUP_LOOP:
-		case SETUP_EXCEPT:
-		case SETUP_FINALLY:
+		case VMG_SETUP_LOOP:
+		case VMG_SETUP_EXCEPT:
+		case VMG_SETUP_FINALLY:
 			delta_iblock++;
 			break;
 
-		case POP_BLOCK:
+		case VMG_POP_BLOCK:
 			delta_iblock--;
 			break;
 		}
 
 		min_delta_iblock = MIN(min_delta_iblock, delta_iblock);
-
-		if (op >= HAVE_ARGUMENT) {
-			addr += 2;
-		}
 	}
 
 	/* Derive the absolute iblock values from the deltas. */

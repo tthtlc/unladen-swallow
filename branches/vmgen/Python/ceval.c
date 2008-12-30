@@ -111,8 +111,9 @@ static int call_trace(Py_tracefunc, PyObject *, PyFrameObject *,
 static int call_trace_protected(Py_tracefunc, PyObject *,
 				 PyFrameObject *, int, PyObject *);
 static void call_exc_trace(Py_tracefunc, PyObject *, PyFrameObject *);
-static int maybe_call_line_trace(Py_tracefunc, PyObject *,
-				  PyFrameObject *, int *, int *, int *);
+static int maybe_call_line_trace(PyThreadState *, Inst *, Inst **, int *,
+				 PyObject ***, PyFrameObject *,
+				 int *, int *, int *);
 
 static PyObject * apply_slice(PyObject *, PyObject *, PyObject *);
 static int assign_slice(PyObject *, PyObject *,
@@ -128,7 +129,6 @@ static void reset_exc_info(PyThreadState *);
 static void format_exc_check_arg(PyObject *, char *, PyObject *);
 static PyObject * string_concatenate(PyObject *, PyObject *,
                                      PyFrameObject *, int, int );
-static void translate_code(Inst **, unsigned char *, int);
 static void disassemble_bytecode(PyInstructionsObject *code);
 static void disassemble_tcode(Inst *, Inst *);
 
@@ -580,7 +580,26 @@ typedef PyObject *Obj;
 #define vm_a2Obj(a,obj)     ({(obj) = (a);})
 
 /* This is the first code executed in any instruction. */
-#define NEXT_P0 ({f->f_lasti = INSTR_OFFSET(); next_instr++;})
+#define NEXT_P0 do { \
+		f->f_lasti = INSTR_OFFSET(); \
+		/* line-by-line tracing support */ \
+		if (_Py_TracingPossible) { \
+			err = maybe_call_line_trace(tstate, first_instr, \
+						    &next_instr, &tracer_just_jumped, \
+						    &stack_pointer, \
+						    f, &instr_lb, &instr_ub, \
+						    &instr_prev); \
+			if (err) { \
+				/* trace function raised an exception */ \
+				goto on_error; \
+			} \
+			if (tracer_just_jumped) { \
+				/* trace function may have changed the line number */ \
+				NEXT_P2; \
+			} \
+		} \
+		next_instr++; \
+	} while (0)
 
 /* Reference counting annotations */
 #define vm_a2decref(a,_) Py_DECREF(a)
@@ -665,8 +684,8 @@ PyEval_EvalFrame(PyFrameObject *f) {
 PyObject *
 PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 {
-	register PyObject **stack_pointer;   /* Next free slot in value stack */
-	register Inst *next_instr;
+	PyObject **stack_pointer;   /* Next free slot in value stack */
+	Inst *next_instr;
 	register enum why_code why; /* Reason for block stack unwind */
 	register int err;	/* Error status -- nonzero if error */
 	register PyObject *x;	/* Result object -- NULL if error */
@@ -678,6 +697,19 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	PyObject *retval = NULL;	/* Return value */
 	PyThreadState *tstate = PyThreadState_GET();
 	PyCodeObject *co;
+
+	/* when tracing we set things up so that
+
+               not (instr_lb <= current_bytecode_offset < instr_ub)
+
+	   is true when the line being executed has changed.  The
+           initial values are such as to make this false the first
+           time it is tested. */
+	int instr_ub = -1, instr_lb = 0, instr_prev = -1;
+	/* True when we just went to another opcode because the tracer
+	   changed the line number, in which case we don't want to
+	   call the tracer again for the new line. */
+	int tracer_just_jumped = 0;
 
 	Inst *first_instr;
 	PyObject *names;
@@ -706,6 +738,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define IP              (next_instr)
 #define IPTOS           (*next_instr)
 #define INC_IP(n)       ({next_instr += (n);})
+/* If SET_IP changes, you may have to change maybe_call_line_trace too. */
 #define SET_IP(target)  ({next_instr = (target);})
 
 /* Stack manipulation macros */
@@ -1784,12 +1817,30 @@ _PyEval_CallTracing(PyObject *func, PyObject *args)
 	return result;
 }
 
+/* If *tracer_just_jumped was true before the call, clears it and
+   returns.  Otherwise, if a trace function is enabled and we've
+   changed lines, calls the trace function.  If it changes the line
+   number, this function sets *tracer_just_jumped to true (which
+   triggers a re-dispatch).  Returns nonzero on exception. */
 static int
-maybe_call_line_trace(Py_tracefunc func, PyObject *obj,
-		      PyFrameObject *frame, int *instr_lb, int *instr_ub,
-		      int *instr_prev)
+maybe_call_line_trace(PyThreadState* tstate, Inst *first_instr, Inst **next_instr,
+		      int *tracer_just_jumped,
+		      PyObject ***stack_pointer, PyFrameObject *frame,
+		      int *instr_lb, int *instr_ub, int *instr_prev)
 {
 	int result = 0;
+	Py_tracefunc func = tstate->c_tracefunc;
+	PyObject *obj = tstate->c_traceobj;
+
+	if (*tracer_just_jumped) {
+		*tracer_just_jumped = 0;
+		return 0;
+	}
+	if (tstate->c_tracefunc == NULL || tstate->tracing) {
+		return 0;
+	}
+
+	frame->f_stacktop = *stack_pointer;
 
         /* If the last instruction executed isn't in the current
            instruction window, reset the window.  If the last
@@ -1814,6 +1865,17 @@ maybe_call_line_trace(Py_tracefunc func, PyObject *obj,
 		result = call_trace(func, obj, frame, PyTrace_LINE, Py_None);
 	}
 	*instr_prev = frame->f_lasti;
+
+	/* Reload possibly changed frame fields */
+	if (*next_instr != first_instr + frame->f_lasti) {
+		*tracer_just_jumped = 1;
+		/* JUMPTO(frame->f_lasti) */
+		*next_instr = first_instr + frame->f_lasti;
+	}
+	if (frame->f_stacktop != NULL) {
+		*stack_pointer = frame->f_stacktop;
+		frame->f_stacktop = NULL;
+	}
 	return result;
 }
 
