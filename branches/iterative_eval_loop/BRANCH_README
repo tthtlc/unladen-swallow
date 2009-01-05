@@ -1,0 +1,1 @@
+Attempt to make the core eval loop (PyEval_EvalFrameEx) iterative, rather than recursive.
