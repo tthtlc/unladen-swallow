@@ -28,6 +28,47 @@ err:
     return NULL;
 }
 
+typedef struct idx_combination {
+	int prefix;      /* instruction or superinstruction prefix index */
+	int lastprim;    /* most recently added instruction index	*/
+	int combination; /* resulting superinstruction index	     */
+} IdxCombination;
+
+static IdxCombination peephole_table[] = {
+#include "ceval-peephole.i"
+};
+
+static PyObject *
+init_superinstruction_table(void)
+{
+    Py_ssize_t i;
+    PyObject *table = NULL, *key = NULL, *value = NULL;
+
+    table = PyDict_New();
+    if (table == NULL)
+        goto err;
+
+    for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
+        IdxCombination *c   = &(peephole_table[i]);
+
+        key = Py_BuildValue("ii", c->prefix, c->lastprim);
+        value = PyInt_FromLong(c->combination);
+        if (key == NULL || value == NULL)
+            goto err;
+        if (PyDict_SetItem(table, key, value) != 0)
+            goto err;
+        Py_CLEAR(key);
+        Py_CLEAR(value);
+    }
+    return table;
+
+err:
+    Py_XDECREF(table);
+    Py_XDECREF(key);
+    Py_XDECREF(value);
+    return NULL;
+}
+
 PyMODINIT_FUNC
 init_opcode(void)
 {
@@ -35,8 +76,13 @@ init_opcode(void)
 
     m = Py_InitModule3("_opcode", NULL, "Opcode definition module.");
     if (m != NULL) {
-        PyObject *opcode_list = init_opcode_names();
+        PyObject *opcode_list, *superinstruction_table;
+        opcode_list = init_opcode_names();
         if (opcode_list != NULL)
             PyModule_AddObject(m, "opcodes", opcode_list);
+
+        superinstruction_table = init_superinstruction_table();
+        if (superinstruction_table != NULL)
+            PyModule_AddObject(m, "superinstruction_table", superinstruction_table);
     }
 }

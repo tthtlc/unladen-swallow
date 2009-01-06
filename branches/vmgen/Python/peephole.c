@@ -242,6 +242,9 @@ fold_unaryops_on_constants(PyPInst *inststr, PyObject *consts)
 	return 1;
 }
 
+/* XXX(jyasskin): This currently prevents optimizations that eliminate a
+   jump target. Consider whether we want to prevent optimizations that blur
+   a line boundary too, and under what circumstances. */
 static unsigned int *
 markblocks(PyPInst *code, Py_ssize_t len)
 {
@@ -281,16 +284,98 @@ markblocks(PyPInst *code, Py_ssize_t len)
 	return blocks;
 }
 
+/* Superinstruction combiner
+
+   - We use a simple, greedy peepholing algorithm for superinstructions
+     (taken from the vmgen example code).
+   - Vmgen generates the necessary table as an array of tuples of
+     instruction indices (known at compile time); we convert this into a
+     hash table at runtime.
+ */
+
+/* Very simple hash function.  It's the way it is because the arguments are
+   contiguous small integers. */
+#define HASH_SIZE (1 << 10)
+#define HASH(a,b) (((a) ^ ((b) << 5) ^ ((b) >> 5)) & (HASH_SIZE-1))
+
+typedef struct idx_combination {
+	int prefix;      /* instruction or superinstruction prefix index */
+	int lastprim;    /* most recently added instruction index	*/
+	int combination; /* resulting superinstruction index	     */
+	struct idx_combination *next;
+} IdxCombination;
+
+static IdxCombination peephole_table[] = {
+#include "ceval-peephole.i"
+};
+
+static IdxCombination *peeptable[HASH_SIZE];
+
 static void
-dump_inststr(PyPInst* inststr, Py_ssize_t len) {
-        int i;
-        for (i = 0; i < len; ++i) {
-                if (inststr[i].is_arg)
-                        printf("A%u ", PyPInst_GET_ARG(inststr + i));
-                else
-                        printf("O%u ", PyPInst_GET_OPCODE(inststr + i));
-        }
-        printf("\n");
+prepare_peeptable()
+{
+	long i;
+
+	for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
+		IdxCombination *c   = &(peephole_table[i]);
+		IdxCombination *p = (IdxCombination*) malloc(sizeof(*p));
+
+		p->prefix      = c->prefix;
+		p->lastprim    = c->lastprim;
+		p->combination = c->combination;
+
+		long h       = HASH(p->prefix, p->lastprim);
+		p->next      = peeptable[h];
+		peeptable[h] = p;
+	}
+}
+
+static int
+combine_two(int op1, int op2)
+{
+	IdxCombination *p;
+
+	for (p = peeptable[HASH(op1, op2)]; p != NULL; p = p->next)
+		if (op1 == p->prefix && op2 == p->lastprim)
+			return p->combination;
+
+	return -1;
+}
+
+/* Combines basic instructions into superinstructions */
+static void
+combine_to_superinstructions(PyPInst *inststr, Py_ssize_t codelen,
+			     unsigned int *blocks)
+{
+	/* First element of inststr is always an opcode. */
+	int working_on = 0;
+	int next_arg = 1;
+	int i;
+
+	for (i=1; i < codelen; i++) {
+		if (inststr[i].is_arg) {
+			inststr[next_arg] = inststr[i];
+			next_arg++;
+		}
+		else {
+			int super_op = -1;
+			/* See ISBASICBLOCK() */
+			if (blocks[working_on] == blocks[i]) {
+				super_op = combine_two(GETOP(inststr[working_on]),
+						       GETOP(inststr[i]));
+			}
+			if (super_op == -1) {
+				/* Start new superinstruction */
+				set_nops(inststr + next_arg, i - next_arg);
+				working_on = i;
+				next_arg = i + 1;
+			}
+			else {
+				/* Continue an existing superinstruction */
+				SETOP(inststr[working_on], super_op);
+			}
+		}
+	}
 }
 
 /* Perform basic peephole optimizations to components of a code object.
@@ -319,7 +404,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	PyPInst *inststr;
 	unsigned char *lineno;
 	int *addrmap = NULL;
-	int new_line, cum_orig_line, last_line, tabsiz;
+	int new_code, cum_orig_code_offset, last_code, tabsiz;
 	int cumlc=0, lastlc=0;	/* Count runs of consecutive LOAD_CONSTs */
 	unsigned int *blocks = NULL;
 	char *name;
@@ -599,24 +684,34 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 		}
 	}
 
-	/* XXX(jyasskin): Build superinstructions here. */
+	combine_to_superinstructions(inststr, codelen, blocks);
 
+	last_code = 0;
 	/* Fixup linenotab */
 	for (i=0, nops=0 ; i<codelen ; i++) {
-		if (inststr[i].is_arg)
+		if (inststr[i].is_arg) {
+			/* Line numbers can point to code that has been
+			   turned into an argument.  Resolve them to the
+			   next earlier opcode. */
+			addrmap[i] = last_code;
 			continue;
-		addrmap[i] = i - nops;
+		}
+		addrmap[i] = last_code = i - nops;
 		if (GETOP(inststr[i]) == NOP)
 			nops++;
 	}
-	cum_orig_line = 0;
-	last_line = 0;
+	cum_orig_code_offset = 0;
+	last_code = 0;
 	for (i=0 ; i < tabsiz ; i+=2) {
-		cum_orig_line += lineno[i];
-		new_line = addrmap[cum_orig_line];
-		assert (new_line - last_line < 255);
-		lineno[i] =((unsigned char)(new_line - last_line));
-		last_line = new_line;
+		cum_orig_code_offset += lineno[i];
+		new_code = addrmap[cum_orig_code_offset];
+		/* We checked above that no two lines are more than 255 code
+		   elements apart.  Since the peephole optimizer only
+		   reduces the size of the bytecode, we know that they're
+		   still less than 255 apart.  */
+		assert (last_code <= new_code && new_code - last_code < 255);
+		lineno[i] =((unsigned char)(new_code - last_code));
+		last_code = new_code;
 	}
 
 	/* Remove NOPs and fixup jump targets */
@@ -666,342 +761,3 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	Py_INCREF(code);
 	return code;
 }
-
-
-
-
-/* CPython opcode->DTC translator and superinstruction combiner
-
-   - We use a simple, greedy peepholing algorithm for superinstructions
-     (taken from the vmgen example code).
-   - Vmgen generates the necessary table as an array of tuples of
-     instruction indices (known at compile time); we convert this into a
-     hash table at runtime.
-   - translate_code() is a little kludgy right now.
- */
-
-#define HASH_SIZE 1024
-#define HASH(a,b) (((a) ^ ((b) << 5)) & (HASH_SIZE-1))
-
-typedef struct idx_combination {
-	int prefix;      /* instruction or superinstruction prefix index */
-	int lastprim;    /* most recently added instruction index	*/
-	int combination; /* resulting superinstruction index	     */
-	struct idx_combination *next;
-} IdxCombination;
-
-static IdxCombination peephole_table[] = {
-#include "ceval-peephole.i"
-};
-
-static IdxCombination *peeptable[HASH_SIZE];
-
-static void
-prepare_peeptable()
-{
-	long i;
-
-	for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
-		IdxCombination *c   = &(peephole_table[i]);
-		IdxCombination *p = (IdxCombination*) malloc(sizeof(*p));
-
-		p->prefix      = c->prefix;
-		p->lastprim    = c->lastprim;
-		p->combination = c->combination;
-
-		long h       = HASH(p->prefix, p->lastprim);
-		p->next      = peeptable[h];
-		peeptable[h] = p;
-	}
-}
-
-static int
-combine(int op1, int op2)
-{
-	IdxCombination *p;
-
-	for (p = peeptable[HASH(op1, op2)]; p != NULL; p = p->next)
-		if (op1 == p->prefix && op2 == p->lastprim)
-			return p->combination;
-
-	return -1;
-}
-
-#if 0
-static int cur_super_len = 0; /* # of insts accumulated so far */
-static int super_len     = 0; /* # of insts in last opcode     */
-static int super_done    = 0; /* flag: last opcode finalized   */
-
-/* Your typical superinstructions of e.g. 3 components
-     OP1 ARG1 OP2 ARG2 OP3
-   will be compiled as
-     OP1_OP2_OP3 ARG1 ARG2.
-   Since calls to gen_inst() are interleaved with calls to gen_arg(),
-   we save the position of OP1 in the instruction stream.
- */
-static PyPInst *prev_inst = NULL;
-
-static void
-gen_inst(PyPInst **ctp, intptr_t op)
-{
-	int super_op = -1;
-
-	if (prev_inst)
-		super_op = combine(PyPInst_GET_OPCODE(prev_inst), op);
-
-	if (super_op != -1) {
-		cur_super_len++;
-		PyPInst_SET_OPCODE(prev_inst, super_op);
-	} else {
-		/* We've been compiling a superinstruction, but the
-		   current instruction couldn't be added. */
-		if (cur_super_len > 1) {
-			super_len  = cur_super_len;
-			super_done = 1;
-		}
-		cur_super_len = 1;
-		prev_inst = *ctp;
-		PyPInst_SET_OPCODE(*ctp, op);
-		(*ctp)++;
-	}
-}
-
-static void
-genarg_i(PyPInst **ctp, Oparg arg)
-{
-	PyPInst_SET_ARG(*ctp, arg);
-	(*ctp)++;
-}
-
-/* ceval-gen.i includes expressions like "vm_prim[6]", which we want
-   to evaluate to "6" (because we want to translate to addresses in
-   EvalFrameEx, not here). The following nasty expression accomplishes
-   that. */
-#define vm_prim (intptr_t)&((char*)0)
-#define Inst PyPInst
-#include "ceval-gen.i"
-#undef Inst
-#undef vm_prim
-
-/* Branch target store */
-typedef struct target {
-	int   idx; /* -1 indicates absolute jump */
-	Inst *arg;
-} *Target;
-
-static void
-translate_code(PyPInst **ctp, PyPInst *first_instr, int len)
-{
-	/* reset peepholer */
-	cur_super_len = 0;
-	super_len     = 0;
-	super_done    = 0;
-	prev_inst     = NULL;
-
-	/* ``addrmap'' is used initially to flag basic block boundaries
-	   and later to record the mapping of pre-translation instruction
-	   indices to post-translation instruction indices. */
-	int *addrmap = (int *) calloc(len, sizeof(int));
-	bzero(addrmap, sizeof(int)*len);
-
-	int i;
-	int jumps  = 0;
-	int idx    = 0;
-	int opcode = 0;
-	int oparg  = 0;
-	int blanks = 0; /* # of positions to shift the current instruction */
-
-	/* Code access macros */
-
-#define GETOP()  (next_instr[i++])
-#define GETARG() (i += 2, (next_instr[i-1]<<8) + next_instr[i-2])
-
-	/* Branch classification macros */
-
-#define ABSOLUTE_JUMP(op) (op==JUMP_ABSOLUTE || op==CONTINUE_LOOP)
-#define RELATIVE_JUMP(op) (op==FOR_ITER || op==JUMP_FORWARD ||	  \
-			   op==JUMP_IF_FALSE || op==JUMP_IF_TRUE ||     \
-			   op==SETUP_LOOP || op==SETUP_EXCEPT ||	\
-			   op==SETUP_FINALLY)
-
-	/* Pass 1: flag BBBs, count jump instructions */
-	for (i = 0; i < len; ) {
-		opcode = GETOP();
-
-		if (HAS_ARG(opcode))
-			oparg = GETARG();
-
-		if (opcode == EXTENDED_ARG) {
-			opcode = GETOP();
-			oparg  = oparg<<16 | GETARG();
-		}
-
-		if (ABSOLUTE_JUMP(opcode)) {
-			addrmap[oparg] = 1;
-			jumps++;
-		} else if (RELATIVE_JUMP(opcode)) {
-			addrmap[i + oparg] = 1;
-			jumps++;
-		}
-	}
-
-	Target targets = (Target) calloc(jumps, sizeof(struct target));
-	jumps = 0;
-
-	/* Pass 2: calculate new addresses, translate bytes to pointers */
-	for (i = 0; i < len;) {
-		/* ``super_done'' has been set. This means that the instruction
-		   compiled before the current one was preceded by a
-		   superinstruction to which it couldn't be appended. */
-		if (super_done) {
-			assert(cur_super_len == 1);
-			blanks += super_len-1;
-			super_done = 0;
-			addrmap[idx] -= super_len-1; /* adjust PREVIOUS inst's position */
-		}
-
-		/* We know the current instruction to be the target of some
-		   jump and hence we disable superinstruction generation and
-		   terminate the current one (if any). C.f. gen_inst(). */
-		if (addrmap[i]) {
-			super_len = cur_super_len;
-			cur_super_len = 0;
-			prev_inst = NULL;
-			blanks += super_len-1;
-		}
-
-		/* Adjust the CURRENT instruction's position */
-		addrmap[i] = i - blanks;
-
-		idx = i;
-		opcode = GETOP();
-
-		if (HAS_ARG(opcode))
-			oparg = GETARG();
-
-		if (opcode == EXTENDED_ARG) {
-			idx = i;
-			opcode = GETOP();
-			oparg  = oparg<<16 | GETARG();
-			blanks += 3;
-		}
-
-		/* Save jump targets */
-		if (ABSOLUTE_JUMP(opcode)) {
-			targets[jumps].idx = -1;
-			targets[jumps].arg = *ctp+1; /* oparg to be */
-			jumps++;
-		} else if (RELATIVE_JUMP(opcode)) {
-			targets[jumps].idx = idx;
-			targets[jumps].arg = *ctp+1;
-			jumps++;
-		}
-
-		/* Translate bytecode */
-		switch (opcode) {
-			/* Emulate fallthrough: OP ==> OP OP */
-		case PRINT_ITEM_TO:
-			gen_print_item_to(ctp);
-			gen_print_item(ctp);
-			blanks--;
-			break;
-		case PRINT_NEWLINE_TO:
-			gen_print_item_to(ctp);
-			gen_print_newline(ctp);
-			blanks--;
-			break;
-			/* Specialize for oparg: OP ARG ARG ==> OP */
-		case DUP_TOPX:
-			switch (oparg) {
-			case 3: gen_dup_top_three(ctp); break;
-			case 2: gen_dup_top_two(ctp);   break;
-			default:
-				Py_FatalError("invalid argument to DUP_TOPX"
-					      " (bytecode corruption?)");
-			}
-			blanks += 2;
-			break;
-		case RAISE_VARARGS:
-			switch (oparg) {
-			case 3: gen_raise_varargs_three(ctp); break;
-			case 2: gen_raise_varargs_two(ctp);   break;
-			case 1: gen_raise_varargs_one(ctp);   break;
-			case 0: gen_raise_varargs_zero(ctp);  break;
-			default:
-				printf("bad RAISE_VARARGS oparg: %d\n", oparg);
-				assert(0);
-			}
-			blanks += 2;
-			break;
-		case BUILD_SLICE:
-			switch (oparg) {
-			case 3: gen_build_slice_three(ctp); break;
-			case 2: gen_build_slice_two(ctp);   break;
-			default:
-				assert(0);
-			}
-			blanks += 2;
-			break;
-			/* More fallthrough */
-		case BINARY_DIVIDE:
-			if (!_Py_QnewFlag) gen_binary_divide(ctp);
-			else gen_binary_true_divide(ctp);
-			break;
-		case INPLACE_DIVIDE:
-			if (!_Py_QnewFlag) gen_inplace_divide(ctp);
-			else gen_inplace_true_divide(ctp);
-			break;
-			/* Decode SLICE */
-		case SLICE+0: gen_slice_none(ctp);  break;
-		case SLICE+1: gen_slice_left(ctp);  break;
-		case SLICE+2: gen_slice_right(ctp); break;
-		case SLICE+3: gen_slice_both(ctp);  break;
-		case STORE_SLICE+0: gen_store_slice_none(ctp);  break;
-		case STORE_SLICE+1: gen_store_slice_left(ctp);  break;
-		case STORE_SLICE+2: gen_store_slice_right(ctp); break;
-		case STORE_SLICE+3: gen_store_slice_both(ctp);  break;
-		case DELETE_SLICE+0: gen_delete_slice_none(ctp);  break;
-		case DELETE_SLICE+1: gen_delete_slice_left(ctp);  break;
-		case DELETE_SLICE+2: gen_delete_slice_right(ctp); break;
-		case DELETE_SLICE+3: gen_delete_slice_both(ctp);  break;
-			/* Store bytecode in oparg...
-			   XXX this doesn't work with extended arguments */
-		case CALL_FUNCTION_VAR:
-			gen_call_function_var_kw(ctp, (oparg<<16) | CALL_FUNCTION_VAR);
-			blanks++;
-			break;
-		case CALL_FUNCTION_KW:
-			gen_call_function_var_kw(ctp, (oparg<<16) | CALL_FUNCTION_KW);
-			blanks++;
-			break;
-		case CALL_FUNCTION_VAR_KW:
-			gen_call_function_var_kw(ctp, (oparg<<16) | CALL_FUNCTION_VAR_KW);
-			blanks++;
-			break;
-
-#include "ceval-translate.i"
-
-		default:
-			printf("unknown opcode: %d", opcode);
-			assert(0);
-		}
-	}
-
-	/* Pass 3: retarget jumps */
-	for (i = 0; i < jumps; i++) {
-		if (targets[i].idx == -1) {
-			targets[i].arg->oparg = addrmap[targets[i].arg->oparg];
-		} else {
-			targets[i].arg->oparg =
-				addrmap[targets[i].idx	   /* branch instruction   */
-					+ 3		      /* oparg is ip relative */
-					+ targets[i].arg->oparg] /* offset	       */
-				- addrmap[targets[i].idx]	/* instruction shift    */
-				- 2;			     /* new oparg format     */
-		}
-	}
-
-	free(addrmap);
-	free(targets);
-}
-#endif

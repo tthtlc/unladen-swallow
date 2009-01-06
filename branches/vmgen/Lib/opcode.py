@@ -5,8 +5,11 @@ operate on bytecodes (e.g. peephole optimizers).
 """
 
 __all__ = ["cmp_op", "hasconst", "hasname", "hasjrel", "hasjabs",
-           "haslocal", "hascompare", "hasfree", "opname", "opmap", "opdesc",
-           "is_argument", "get_opcode", "get_argument"]
+           "haslocal", "hascompare", "hasfree", "opname", "opmap", "argdesc",
+           "is_argument", "get_opcode", "get_argument",
+           "make_opcode", "make_argument",
+           "prim2super", "super2prim",
+           "decode_superinstruction"]
 
 import _opcode
 
@@ -31,31 +34,34 @@ for i, name in enumerate(_opcode.opcodes):
     opmap[name] = i
 del i, name
 
-opdesc = {}
+prim2super = _opcode.superinstruction_table
+super2prim = dict((super,prims) for prims, super in prim2super.iteritems())
 
-def describe(name, description):
-    opdesc[opmap[name]] = description
+argdesc = {}
+
+def arg_op(name, description):
+    argdesc[opmap[name]] = description
 
 def name_op(name, description):
     op = opmap[name]
     hasname.append(op)
-    opdesc[op] = description
+    argdesc[op] = description
 
 def jrel_op(name, description):
     op = opmap[name]
     hasjrel.append(op)
-    opdesc[op] = description
+    argdesc[op] = description
 
 def jabs_op(name, description):
     op = opmap[name]
     hasjabs.append(op)
-    opdesc[op] = description
+    argdesc[op] = description
 
 # Instruction opcodes for compiled code
 
 name_op('STORE_NAME', 'Index in name list')
 name_op('DELETE_NAME', 'Index in name list')
-describe('UNPACK_SEQUENCE', 'Number of tuple items')
+arg_op('UNPACK_SEQUENCE', 'Number of tuple items')
 jrel_op('FOR_ITER', '???')
 
 name_op('STORE_ATTR', 'Index in name list')
@@ -63,14 +69,14 @@ name_op('DELETE_ATTR', 'Index in name list')
 name_op('STORE_GLOBAL', 'Index in name list')
 name_op('DELETE_GLOBAL', 'Index in name list')
 
-describe('LOAD_CONST', 'Index in const list')
+arg_op('LOAD_CONST', 'Index in const list')
 hasconst.append(opmap['LOAD_CONST'])
 name_op('LOAD_NAME', 'Index in name list')
-describe('BUILD_TUPLE', 'Number of tuple items')
-describe('BUILD_LIST', 'Number of list items')
-describe('BUILD_MAP', 'Number of dict entries (upto 255)')
+arg_op('BUILD_TUPLE', 'Number of tuple items')
+arg_op('BUILD_LIST', 'Number of list items')
+arg_op('BUILD_MAP', 'Number of dict entries (upto 255)')
 name_op('LOAD_ATTR', 'Index in name list')
-describe('COMPARE_OP', 'Comparison operator')
+arg_op('COMPARE_OP', 'Comparison operator')
 hascompare.append(opmap['COMPARE_OP'])
 name_op('IMPORT_NAME', 'Index in name list')
 name_op('IMPORT_FROM', 'Index in name list')
@@ -87,29 +93,29 @@ jrel_op('SETUP_LOOP', 'Distance to target address')
 jrel_op('SETUP_EXCEPT', 'Distance to target address')
 jrel_op('SETUP_FINALLY', 'Distance to target address')
 
-describe('LOAD_FAST', 'Local variable number')
+arg_op('LOAD_FAST', 'Local variable number')
 haslocal.append(opmap['LOAD_FAST'])
-describe('STORE_FAST', 'Local variable number')
+arg_op('STORE_FAST', 'Local variable number')
 haslocal.append(opmap['STORE_FAST'])
-describe('DELETE_FAST', 'Local variable number')
+arg_op('DELETE_FAST', 'Local variable number')
 haslocal.append(opmap['DELETE_FAST'])
 
-describe('CALL_FUNCTION', '#args + (#kwargs << 8)')
-describe('MAKE_FUNCTION', 'Number of args with default values')
-describe('MAKE_CLOSURE', '???')
-describe('LOAD_CLOSURE', '???')
+arg_op('CALL_FUNCTION', '#args + (#kwargs << 8)')
+arg_op('MAKE_FUNCTION', 'Number of args with default values')
+arg_op('MAKE_CLOSURE', '???')
+arg_op('LOAD_CLOSURE', '???')
 hasfree.append(opmap['LOAD_CLOSURE'])
-describe('LOAD_DEREF', '???')
+arg_op('LOAD_DEREF', '???')
 hasfree.append(opmap['LOAD_DEREF'])
-describe('STORE_DEREF', '???')
+arg_op('STORE_DEREF', '???')
 hasfree.append(opmap['STORE_DEREF'])
 
-describe('CALL_FUNCTION_VAR_KW',
-         '((#args + (#kwargs << 8)) << 16) + code;'
-         ' where code&1 is true if there\'s a *args parameter,'
-         ' and code&2 is true if there\'s a **kwargs parameter.')
+arg_op('CALL_FUNCTION_VAR_KW',
+       '((#args + (#kwargs << 8)) << 16) + code;'
+       ' where code&1 is true if there\'s a *args parameter,'
+       ' and code&2 is true if there\'s a **kwargs parameter.')
 
-del describe, name_op, jrel_op, jabs_op
+del arg_op, name_op, jrel_op, jabs_op
 
 def is_argument(instruction):
     return bool(instruction & 1)
@@ -121,3 +127,36 @@ def get_opcode(instruction):
 def get_argument(instruction):
     assert is_argument(instruction), '%d is opcode, not argument' % instruction
     return instruction >> 1
+
+def make_opcode(op):
+    return op << 1
+
+def make_argument(arg):
+    return (arg << 1) | 1
+
+def decode_superinstruction(instructions, index):
+    """Given a sequence of instructions, decodes the superinstruction
+    at the beginning and returns the list of primitive instructions
+    and arguments that it executes, and the instruction just after the
+    superinstruction's arguments.
+
+    This function does not change argument values that refer to
+    instruction indices, so it alone can't convert the whole
+    instruction sequence back into primitive instructions.
+    """
+    ops = [get_opcode(instructions[index])]
+    while ops[0] in super2prim:
+        ops[0:1] = super2prim[ops[0]]
+    result = []
+    next_arg = index + 1
+    for op in ops:
+        result.append(make_opcode(op))
+        if op in argdesc:
+            # The primitive takes an argument, so pull it off of the
+            # instruction stream.
+            assert is_argument(instructions[next_arg])
+            result.append(instructions[next_arg])
+            next_arg += 1
+    assert (next_arg == len(instructions) or
+            not is_argument(instructions[next_arg]))
+    return result, next_arg

@@ -413,8 +413,11 @@ class ModuleFinder:
                 yield "store", (names[oparg],)
                 code = code[2:]
                 continue
-            if code[:6:2] == LOAD_LOAD_AND_IMPORT:
-                oparg_1, oparg_2, oparg_3 = map(dis.get_argument, code[1:6:2])
+            if (len(code) >= 5 and
+                code[0] == dis.make_opcode(dis.opmap['CC']) and
+                code[3] == dis.make_opcode(ord(IMPORT_NAME))):
+                oparg_1, oparg_2, oparg_3 = (dis.get_argument(code[x])
+                                             for x in (1,2,4))
                 level = consts[oparg_1]
                 if level == -1: # normal import
                     yield "import", (consts[oparg_2], names[oparg_3])
@@ -422,7 +425,7 @@ class ModuleFinder:
                     yield "absolute_import", (consts[oparg_2], names[oparg_3])
                 else: # relative import
                     yield "relative_import", (level, consts[oparg_2], names[oparg_3])
-                code = code[6:]
+                code = code[5:]
                 continue
             code = code[1:]
             while code and dis.is_argument(code[0]):

@@ -22,26 +22,52 @@ dis_f = """\
      _f.func_code.co_firstlineno + 2)
 
 
+def _supertest(a):
+    return a + 1
+
+dis_supertest = """\
+ %-4d         0 LOAD_FAST                0 (a)
+              2 CBINARY_ADD:
+                  LOAD_CONST               1 (1)
+                  BINARY_ADD
+              4 RETURN_VALUE
+"""%(_supertest.func_code.co_firstlineno + 1,)
+
+
+def _2arg_supertest(a):
+    return (a, 1, 2)
+
+dis_2arg_supertest = """\
+ %-4d         0 LOAD_FAST                0 (a)
+              2 CC:
+                  LOAD_CONST               1 (1)
+                  LOAD_CONST               2 (2)
+              5 BUILD_TUPLE              3
+              7 RETURN_VALUE
+"""%(_2arg_supertest.func_code.co_firstlineno + 1,)
+
+
 def bug708901():
     for res in range(1,
                      10):
         pass
 
 dis_bug708901 = """\
- %-4d         0 SETUP_LOOP              16 (to 18)
+ %-4d         0 SETUP_LOOP              15 (to 17)
               2 LOAD_GLOBAL              0 (range)
-              4 LOAD_CONST               1 (1)
 
- %-4d         6 LOAD_CONST               2 (10)
-              8 CALL_FUNCTION            2
-             10 GET_ITER
-        >>   11 FOR_ITER                 4 (to 17)
-             13 STORE_FAST               0 (res)
+ %-4d         4 CC:
+                  LOAD_CONST               1 (1)
+                  LOAD_CONST               2 (10)
+              7 CALL_FUNCTION            2
+              9 GET_ITER
+        >>   10 FOR_ITER                 4 (to 16)
+             12 STORE_FAST               0 (res)
 
- %-4d        15 JUMP_ABSOLUTE           11
-        >>   17 POP_BLOCK
-        >>   18 LOAD_CONST               0 (None)
-             20 RETURN_VALUE
+ %-4d        14 JUMP_ABSOLUTE           10
+        >>   16 POP_BLOCK
+        >>   17 LOAD_CONST               0 (None)
+             19 RETURN_VALUE
 """%(bug708901.func_code.co_firstlineno + 1,
      bug708901.func_code.co_firstlineno + 2,
      bug708901.func_code.co_firstlineno + 3)
@@ -54,7 +80,7 @@ def bug1333982(x=[]):
 
 dis_bug1333982 = """\
  %-4d         0 LOAD_CONST               1 (0)
-              2 JUMP_IF_TRUE            28 (to 32)
+              2 JUMP_IF_TRUE            27 (to 31)
               4 POP_TOP
               5 LOAD_GLOBAL              0 (AssertionError)
               7 BUILD_LIST               0
@@ -70,13 +96,14 @@ dis_bug1333982 = """\
              24 JUMP_ABSOLUTE           15
         >>   26 DELETE_FAST              1 (_[1])
 
- %-4d        28 LOAD_CONST               2 (1)
-             30 BINARY_ADD
-             31 RAISE_VARARGS_TWO
-        >>   32 POP_TOP
+ %-4d        28 CBINARY_ADD:
+                  LOAD_CONST               2 (1)
+                  BINARY_ADD
+             30 RAISE_VARARGS_TWO
+        >>   31 POP_TOP
 
- %-4d        33 LOAD_CONST               0 (None)
-             35 RETURN_VALUE
+ %-4d        32 LOAD_CONST               0 (None)
+             34 RETURN_VALUE
 """%(bug1333982.func_code.co_firstlineno + 1,
      bug1333982.func_code.co_firstlineno + 2,
      bug1333982.func_code.co_firstlineno + 3)
@@ -116,6 +143,12 @@ class DisTests(unittest.TestCase):
 
     def test_dis(self):
         self.do_disassembly_test(_f, dis_f)
+
+    def test_dis_super(self):
+        self.do_disassembly_test(_supertest, dis_supertest)
+
+    def test_dis_2_arg_super(self):
+        self.do_disassembly_test(_2arg_supertest, dis_2arg_supertest)
 
     def test_bug_708901(self):
         self.do_disassembly_test(bug708901, dis_bug708901)
