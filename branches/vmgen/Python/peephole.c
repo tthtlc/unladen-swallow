@@ -13,9 +13,6 @@
 #include "opcode.h"
 
 static void prepare_peeptable(void);
-static void prepare_translatetable(void);
-
-static int translatetable[144];
 
 #define GETOP(inst) PyPInst_GET_OPCODE(&(inst))
 #define OP_EQ(inst, EXPECTED) (!(inst).is_arg && GETOP(inst) == EXPECTED)
@@ -284,86 +281,6 @@ markblocks(PyPInst *code, Py_ssize_t len)
 	return blocks;
 }
 
-void
-translate_inst(PyPInst* inst)
-{
-	int cpython_code = PyPInst_GET_OPCODE(inst);
-	int oparg;
-	if (translatetable[cpython_code] != -1) {
-		PyPInst_SET_OPCODE(inst, translatetable[cpython_code]);
-		return;
-	}
-
-#define REPLACE_OP(VCODE) PyPInst_SET_OPCODE(inst, VCODE)
-	/* Translate bytecode */
-	switch (cpython_code) {
-		/* Specialize for oparg: OP ARG ARG ==> OP */
-	case DUP_TOPX:
-		oparg = PyPInst_GET_ARG(inst + 1);
-		switch (oparg) {
-			case 3: REPLACE_OP(VMG_DUP_TOP_THREE); break;
-			case 2: REPLACE_OP(VMG_DUP_TOP_TWO);   break;
-			default:
-				Py_FatalError("invalid argument to DUP_TOPX"
-					      " (bytecode corruption?)");
-		}
-		PyPInst_SET_OPCODE(inst + 1, NOP);
-		break;
-	case RAISE_VARARGS:
-		oparg = PyPInst_GET_ARG(inst + 1);
-		switch (oparg) {
-			case 3: REPLACE_OP(VMG_RAISE_VARARGS_THREE); break;
-			case 2: REPLACE_OP(VMG_RAISE_VARARGS_TWO);   break;
-			case 1: REPLACE_OP(VMG_RAISE_VARARGS_ONE);   break;
-			case 0: REPLACE_OP(VMG_RAISE_VARARGS_ZERO);  break;
-			default:
-				printf("bad RAISE_VARARGS oparg: %d\n", oparg);
-				abort();
-		}
-		PyPInst_SET_OPCODE(inst + 1, NOP);
-		break;
-	case BUILD_SLICE:
-		oparg = PyPInst_GET_ARG(inst + 1);
-		switch (oparg) {
-			case 3: REPLACE_OP(VMG_BUILD_SLICE_THREE); break;
-			case 2: REPLACE_OP(VMG_BUILD_SLICE_TWO);   break;
-			default:
-				printf("bad BUILD_SLICE oparg: %d\n", oparg);
-				abort();
-		}
-		PyPInst_SET_OPCODE(inst + 1, NOP);
-		break;
-		/* Decode SLICE */
-	case SLICE+0: REPLACE_OP(VMG_SLICE_NONE);  break;
-	case SLICE+1: REPLACE_OP(VMG_SLICE_LEFT);  break;
-	case SLICE+2: REPLACE_OP(VMG_SLICE_RIGHT); break;
-	case SLICE+3: REPLACE_OP(VMG_SLICE_BOTH);  break;
-	case STORE_SLICE+0: REPLACE_OP(VMG_STORE_SLICE_NONE);  break;
-	case STORE_SLICE+1: REPLACE_OP(VMG_STORE_SLICE_LEFT);  break;
-	case STORE_SLICE+2: REPLACE_OP(VMG_STORE_SLICE_RIGHT); break;
-	case STORE_SLICE+3: REPLACE_OP(VMG_STORE_SLICE_BOTH);  break;
-	case DELETE_SLICE+0: REPLACE_OP(VMG_DELETE_SLICE_NONE);  break;
-	case DELETE_SLICE+1: REPLACE_OP(VMG_DELETE_SLICE_LEFT);  break;
-	case DELETE_SLICE+2: REPLACE_OP(VMG_DELETE_SLICE_RIGHT); break;
-	case DELETE_SLICE+3: REPLACE_OP(VMG_DELETE_SLICE_BOTH);  break;
-		/* Store bytecode in oparg...
-		   XXX this doesn't work with extended arguments */
-	case CALL_FUNCTION_VAR:
-	case CALL_FUNCTION_KW:
-	case CALL_FUNCTION_VAR_KW:
-		REPLACE_OP(VMG_CALL_FUNCTION_VAR_KW);
-		PyPInst_SET_ARG(inst + 1,
-				(PyPInst_GET_ARG(inst + 1) << 16) |
-				(cpython_code - CALL_FUNCTION));
-		break;
-
-	default:
-		printf("unknown opcode: %d", cpython_code);
-		abort();
-	}
-#undef REPLACE_OP
-}
-
 static void
 dump_inststr(PyPInst* inststr, Py_ssize_t len) {
         int i;
@@ -380,10 +297,10 @@ dump_inststr(PyPInst* inststr, Py_ssize_t len) {
    The consts object should still be in list form to allow new constants 
    to be appended.
 
-   To keep the optimizer simple, it bails out (does nothing) for code
-   containing extended arguments or that has a length over 32,700.  That 
-   allows us to avoid overflow and sign issues.	 Likewise, it bails when
-   the lineno table has complex encoding for gaps >= 255.
+   To keep the optimizer simple, it bails out (does nothing) for code that
+   has a length over 32,700.  That allows us to avoid overflow and sign
+   issues.  Likewise, it bails when the lineno table has complex encoding
+   for gaps >= 255.
 
    Optimizations are restricted to simple transformations occuring within a
    single basic block.	All transformations keep the code size the same or 
@@ -410,7 +327,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 
 	if (init) {
 		prepare_peeptable();
-		prepare_translatetable();
 		init = 0;
 	}
 
@@ -668,9 +584,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 				SETARG(inststr, i, tgttgt);
 				break;
 
-			case EXTENDED_ARG:
-				goto exitUnchanged;
-
 				/* Replace RETURN LOAD_CONST None RETURN with just RETURN */
 				/* Remove unreachable JUMPs after RETURN */
 			case RETURN_VALUE:
@@ -686,14 +599,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 		}
 	}
 
-	/* Convert from opcode.h bytecodes to vmgen indices. */
-	for (i = 0; i < codelen; ++i) {
-		PyPInst* inst = inststr + i;
-		if (!inst->is_arg) {
-			translate_inst(inst);
-		}
-	}
-
 	/* XXX(jyasskin): Build superinstructions here. */
 
 	/* Fixup linenotab */
@@ -701,7 +606,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 		if (inststr[i].is_arg)
 			continue;
 		addrmap[i] = i - nops;
-		if (GETOP(inststr[i]) == VMG_NOP)
+		if (GETOP(inststr[i]) == NOP)
 			nops++;
 	}
 	cum_orig_line = 0;
@@ -718,23 +623,23 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	for (i=0, h=0 ; i<codelen ; ) {
 		opcode = GETOP(inststr[i]);
 		switch (opcode) {
-			case VMG_NOP:
+			case NOP:
 				i++;
 				continue;
 
-			case VMG_JUMP_ABSOLUTE:
-			case VMG_CONTINUE_LOOP:
+			case JUMP_ABSOLUTE:
+			case CONTINUE_LOOP:
 				j = addrmap[GETARG(inststr, i)];
 				SETARG(inststr, i, j);
 				break;
 
-			case VMG_FOR_ITER:
-			case VMG_JUMP_FORWARD:
-			case VMG_JUMP_IF_FALSE:
-			case VMG_JUMP_IF_TRUE:
-			case VMG_SETUP_LOOP:
-			case VMG_SETUP_EXCEPT:
-			case VMG_SETUP_FINALLY:
+			case FOR_ITER:
+			case JUMP_FORWARD:
+			case JUMP_IF_FALSE:
+			case JUMP_IF_TRUE:
+			case SETUP_LOOP:
+			case SETUP_EXCEPT:
+			case SETUP_FINALLY:
 				j = addrmap[GETARG(inststr, i) + i + 2] - addrmap[i] - 2;
 				SETARG(inststr, i, j);
 				break;
@@ -758,16 +663,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 		PyMem_Free(addrmap);
 	Py_XDECREF(modcode);
 
-        codelen = Py_SIZE(code);
-        inststr = ((PyInstructionsObject *)code)->inst;
-	/* Convert from opcode.h bytecodes to vmgen indices, even if
-           we're not changing anything else. */
-	for (i = 0; i < codelen; ++i) {
-		PyPInst* inst = inststr + i;
-		if (!inst->is_arg) {
-			translate_inst(inst);
-		}
-	}
 	Py_INCREF(code);
 	return code;
 }
@@ -830,15 +725,6 @@ combine(int op1, int op2)
 			return p->combination;
 
 	return -1;
-}
-
-void
-prepare_translatetable(void) {
-	int i;
-	for (i = 0; i < sizeof(translatetable)/sizeof(translatetable[0]); ++i) {
-		translatetable[i] = -1;
-	}
-#include "peephole-translate.i"
 }
 
 #if 0

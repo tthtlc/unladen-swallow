@@ -710,31 +710,31 @@ opcode_stack_effect(int opcode, int oparg)
 		case INPLACE_TRUE_DIVIDE:
 			return -1;
 
-		case SLICE+0:
+		case SLICE_NONE:
 			return 1;
-		case SLICE+1:
+		case SLICE_LEFT:
 			return 0;
-		case SLICE+2:
+		case SLICE_RIGHT:
 			return 0;
-		case SLICE+3:
+		case SLICE_BOTH:
 			return -1;
 
-		case STORE_SLICE+0:
+		case STORE_SLICE_NONE:
 			return -2;
-		case STORE_SLICE+1:
+		case STORE_SLICE_LEFT:
 			return -3;
-		case STORE_SLICE+2:
+		case STORE_SLICE_RIGHT:
 			return -3;
-		case STORE_SLICE+3:
+		case STORE_SLICE_BOTH:
 			return -4;
 
-		case DELETE_SLICE+0:
+		case DELETE_SLICE_NONE:
 			return -1;
-		case DELETE_SLICE+1:
+		case DELETE_SLICE_LEFT:
 			return -2;
-		case DELETE_SLICE+2:
+		case DELETE_SLICE_RIGHT:
 			return -2;
-		case DELETE_SLICE+3:
+		case DELETE_SLICE_BOTH:
 			return -3;
 
 		case INPLACE_ADD:
@@ -816,8 +816,10 @@ opcode_stack_effect(int opcode, int oparg)
 			return -1;
 		case DELETE_GLOBAL:
 			return 0;
-		case DUP_TOPX:
-			return oparg;
+		case DUP_TOP_TWO:
+			return 2;
+		case DUP_TOP_THREE:
+			return 3;
 		case LOAD_CONST:
 			return 1;
 		case LOAD_NAME:
@@ -860,25 +862,26 @@ opcode_stack_effect(int opcode, int oparg)
 		case DELETE_FAST:
 			return 0;
 
-		case RAISE_VARARGS:
-			return -oparg;
+		case RAISE_VARARGS_ZERO:
+			return 0;
+		case RAISE_VARARGS_ONE:
+			return -1;
+		case RAISE_VARARGS_TWO:
+			return -2;
+		case RAISE_VARARGS_THREE:
+			return -3;
 #define NARGS(o) (((o) % 256) + 2*((o) / 256))
 		case CALL_FUNCTION:
 			return -NARGS(oparg);
-		case CALL_FUNCTION_VAR:
-		case CALL_FUNCTION_KW:
-			return -NARGS(oparg)-1;
 		case CALL_FUNCTION_VAR_KW:
-			return -NARGS(oparg)-2;
+			return -NARGS(oparg>>16) - ((oparg&1) + ((oparg>>1)&1));
 #undef NARGS
 		case MAKE_FUNCTION:
 			return -oparg;
-		case BUILD_SLICE:
-			if (oparg == 3)
-				return -2;
-			else
-				return -1;
-
+		case BUILD_SLICE_TWO:
+			return -1;
+		case BUILD_SLICE_THREE:
+			return -2;
 		case MAKE_CLOSURE:
 			return -oparg;
 		case LOAD_CLOSURE:
@@ -2085,10 +2088,10 @@ compiler_assert(struct compiler *c, stmt_ty s)
 	ADDOP_O(c, LOAD_GLOBAL, assertion_error, names);
 	if (s->v.Assert.msg) {
 		VISIT(c, expr, s->v.Assert.msg);
-		ADDOP_I(c, RAISE_VARARGS, 2);
+		ADDOP(c, RAISE_VARARGS_TWO);
 	}
 	else {
-		ADDOP_I(c, RAISE_VARARGS, 1);
+		ADDOP(c, RAISE_VARARGS_ONE);
 	}
 	compiler_use_next_block(c, end);
 	ADDOP(c, POP_TOP);
@@ -2099,6 +2102,8 @@ static int
 compiler_visit_stmt(struct compiler *c, stmt_ty s)
 {
 	int i, n;
+	const int raise_varargs[] = { RAISE_VARARGS_ZERO, RAISE_VARARGS_ONE,
+				      RAISE_VARARGS_TWO, RAISE_VARARGS_THREE };
 
 	/* Always assign a lineno to the next instruction for a stmt. */
 	c->u->u_lineno = s->lineno;
@@ -2156,7 +2161,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 				}
 			}
 		}
-		ADDOP_I(c, RAISE_VARARGS, n);
+		ADDOP(c, raise_varargs[n]);
 		break;
 	case TryExcept_kind:
 		return compiler_try_except(c, s);
@@ -2593,13 +2598,11 @@ compiler_call(struct compiler *c, expr_ty e)
 		ADDOP_I(c, CALL_FUNCTION, n);
 		break;
 	case 1:
-		ADDOP_I(c, CALL_FUNCTION_VAR, n);
-		break;
 	case 2:
-		ADDOP_I(c, CALL_FUNCTION_KW, n);
-		break;
 	case 3:
-		ADDOP_I(c, CALL_FUNCTION_VAR_KW, n);
+		/* XXX this doesn't work with >2^8 positional or >2^7
+		   keyword arguments */
+		ADDOP_I(c, CALL_FUNCTION_VAR_KW, (n << 16) | code);
 		break;
 	}
 	return 1;
@@ -3232,7 +3235,7 @@ compiler_handle_subscr(struct compiler *c, const char *kind,
 			return 0;
 	}
 	if (ctx == AugLoad) {
-		ADDOP_I(c, DUP_TOPX, 2);
+		ADDOP(c, DUP_TOP_TWO);
 	}
 	else if (ctx == AugStore) {
 		ADDOP(c, ROT_THREE);
@@ -3244,6 +3247,7 @@ compiler_handle_subscr(struct compiler *c, const char *kind,
 static int
 compiler_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 {
+	const int build_slice[] = { -1, -1, BUILD_SLICE_TWO, BUILD_SLICE_THREE };
 	int n = 2;
 	assert(s->kind == Slice_kind);
 
@@ -3266,14 +3270,20 @@ compiler_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 		n++;
 		VISIT(c, expr, s->v.Slice.step);
 	}
-	ADDOP_I(c, BUILD_SLICE, n);
+	ADDOP(c, build_slice[n]);
 	return 1;
 }
 
 static int
 compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 {
-	int op = 0, slice_offset = 0, stack_count = 0;
+	const int slice[] = { SLICE_NONE, SLICE_LEFT, SLICE_RIGHT, SLICE_BOTH };
+	const int store_slice[] = { STORE_SLICE_NONE, STORE_SLICE_LEFT,
+				    STORE_SLICE_RIGHT, STORE_SLICE_BOTH };
+	const int delete_slice[] = { DELETE_SLICE_NONE, DELETE_SLICE_LEFT,
+				     DELETE_SLICE_RIGHT, DELETE_SLICE_BOTH };
+	const int *op = NULL;
+	int slice_offset = 0, stack_count = 0;
 
 	assert(s->v.Slice.step == NULL);
 	if (s->v.Slice.lower) {
@@ -3292,8 +3302,8 @@ compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 	if (ctx == AugLoad) {
 		switch (stack_count) {
 		case 0: ADDOP(c, DUP_TOP); break;
-		case 1: ADDOP_I(c, DUP_TOPX, 2); break;
-		case 2: ADDOP_I(c, DUP_TOPX, 3); break;
+		case 1: ADDOP(c, DUP_TOP_TWO); break;
+		case 2: ADDOP(c, DUP_TOP_THREE); break;
 		}
 	}
 	else if (ctx == AugStore) {
@@ -3306,10 +3316,10 @@ compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 
 	switch (ctx) {
 	case AugLoad: /* fall through to Load */
-	case Load: op = SLICE; break;
+	case Load: op = slice; break;
 	case AugStore:/* fall through to Store */
-	case Store: op = STORE_SLICE; break;
-	case Del: op = DELETE_SLICE; break;
+	case Store: op = store_slice; break;
+	case Del: op = delete_slice; break;
 	case Param:
 	default:
 		PyErr_SetString(PyExc_SystemError,
@@ -3317,7 +3327,7 @@ compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 		return 0;
 	}
 
-	ADDOP(c, op + slice_offset);
+	ADDOP(c, op[slice_offset]);
 	return 1;
 }
 
@@ -3698,13 +3708,6 @@ assemble_emit(struct assembler *a, struct instr *i)
 	}
 	code = a->a_code->inst + a->a_offset;
 	a->a_offset += size;
-	assert(size != 6);  /* XXX: No more reason to have EXTENDED_ARGs. */
-	if (size == 6) {
-		assert(i->i_hasarg);
-		PyPInst_SET_OPCODE(code++, EXTENDED_ARG);
-		PyPInst_SET_ARG(code++, ext);
-		arg &= 0xffff;
-	}
 	PyPInst_SET_OPCODE(code++, i->i_opcode);
 	if (i->i_hasarg) {
 		assert(size == 2);

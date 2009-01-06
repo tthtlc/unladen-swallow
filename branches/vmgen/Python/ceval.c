@@ -129,8 +129,6 @@ static void reset_exc_info(PyThreadState *);
 static void format_exc_check_arg(PyObject *, char *, PyObject *);
 static PyObject * string_concatenate(PyObject *, PyObject *,
                                      PyFrameObject *, int, int );
-static void disassemble_bytecode(PyInstructionsObject *code);
-static void disassemble_tcode(Inst *, Inst *);
 
 #define NAME_ERROR_MSG \
 	"name '%.200s' is not defined"
@@ -640,13 +638,6 @@ typedef PyObject *Obj;
 #define ERROR()    ({goto on_error;})
 #define DISPATCH() NEXT_P2
 
-/* XXX string_concatenate() */
-#define ADDR2OP(addr, op)                                                \
-        ({if      ((addr) == INST_ADDR(STORE_FAST))  (op) = STORE_FAST;  \
-          else if ((addr) == INST_ADDR(STORE_DEREF)) (op) = STORE_DEREF; \
-          else if ((addr) == INST_ADDR(STORE_NAME))  (op) = STORE_NAME;  \
-          else                                       (op) = STOP_CODE;})
-
 /* Misc */
 #define DEF_CA                /* Nothing */
 #define LABEL2(inst_name)     /* Nothing */
@@ -842,7 +833,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                 Py_ssize_t len, i;
                 PyPInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
                 len = Py_SIZE(co->co_code);
-                MAYBE(disassemble_bytecode(co->co_code));
                 first_instr = (Inst *) calloc(len, sizeof(Inst));
                 for (i = 0; i < len; ++i) {
                         if (pinsts[i].is_arg) {
@@ -855,7 +845,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                         }
                 }
                 co->co_tcode = first_instr;
-                MAYBE(disassemble_tcode(first_instr, first_instr + len));
         }
 
 	/* An explanation is in order for the next line.
@@ -1370,47 +1359,6 @@ fail: /* Jump here from prelude on failure */
 	Py_DECREF(f);
 	--tstate->recursion_depth;
 	return retval;
-}
-
-
-/* Disassemblers */
-
-static void
-disassemble_bytecode(PyInstructionsObject *code)
-{
-        int opcode = 0, oparg = 0;
-        PyPInst *current = code->inst;
-        PyPInst *end = current + Py_SIZE(code);
-
-        while (current < end) {
-                opcode = PyPInst_GET_OPCODE(current++);
-                if (current->is_arg)
-                        oparg = PyPInst_GET_ARG(current++);
-
-                switch (opcode) {
-                case EXTENDED_ARG:
-                        Py_FatalError("Unexpected EXTENDED_ARG");
-                        break;
-#include "ceval-disasm-bytes.i"
-                }
-                printf("\n");
-        }
-}
-
-#define VM_IS_INST(inst, n) ((inst).opcode == vm_prim[n])
-#undef IPTOS
-#define IPTOS               (*(ip+1))
-#undef IP
-#define IP                  (ip+1)
-
-static void
-disassemble_tcode(Inst *ip, Inst *endp)
-{
-        while (ip < endp) {
-#include "ceval-disasm.i"
-        _endif_:
-                printf("\n");
-        }
 }
 
 

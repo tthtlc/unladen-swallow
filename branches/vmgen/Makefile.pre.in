@@ -574,13 +574,10 @@ Python/formatter_unicode.o: $(srcdir)/Python/formatter_unicode.c \
 Python/formatter_string.o: $(srcdir)/Python/formatter_string.c \
 				$(STRINGLIB_HEADERS)
 
-Python/peephole.o: Include/peephole-translate.i
-
 # Vmgen-provided ceval bits
 
 Python/ceval.o: $(srcdir)/Python/ceval.c \
-		Include/ceval-vm.i \
-		Include/ceval-disasm-bytes.i
+		Include/ceval-vm.i
 	$(CC) -c $(PY_CFLAGS) -fno-gcse -o $@ $<
 
 # Actually generates all of Include/ceval-vm.i, Include/ceval-disasm.i,
@@ -596,13 +593,6 @@ Include/ceval-vm.i: $(srcdir)/Python/ceval.vmg $(srcdir)/Python/mangler.awk
 
 # Already built, just telling make.
 Include/ceval-disasm.i Include/ceval-gen.i Include/ceval-labels.i Include/ceval-profile.i Include/ceval-peephole.i : Include/ceval-vm.i
-
-Include/peephole-translate.i: $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES
-	$(AWK) -f $(srcdir)/Python/gentranslate.awk $(srcdir)/Python/OPCODES > $@
-
-Include/ceval-disasm-bytes.i: $(srcdir)/Python/gendisasm.awk $(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS
-	$(AWK) -f $(srcdir)/Python/gendisasm.awk \
-		$(srcdir)/Python/OPCODES $(srcdir)/Python/MOREOPS > $@
 
 ############################################################################
 # Header files
