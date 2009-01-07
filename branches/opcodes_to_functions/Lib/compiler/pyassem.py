@@ -290,8 +290,8 @@ class Block:
     def getContainedGraphs(self):
         """Return all graphs contained within this block.
 
-        For example, a #@make_function block will contain a reference to
-        the graph for the function body.
+        For example, the arguments to #@make_function will contain a
+        reference to the graph for the function body.
         """
         contained = []
         for inst in self.insts:

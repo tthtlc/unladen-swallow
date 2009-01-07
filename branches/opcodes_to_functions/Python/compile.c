@@ -1267,11 +1267,11 @@ compiler_make_closure(struct compiler *c, PyCodeObject *co, asdl_seq *defaults)
 	if (free == 0) {
 		if (!compiler_load_global(c, "#@make_function"))
 			return 0;
-	    ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
+		ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
 		if (defaults)
 			VISIT_SEQ(c, expr, defaults);
 		ADDOP_I(c, CALL_FUNCTION, asdl_seq_LEN(defaults) + 1);
-	    return 1;
+		return 1;
 	}
 	if (defaults) {
 		ndefaults = asdl_seq_LEN(defaults);
@@ -1372,10 +1372,10 @@ compiler_function(struct compiler *c, stmt_ty s)
 	st = (stmt_ty)asdl_seq_GET(s->v.FunctionDef.body, 0);
 	docstring = compiler_isdocstring(st);
 	if (docstring && Py_OptimizeFlag < 2)
-	    first_const = st->v.Expr.value->v.Str.s;
-	if (compiler_add_o(c, c->u->u_consts, first_const) < 0)	 {
-	    compiler_exit_scope(c);
-	    return 0;
+		first_const = st->v.Expr.value->v.Str.s;
+	if (compiler_add_o(c, c->u->u_consts, first_const) < 0) {
+		compiler_exit_scope(c);
+		return 0;
 	}
 
 	/* unpack nested arguments */
@@ -1415,7 +1415,7 @@ compiler_class(struct compiler *c, stmt_ty s)
 		return 0;
 
 	if (!compiler_load_global(c, "#@buildclass"))
-        return 0;
+		return 0;
 
 	/* push class name on stack, needed by #@buildclass */
 	ADDOP_O(c, LOAD_CONST, s->v.ClassDef.name, consts);
@@ -1452,7 +1452,7 @@ compiler_class(struct compiler *c, stmt_ty s)
 	}
 
 	if (!compiler_load_global(c, "#@locals"))
-        return 0;
+		return 0;
 	ADDOP_I(c, CALL_FUNCTION, 0);
 
 	ADDOP_IN_SCOPE(c, RETURN_VALUE);
@@ -1481,8 +1481,8 @@ compiler_class(struct compiler *c, stmt_ty s)
 static int
 compiler_exec(struct compiler *c, stmt_ty s)
 {
-    if (!compiler_load_global(c, "#@exec"))
-        return 0;
+	if (!compiler_load_global(c, "#@exec"))
+		return 0;
 
 	VISIT(c, expr, s->v.Exec.body);
 	if (s->v.Exec.globals) {
@@ -1496,16 +1496,16 @@ compiler_exec(struct compiler *c, stmt_ty s)
 		ADDOP_O(c, LOAD_CONST, Py_None, consts);
 		ADDOP(c, DUP_TOP);
 	}
-    ADDOP_I(c, CALL_FUNCTION, 3);
-    ADDOP(c, POP_TOP);
-    return 1;
+	ADDOP_I(c, CALL_FUNCTION, 3);
+	ADDOP(c, POP_TOP);
+	return 1;
 }
 
 static int
 compiler_ifexp(struct compiler *c, expr_ty e)
 {
 	basicblock *end, *next;
-	
+
 	assert(e->kind == IfExp_kind);
 	end = compiler_new_block(c);
 	if (end == NULL)
@@ -1576,7 +1576,7 @@ compiler_print(struct compiler *c, stmt_ty s)
 		VISIT(c, expr, e);
 	}
 	if (!s->v.Print.nl) {
-		str = PyString_FromString("end");
+		str = PyString_InternFromString("end");
 		if (!str)
 			return 0;
 		ADDOP_O(c, LOAD_CONST, str, consts);
@@ -1589,7 +1589,7 @@ compiler_print(struct compiler *c, stmt_ty s)
 		kwargs++;
 	}
 	if (s->v.Print.dest) {
-		str = PyString_FromString("file");
+		str = PyString_InternFromString("file");
 		if (!str)
 			return 0;
 		ADDOP_O(c, LOAD_CONST, str, consts);
@@ -1597,7 +1597,6 @@ compiler_print(struct compiler *c, stmt_ty s)
 		VISIT(c, expr, s->v.Print.dest);
 		kwargs++;
 	}
-	/* One positional argument, variable number of keyword args. */
 	ADDOP_I(c, CALL_FUNCTION, n | (kwargs << 8));
 	ADDOP(c, POP_TOP);
 	return 1;
@@ -1614,8 +1613,8 @@ compiler_if(struct compiler *c, stmt_ty s)
 		return 0;
 	next = compiler_new_block(c);
 	if (next == NULL)
-	    return 0;
-	
+		return 0;
+
 	constant = expr_constant(s->v.If.test);
 	/* constant = 0: "if 0"
 	 * constant = 1: "if 1", "if 2", ...
@@ -2050,7 +2049,7 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 
 	/* Handle 'from x import *' */
 	alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, 0);
-	if (*PyString_AS_STRING(alias->name) == '*') {
+	if (PyString_AS_STRING(alias->name)[0] == '*') {
 		assert(n == 1);
 		if (!compiler_load_global(c, "#@import_star"))
 			return 0;
@@ -2081,6 +2080,8 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 		alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		identifier store_name;
 
+		/* The DUP_TOPX 2 ends up duplicating [#@import_from, module],
+		where module is the return value from #@import_name. */
 		ADDOP_I(c, DUP_TOPX, 2);
 		ADDOP_O(c, LOAD_CONST, alias->name, consts);
 		ADDOP_I(c, CALL_FUNCTION, 2);
@@ -2212,13 +2213,13 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 	case ImportFrom_kind:
 		return compiler_from_import(c, s);
 	case Exec_kind:
-        return compiler_exec(c, s);
+		return compiler_exec(c, s);
 	case Global_kind:
 		break;
 	case Expr_kind:
 		if (c->c_interactive && c->c_nestlevel <= 1) {
 			if (!compiler_load_global(c, "#@displayhook"))
-                return 0;
+				return 0;
 			VISIT(c, expr, s->v.Expr.value);
 			ADDOP_I(c, CALL_FUNCTION, 1);
 			ADDOP(c, POP_TOP);

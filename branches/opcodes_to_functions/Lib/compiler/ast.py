@@ -1030,8 +1030,7 @@ class Print(Node):
         return tuple(nodelist)
 
     def __repr__(self):
-        return "Print(%s, %s, %r)" % (repr(self.nodes), repr(self.dest),
-                                      self.newline)
+        return "Print(%r, %r, %r)" % (self.nodes, self.dest, self.newline)
 
 class Raise(Node):
     def __init__(self, expr1, expr2, expr3, lineno=None):

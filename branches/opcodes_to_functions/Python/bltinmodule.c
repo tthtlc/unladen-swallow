@@ -212,7 +212,7 @@ Deprecated since release 2.3. Instead, use the extended call syntax:\n\
 static PyObject *
 builtin_bin(PyObject *self, PyObject *v)
 {
-        return PyNumber_ToBase(v, 2);
+	return PyNumber_ToBase(v, 2);
 }
 
 PyDoc_STRVAR(bin_doc,
@@ -256,7 +256,7 @@ builtin_buildclass(PyObject *self, PyObject *args)
 	if (result == NULL && PyErr_ExceptionMatches(PyExc_TypeError)) {
 		/* A type error here likely means that the user passed
 		   in a base that was not a class (such the random module
-		   instead of the random.random type).  Help them out with
+		   instead of the random.random type).  Help them out
 		   by augmenting the error message with more information.*/
 
 		PyObject *ptype, *pvalue, *ptraceback;
@@ -302,7 +302,7 @@ Note that classes are callable, as are instances with a __call__() method.");
 static PyObject *
 builtin_displayhook(PyObject *self, PyObject *args)
 {
-    PyObject *displayhook, *result;
+	PyObject *displayhook, *result;
 
 	displayhook = PySys_GetObject("displayhook");
 	if (displayhook == NULL) {
@@ -313,7 +313,7 @@ builtin_displayhook(PyObject *self, PyObject *args)
 	Py_XDECREF(result);
 	if (result == NULL)
 		return NULL;
-    Py_RETURN_NONE;
+	Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(displayhook_doc,
@@ -329,11 +329,11 @@ builtin_exec(PyObject *self, PyObject *args)
 	PyFrameObject *f;
 	int plain = 0;
 
-    if (!PyArg_UnpackTuple(args, "#@exec", 1, 3,
+	if (!PyArg_UnpackTuple(args, "#@exec", 1, 3,
 	                       &prog, &globals, &locals))
 		return NULL;
 
-    f = PyThreadState_Get()->frame;
+	f = PyThreadState_Get()->frame;
 
 	if (PyTuple_Check(prog) && globals == Py_None && locals == Py_None &&
 	    ((n = PyTuple_Size(prog)) == 2 || n == 3)) {
@@ -981,7 +981,7 @@ builtin_execfile(PyObject *self, PyObject *args)
 	}
 #endif
 
-        if (exists) {
+	if (exists) {
 		Py_BEGIN_ALLOW_THREADS
 		fp = fopen(filename, "r" PY_STDIOTEXTMODE);
 		Py_END_ALLOW_THREADS
@@ -989,7 +989,7 @@ builtin_execfile(PyObject *self, PyObject *args)
 		if (fp == NULL) {
 			exists = 0;
 		}
-        }
+	}
 
 	if (!exists) {
 		PyErr_SetFromErrnoWithFilename(PyExc_IOError, filename);
@@ -1145,7 +1145,7 @@ builtin_import_from(PyObject *self, PyObject *args)
 PyDoc_STRVAR(import_from_doc,
 "#@import_from(module, attr_name) -> object\n\
 \n\
-Simulate the removed IMPORT_NAME opcode. Internal use only.");
+Simulate the removed IMPORT_FROM opcode. Internal use only.");
 
 
 static PyObject *
@@ -1155,7 +1155,7 @@ builtin_import_name(PyObject *self, PyObject *args)
 	PyFrameObject *frame = PyThreadState_Get()->frame;
 
 	if (!PyArg_UnpackTuple(args, "#@import_name", 3, 3,
-						   &level, &names, &module_name))
+							&level, &names, &module_name))
 		return NULL;
 
 	import = PyDict_GetItemString(frame->f_builtins, "__import__");
@@ -1166,7 +1166,7 @@ builtin_import_name(PyObject *self, PyObject *args)
 	Py_INCREF(import);
 	if (PyInt_AsLong(level) != -1 || PyErr_Occurred())
 		import_args = PyTuple_Pack(5,
-			    module_name,
+				module_name,
 			    frame->f_globals,
 			    frame->f_locals == NULL ? Py_None : frame->f_locals,
 			    names,
@@ -1288,6 +1288,8 @@ builtin_make_function(PyObject *self, PyObject *args)
 	frame = PyThreadState_Get()->frame;
 
 	code_obj = PyTuple_GetItem(args, 0);
+	if (code_obj == NULL)
+		return NULL;
 	func = PyFunction_New(code_obj, frame->f_globals);
 	if (func == NULL)
 		return NULL;
@@ -1302,9 +1304,9 @@ builtin_make_function(PyObject *self, PyObject *args)
 			return NULL;
 		}
 		for (i = 1; i < n; i++) {
-			default_obj = PyTuple_GetItem(args, i);
+			default_obj = PyTuple_GET_ITEM(args, i);
 			Py_INCREF(default_obj);
-			PyTuple_SetItem(defaults, i - 1, default_obj);
+			PyTuple_SET_ITEM(defaults, i - 1, default_obj);
 		}
 	}
 	if (PyFunction_SetDefaults(func, defaults)) {
@@ -2036,30 +2038,26 @@ end:  string appended after the last value, default a newline.");
 static void
 print_stmt_set_softspace(PyObject *obj, PyObject *file)
 {
-    if (PyString_Check(obj)) {
-        char *s = PyString_AS_STRING(obj);
-        Py_ssize_t len = PyString_GET_SIZE(obj);
-        if (len == 0 ||
-            !isspace(Py_CHARMASK(s[len-1])) ||
-            s[len-1] == ' ')
-                PyFile_SoftSpace(file, 1);
-    }
+	if (PyString_Check(obj)) {
+		char *s = PyString_AS_STRING(obj);
+		Py_ssize_t len = PyString_GET_SIZE(obj);
+		if (len == 0 || !isspace(Py_CHARMASK(s[len-1])) || s[len-1] == ' ')
+			PyFile_SoftSpace(file, 1);
+	}
 #ifdef Py_USING_UNICODE
-    else if (PyUnicode_Check(obj)) {
-        Py_UNICODE *s = PyUnicode_AS_UNICODE(obj);
-        Py_ssize_t len = PyUnicode_GET_SIZE(obj);
-        if (len == 0 ||
-            !Py_UNICODE_ISSPACE(s[len-1]) ||
-            s[len-1] == ' ')
-            PyFile_SoftSpace(file, 1);
-    }
+	else if (PyUnicode_Check(obj)) {
+		Py_UNICODE *s = PyUnicode_AS_UNICODE(obj);
+		Py_ssize_t len = PyUnicode_GET_SIZE(obj);
+		if (len == 0 || !Py_UNICODE_ISSPACE(s[len-1]) || s[len-1] == ' ')
+			PyFile_SoftSpace(file, 1);
+	}
 #endif
-    else
-        PyFile_SoftSpace(file, 1);
+	else
+		PyFile_SoftSpace(file, 1);
 }
 
 /* This is the builtin_print() function above, but with support for all the
- * softspace stuff needed to emulate the print statement.
+ * softspace stuff needed to implement the print statement.
  */
 static PyObject *
 builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
@@ -2067,14 +2065,14 @@ builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
 	static char *kwlist[] = {"end", "file", 0};
 	static PyObject *dummy_args;
 	PyObject *end = NULL, *file = NULL, *to_print;
-	int i, err;
+	int i, err = 0;
 
 	if (dummy_args == NULL) {
-		if (!(dummy_args = PyTuple_New(0)))
+		if ((dummy_args = PyTuple_New(0)) == NULL)
 			return NULL;
 	}
 	if (!PyArg_ParseTupleAndKeywords(dummy_args, kwds, "|OO:print_stmt",
-					 kwlist, &end, &file))
+				kwlist, &end, &file))
 		return NULL;
 	if (file == NULL || file == Py_None) {
 		file = PySys_GetObject("stdout");
@@ -2088,10 +2086,10 @@ builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
 	}
 
 	if (end && end != Py_None && !PyString_Check(end) &&
-		!PyUnicode_Check(end)) {
+	    !PyUnicode_Check(end)) {
 		PyErr_Format(PyExc_TypeError,
-				 "end must be None, str or unicode, not %.200s",
-				 end->ob_type->tp_name);
+				"end must be None, str or unicode, not %.200s",
+				end->ob_type->tp_name);
 		return NULL;
 	}
 
@@ -2101,25 +2099,19 @@ builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
 	   be freed, so we need to prevent that temporarily. */
 	Py_INCREF(file);
 	if (PyTuple_Size(args) > 0 && PyFile_SoftSpace(file, 0)) {
-		if (PyFile_WriteString(" ", file)) {
-			Py_DECREF(file);
-			return NULL;
-		}
+		if (PyFile_WriteString(" ", file))
+			goto on_error;
 	}
 
 	for (i = 0; i < PyTuple_Size(args); i++) {
 		if (i > 0 && PyFile_SoftSpace(file, 0)) {
-			if (PyFile_WriteString(" ", file)) {
-				Py_DECREF(file);
-				return NULL;
-			}
+			if (PyFile_WriteString(" ", file))
+				goto on_error;
 		}
 		to_print = PyTuple_GetItem(args, i);
 		err = PyFile_WriteObject(to_print, file, Py_PRINT_RAW);
-		if (err) {
-			Py_DECREF(file);
-			return NULL;
-		}
+		if (err)
+			goto on_error;
 		print_stmt_set_softspace(to_print, file);
 	}
 
@@ -2127,13 +2119,13 @@ builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
 		err = PyFile_WriteString("\n", file);
 		PyFile_SoftSpace(file, 0);
 	} else if (PyString_Check(end) && PyString_Size(end) == 0) {
-		/* Adjust softspace appropriately based on the last item in the tuple. */
+		/* Adjust softspace appropriately based on the last item in
+		the tuple. */
 		if (PyTuple_Size(args)) {
-			PyObject *last_obj = PyTuple_GetItem(args, PyTuple_Size(args) - 1);
-			if (!last_obj) {
-				Py_DECREF(file);
-				return NULL;
-			}
+			Py_ssize_t last_idx = PyTuple_Size(args) - 1;
+			PyObject *last_obj = PyTuple_GetItem(args, last_idx);
+			if (!last_obj)
+				goto on_error;
 			print_stmt_set_softspace(last_obj, file);
 		}
 	} else {
@@ -2145,6 +2137,10 @@ builtin_print_stmt(PyObject *self, PyObject *args, PyObject *kwds)
 		return NULL;
 
 	Py_RETURN_NONE;
+
+on_error:
+	Py_DECREF(file);
+	return NULL;
 }
 
 /* Return number of items in range (lo, hi, step), when arguments are

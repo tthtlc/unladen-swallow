@@ -1,5 +1,4 @@
 """Find modules used by a script, using introspection."""
-# This module should be kept compatible with Python 2.2, see PEP 291.
 
 from __future__ import generators
 import dis
@@ -337,9 +336,10 @@ class ModuleFinder:
                         fullname = name + "." + sub
                         self._add_badmodule(fullname, caller)
 
-    def scan_opcodes_25(self, co, unpack=struct.unpack):
-        # Scan the code, and yield 'interesting' opcode combinations
-        # Python 2.5 version (has absolute and relative imports)
+    def scan_opcodes(self, co, unpack=struct.unpack):
+        # Scan the code, and yield 'interesting' opcode combinations.
+        # This supports the absolute and relative imports introduced in
+        # Python 2.5.
         code = co.co_code
         names = co.co_names
         consts = co.co_consts
@@ -352,15 +352,19 @@ class ModuleFinder:
                 code = code[3:]
                 continue
             if code[:12:3] == OPCODE_SIG and '#@import_name' in names:
-                if code[:3] == LOAD_GLOBAL + chr(names.index('#@import_name')) + chr(0):
+                load_global_args = chr(names.index('#@import_name')) + chr(0)
+                if code[:3] == LOAD_GLOBAL + load_global_args:
                     oparg_1, oparg_2, oparg_3 = unpack('<xHxHxH', code[3:12])
                     level = consts[oparg_1]
                     if level == -1: # normal import
                         yield "import", (consts[oparg_2], consts[oparg_3])
                     elif level == 0: # absolute import
-                        yield "absolute_import", (consts[oparg_2], consts[oparg_3])
+                        yield "absolute_import", (consts[oparg_2],
+                                                  consts[oparg_3])
                     else: # relative import
-                        yield "relative_import", (level, consts[oparg_2], consts[oparg_3])
+                        yield "relative_import", (level,
+                                                  consts[oparg_2],
+                                                  consts[oparg_3])
                     code = code[9:]
                     continue
             if c >= HAVE_ARGUMENT:
@@ -370,7 +374,7 @@ class ModuleFinder:
 
     def scan_code(self, co, m):
         code = co.co_code
-        for what, args in self.scan_opcodes_25(co):
+        for what, args in self.scan_opcodes(co):
             if what == "store":
                 name, = args
                 m.globalnames[name] = 1
@@ -385,9 +389,9 @@ class ModuleFinder:
                 else: level = -1
                 self._safe_import_hook(name, m, fromlist, level=level)
                 if have_star:
-                    # We've encountered an "import *". If it is a Python module,
-                    # the code has already been parsed and we can suck out the
-                    # global names.
+                    # We've encountered an "import *". If it is a Python
+                    # module, the code has already been parsed and we can suck
+                    # out the global names.
                     mm = None
                     if m.__path__:
                         # At this point we don't know whether 'name' is a

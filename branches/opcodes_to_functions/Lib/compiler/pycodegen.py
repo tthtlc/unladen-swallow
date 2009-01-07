@@ -920,6 +920,8 @@ class CodeGenerator:
         self.emit('LOAD_CONST', node.modname)
         self.emit('CALL_FUNCTION', 3)
         for name, alias in node.names:
+            # The DUP_TOPX 2 is duplicating [#@import_from, module], where
+            # module is the return value from #@import_name.
             self.emit('DUP_TOPX', 2)
             self.emit('LOAD_CONST', name)
             self.emit('CALL_FUNCTION', 2)

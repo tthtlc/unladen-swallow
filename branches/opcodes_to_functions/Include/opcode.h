@@ -62,9 +62,9 @@ extern "C" {
 #define INPLACE_POWER	67
 #define GET_ITER	68
 
-/* #define PRINT_EXPR	70  Replaced with a call to #@displayhook. */
-/* #define PRINT_ITEM	71  Other PRINT_* opcodes replaced with #@print_stmt.
-#define PRINT_NEWLINE	72
+/* #define PRINT_EXPR	70  Replaced by #@displayhook builtin. */
+/* #define PRINT_ITEM	71  Other PRINT_* opcodes replaced by #@print_stmt
+#define PRINT_NEWLINE	72	builtin.
 #define PRINT_ITEM_TO   73
 #define PRINT_NEWLINE_TO 74 */
 #define INPLACE_LSHIFT	75
@@ -74,14 +74,14 @@ extern "C" {
 #define INPLACE_OR	79
 #define BREAK_LOOP	80
 #define WITH_CLEANUP    81
-/*#define LOAD_LOCALS	82  Replaced with a function call to #@locals. */
+/* #define LOAD_LOCALS	82  Replaced by #@locals builtin. */
 #define RETURN_VALUE	83
-/*#define IMPORT_STAR	84  Replaced with a function call to #@import_star. */
-/*#define EXEC_STMT	85  Replaced with a function call to #@exec. */
+/* #define IMPORT_STAR	84  Replaced by #@import_star builtin. */
+/* #define EXEC_STMT	85  Replaced by #@exec builtin. */
 #define YIELD_VALUE	86
 #define POP_BLOCK	87
 #define END_FINALLY	88
-/*#define BUILD_CLASS	89  Replaced with a function call to #@buildclass. */
+/*#define BUILD_CLASS	89  Replaced by #@buildclass builtin. */
 
 #define HAVE_ARGUMENT	90	/* Opcodes from here have an argument: */
 
@@ -102,8 +102,8 @@ extern "C" {
 #define BUILD_MAP	104	/* Always zero for now */
 #define LOAD_ATTR	105	/* Index in name list */
 #define COMPARE_OP	106	/* Comparison operator */
-/* #define IMPORT_NAME	107	 Removed in favor of #@import_name */
-/* #define IMPORT_FROM	108	 Removed in favor of #@import_from */
+/* #define IMPORT_NAME	107	 Replaced by #@import_name builtin. */
+/* #define IMPORT_FROM	108	 Replaced by #@import_from builtin. */
 
 #define JUMP_FORWARD	110	/* Number of bytes to skip */
 #define JUMP_IF_FALSE	111	/* "" */

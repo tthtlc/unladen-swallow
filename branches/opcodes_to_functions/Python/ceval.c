@@ -602,7 +602,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
    execute new Python code or not.
 
    It's a case-by-case judgement.  I'll use intr1 for the following
-   cases:
+   case:
 
    CALL_FUNCTION (and friends)
 
