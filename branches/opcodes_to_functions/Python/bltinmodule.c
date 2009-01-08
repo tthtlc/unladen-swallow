@@ -1155,7 +1155,7 @@ builtin_import_name(PyObject *self, PyObject *args)
 	PyFrameObject *frame = PyThreadState_Get()->frame;
 
 	if (!PyArg_UnpackTuple(args, "#@import_name", 3, 3,
-							&level, &names, &module_name))
+			       &level, &names, &module_name))
 		return NULL;
 
 	import = PyDict_GetItemString(frame->f_builtins, "__import__");
@@ -1166,7 +1166,7 @@ builtin_import_name(PyObject *self, PyObject *args)
 	Py_INCREF(import);
 	if (PyInt_AsLong(level) != -1 || PyErr_Occurred())
 		import_args = PyTuple_Pack(5,
-				module_name,
+			    module_name,
 			    frame->f_globals,
 			    frame->f_locals == NULL ? Py_None : frame->f_locals,
 			    names,
@@ -1282,7 +1282,7 @@ static PyObject *
 builtin_make_function(PyObject *self, PyObject *args)
 {
 	PyFrameObject *frame;
-	PyObject *code_obj, *func, *defaults, *default_obj;
+	PyObject *code_obj, *func;
 	int i, n = PyTuple_Size(args);
 
 	frame = PyThreadState_Get()->frame;
@@ -1294,11 +1294,9 @@ builtin_make_function(PyObject *self, PyObject *args)
 	if (func == NULL)
 		return NULL;
 
-	if (n == 1) {
-		defaults = Py_None;
-		Py_INCREF(defaults);
-	} else {
-		defaults = PyTuple_New(n - 1);
+	if (n > 1) {
+		PyObject *default_obj;
+		PyObject *defaults = PyTuple_New(n - 1);
 		if (defaults == NULL) {
 			Py_DECREF(func);
 			return NULL;
@@ -1308,13 +1306,13 @@ builtin_make_function(PyObject *self, PyObject *args)
 			Py_INCREF(default_obj);
 			PyTuple_SET_ITEM(defaults, i - 1, default_obj);
 		}
-	}
-	if (PyFunction_SetDefaults(func, defaults)) {
+		if (PyFunction_SetDefaults(func, defaults)) {
+			Py_DECREF(defaults);
+			Py_DECREF(func);
+			return NULL;
+		}
 		Py_DECREF(defaults);
-		Py_DECREF(func);
-		return NULL;
 	}
-	Py_DECREF(defaults);
 	return func;
 }
 
