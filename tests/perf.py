@@ -74,26 +74,31 @@ def BM_PyBench(base_python, changed_python, options):
 
     PYBENCH_PATH = Relative("performance/pybench/pybench.py")
 
-    with contextlib.nested(open("/dev/null", "wb"),
-                           tempfile.NamedTemporaryFile(prefix="baseline."),
-                           tempfile.NamedTemporaryFile(prefix="changed.")
-                           ) as (dev_null, base_pybench, changed_pybench):
-        subprocess.check_call(LogCall([base_python, "-O",
-                                       PYBENCH_PATH,
-                                       "-w", warp,
-                                       "-f", base_pybench.name,
-                                       ]), stdout=dev_null)
-        subprocess.check_call(LogCall([changed_python, "-O",
-                                       PYBENCH_PATH,
-                                       "-w", warp,
-                                       "-f", changed_pybench.name,
-                                       ]), stdout=dev_null)
-        comparer = subprocess.Popen([base_python,
-                                     PYBENCH_PATH,
-                                     "-s", base_pybench.name,
-                                     "-c", changed_pybench.name,
-                                     ], stdout=subprocess.PIPE)
-        result, _ = comparer.communicate()
+    try:
+        with contextlib.nested(open("/dev/null", "wb"),
+                               tempfile.NamedTemporaryFile(prefix="baseline."),
+                               tempfile.NamedTemporaryFile(prefix="changed.")
+                               ) as (dev_null, base_pybench, changed_pybench):
+            subprocess.check_call(LogCall([changed_python, "-O",
+                                           PYBENCH_PATH,
+                                           "-w", warp,
+                                           "-f", changed_pybench.name,
+                                           ]), stdout=dev_null)
+            subprocess.check_call(LogCall([base_python, "-O",
+                                           PYBENCH_PATH,
+                                           "-w", warp,
+                                           "-f", base_pybench.name,
+                                           ]), stdout=dev_null)
+            comparer = subprocess.Popen([base_python,
+                                         PYBENCH_PATH,
+                                         "-s", base_pybench.name,
+                                         "-c", changed_pybench.name,
+                                         ], stdout=subprocess.PIPE)
+            result, err = comparer.communicate()
+            if comparer.returncode != 0:
+                return "pybench died: " + err
+    except subprocess.CalledProcessError, e:
+        return str(e)
 
     if options.verbose:
         return result
@@ -146,27 +151,30 @@ def avg(seq):
 
 
 def BM_2to3(base_python, changed_python, options):
-    with open("/dev/null", "wb") as dev_null:
-        base_times = sorted(Measure2to3(base_python, options))
+    try:
         changed_times = sorted(Measure2to3(changed_python, options))
-        assert len(base_times) == len(changed_times)
+        base_times = sorted(Measure2to3(base_python, options))
+    except subprocess.CalledProcessError, e:
+        return str(e)
 
-        if len(base_times) == 1:
-            base_time = base_times[0]
-            changed_time = changed_times[0]
-            time_delta = TimeDelta(base_time, changed_time)
-            return ("%(base_time).2f -> %(changed_time).2f: %(time_delta)s"
-                    % locals())
-        else:
-            min_base, min_changed = base_times[0], changed_times[0]
-            avg_base, avg_changed = avg(base_times), avg(changed_times)
-            delta_min = TimeDelta(min_base, min_changed)
-            delta_avg = TimeDelta(avg_base, avg_changed)
-            return (("Min: %(min_base).2f -> %(min_changed).2f:" +
-                     " %(delta_min)s\n" +
-                     "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
-                     " %(delta_avg)s")
-                    % locals())
+    assert len(base_times) == len(changed_times)
+
+    if len(base_times) == 1:
+        base_time = base_times[0]
+        changed_time = changed_times[0]
+        time_delta = TimeDelta(base_time, changed_time)
+        return ("%(base_time).2f -> %(changed_time).2f: %(time_delta)s"
+                % locals())
+    else:
+        min_base, min_changed = base_times[0], changed_times[0]
+        avg_base, avg_changed = avg(base_times), avg(changed_times)
+        delta_min = TimeDelta(min_base, min_changed)
+        delta_avg = TimeDelta(avg_base, avg_changed)
+        return (("Min: %(min_base).2f -> %(min_changed).2f:" +
+                 " %(delta_min)s\n" +
+                 "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
+                 " %(delta_avg)s")
+                % locals())
 
 
 if __name__ == "__main__":
