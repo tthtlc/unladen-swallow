@@ -9,6 +9,8 @@ other small ceval, function call, etc. tweaks. I'll probably also
 start pushing to [SimplifyEvalFrameEx simplify the EvalFrameEx loop] even if that doesn't
 help performance because it'll make migrating to LLVM easier.
 
+See ShortTermPerformanceIdeas for some of the ideas for this first phase.
+
 = Long-term Plan =
 Once we get the quick improvements out of the way and convince some
 people to adopt our Python, we'll start switching to LLVM, probably
