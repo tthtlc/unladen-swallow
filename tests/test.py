@@ -53,6 +53,6 @@ if __name__ == "__main__":
         current_dir = os.getcwd()
         os.chdir(subdir)
         try:
-            return test_func()
+            test_func()
         finally:
             os.chdir(current_dir)
