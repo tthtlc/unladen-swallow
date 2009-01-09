@@ -1,0 +1,34 @@
+#summary Ideas for improving performance in phase one.
+
+= Introduction =
+
+Phase One of Unladen Swallow will be based on making the current implementation faster; Phase Two will rip all of this out and replace the current compiler with LLVM, which will solve all problems, including allergies and cancer. In the meantime, we still have to make this thing faster:
+
+
+==To-be-implemented==
+<ol>
+<li>*Lighter PyFrameObject*. Make these quicker to create, use less memory.</li>
+</ol>
+
+==To-be-reviewed==
+(Other people's patches)
+<ol>
+<li>GC changes: http://bugs.python.org/issue4074, http://bugs.python.org/issue4688</li>
+<li>Localized type inference for list.append: http://bugs.python.org/issue4264</li>
+<li>Speed up for/while/if with better bytecode: http://bugs.python.org/issue2459</li>
+<li>Method cache: http://bugs.python.org/issue1700288</li>
+<li>Faster globals/builtins access: http://bugs.python.org/issue1518</li>
+<li>Speed up function calls: http://bugs.python.org/issue1479611</li>
+</ol>
+
+
+==Implemented/In progress==
+<ol>
+<li>*Replace slow/rarely-used opcodes with function calls.* Hypothesis: by eliminating stack variables and shrinking the physical size of PyEval_EvalFrameEx, we a) make it faster to call EvalFrameEx, b) save icache space. This is being implemented in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/branches/opcodes_to_functions opcodes_to_functions branch].</li>
+</ol>
+
+
+==Considered, Rejected==
+<ol>
+<li>*Iterative eval loop*. Hypothesis: if we can reuse a single "instance" of the PyEval_EvalFrameEx C stack frame for Python-to-Python function calls, that will be faster than creating a new stack frame for each Python function call. Making this work with the current implementation would have introduced a prohibitively-high amount of new complication for what we estimate to have been a relatively minor performance improvement.</li>
+</ol>
