@@ -13,7 +13,7 @@ Phase One of Unladen Swallow will be based on making the current implementation 
 ==To-be-reviewed==
 (Other people's patches)
 <ol>
-<li>GC changes: http://bugs.python.org/issue4074, http://bugs.python.org/issue4688</li>
+<li>GC changes: http://bugs.python.org/issue4688</li>
 <li>Localized type inference for list.append: http://bugs.python.org/issue4264</li>
 <li>Speed up for/while/if with better bytecode: http://bugs.python.org/issue2459</li>
 <li>Method cache: http://bugs.python.org/issue1700288</li>
@@ -24,7 +24,8 @@ Phase One of Unladen Swallow will be based on making the current implementation 
 
 ==Implemented/In progress==
 <ol>
-<li>*Replace slow/rarely-used opcodes with function calls.* Hypothesis: by eliminating stack variables and shrinking the physical size of PyEval_EvalFrameEx, we a) make it faster to call EvalFrameEx, b) save icache space. This is being implemented in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/branches/opcodes_to_functions opcodes_to_functions branch].</li>
+<li>Merged http://bugs.python.org/issue4074 into trunk. Much better GC behaviour in the face of large numbers of long-lived objects.</li>
+<li>*Replace slow/rarely-used opcodes with function calls.* Hypothesis: by eliminating stack variables and shrinking the physical size of PyEval_EvalFrameEx, we a) make it faster to call EvalFrameEx, b) save icache space. This is now in trunk. The speedup is marginal, but cleans up the eval loop.</li>
 </ol>
 
 
