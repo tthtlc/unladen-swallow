@@ -1,0 +1,4 @@
+#summary Papers we should read for Plumage
+
+
+  * http://lambda-the-ultimate.org/node/3159: [http://research.microsoft.com/apps/pubs/default.aspx?id=76524 Verifying Compiler Transformations for Concurrent Programs]: When we start really optimizing Python programs, we'll want to verify that our optimizations preserve our memory model.
