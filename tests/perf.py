@@ -12,6 +12,7 @@ import contextlib
 import logging
 import optparse
 import os
+import os.path
 import platform
 import re
 import resource
@@ -234,16 +235,17 @@ def BuildPsyco(python):
 
     info("Building Psyco with %s", python)
     psyco_build_dir = tempfile.mkdtemp()
+    abs_python = os.path.abspath(python)
     with ChangeDir(PSYCO_SRC_DIR):
-        subprocess.check_call(LogCall([python, "setup.py", "build",
+        subprocess.check_call(LogCall([abs_python, "setup.py", "build",
                                        "--build-lib=" + psyco_build_dir]))
     return psyco_build_dir
 
 
 def BM_Spitfire(base_python, changed_python, options):
+    changed_psyco_dir = BuildPsyco(changed_python)
+    base_psyco_dir = BuildPsyco(base_python)
     try:
-        changed_psyco_dir = BuildPsyco(changed_python)
-        base_psyco_dir = BuildPsyco(base_python)
         changed_times = sorted(MeasureSpitfire(changed_python,
                                                changed_psyco_dir,
                                                options))
