@@ -15,12 +15,25 @@ import os
 import platform
 import re
 import resource
+import shutil
 import subprocess
 import sys
 import tempfile
 
 
 info = logging.info
+
+
+def avg(seq):
+    return sum(seq) / len(seq)
+
+
+@contextlib.contextmanager
+def ChangeDir(new_cwd):
+    former_cwd = os.getcwd()
+    os.chdir(new_cwd)
+    yield
+    os.chdir(former_cwd)
 
 
 def Relative(path):
@@ -146,10 +159,6 @@ def Measure2to3(python, options):
     return times
 
 
-def avg(seq):
-    return sum(seq) / len(seq)
-
-
 def BM_2to3(base_python, changed_python, options):
     try:
         changed_times = sorted(Measure2to3(changed_python, options))
@@ -175,6 +184,92 @@ def BM_2to3(base_python, changed_python, options):
                  "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
                  " %(delta_avg)s")
                 % locals())
+
+
+
+def ParseSpitfireOutput(output):
+    for line in output.splitlines():
+        # We consider -O4 because presumably no-one is running Spitfire
+        # at lower optimization levels.
+        if line.startswith("Spitfire template -O4"):
+            # -1 == "ms", -2 is the timing data we want.
+            number = line.split()[-2]
+            return float(number)
+    raise ValueError("Invalid Spitfire output")
+
+
+def MeasureSpitfire(python, psyco_build_dir, options):
+    SPITFIRE_DIR = Relative("lib/spitfire")
+    SPITFIRE_PROG = Relative("lib/spitfire/tests/perf/bigtable.py")
+
+    spitfire_env = {"PYTHONPATH": ":".join([SPITFIRE_DIR, psyco_build_dir])}
+
+    with open("/dev/null", "wb") as dev_null:
+        # Warm up the cache and .pyc files.
+        subprocess.check_call(LogCall([python, "-O", SPITFIRE_PROG]),
+                              stdout=dev_null, stderr=dev_null,
+                              env=spitfire_env)
+        if options.rigorous:
+            trials = 15
+        else:
+            trials = 6
+        times = []
+        for _ in range(trials):
+            spitfire = subprocess.Popen(LogCall([python, "-O", SPITFIRE_PROG]),
+                                  stdout=subprocess.PIPE, stderr=dev_null,
+                                  env=spitfire_env)
+            result, err = spitfire.communicate()
+            if spitfire.returncode != 0:
+                return "Spitfire died: " + err
+
+            elapsed = ParseSpitfireOutput(result)
+            assert elapsed != 0
+            times.append(elapsed)
+
+    return times
+
+
+def BuildPsyco(python):
+    PSYCO_SRC_DIR = Relative("lib/psyco")
+
+    info("Building Psyco with %s", python)
+    psyco_build_dir = tempfile.mkdtemp()
+    with ChangeDir(PSYCO_SRC_DIR):
+        subprocess.check_call(LogCall([python, "setup.py", "build",
+                                       "--build-lib=" + psyco_build_dir]))
+    return psyco_build_dir
+
+
+def BM_Spitfire(base_python, changed_python, options):
+    try:
+        changed_psyco_dir = BuildPsyco(changed_python)
+        base_psyco_dir = BuildPsyco(base_python)
+        changed_times = sorted(MeasureSpitfire(changed_python,
+                                               changed_psyco_dir,
+                                               options))
+        base_times = sorted(MeasureSpitfire(base_python,
+                                            base_psyco_dir,
+                                            options))
+    except subprocess.CalledProcessError, e:
+        return str(e)
+    finally:
+        try:
+            shutil.rmtree(changed_psyco_dir)
+            shutil.rmtree(base_psyco_dir)
+        except OSError:
+            pass
+
+    assert len(base_times) == len(changed_times)
+
+    min_base, min_changed = base_times[0], changed_times[0]
+    avg_base, avg_changed = avg(base_times), avg(changed_times)
+    delta_min = TimeDelta(min_base, min_changed)
+    delta_avg = TimeDelta(avg_base, avg_changed)
+    return (("Min: %(min_base).2f -> %(min_changed).2f:" +
+             " %(delta_min)s\n" +
+             "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
+             " %(delta_avg)s")
+            % locals())
 
 
 if __name__ == "__main__":
