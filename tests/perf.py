@@ -296,7 +296,7 @@ if __name__ == "__main__":
 
     benchmarks = [(name[3:], func)
                   for name, func in sorted(globals().iteritems())
-                  if name.startswith("BM_2")]
+                  if name.startswith("BM_")]
 
     results = []
     for name, func in benchmarks:
