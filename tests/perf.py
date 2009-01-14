@@ -176,61 +176,107 @@ def BM_2to3(base_python, changed_python, options):
         return ("%(base_time).2f -> %(changed_time).2f: %(time_delta)s"
                 % locals())
     else:
-        min_base, min_changed = base_times[0], changed_times[0]
-        avg_base, avg_changed = avg(base_times), avg(changed_times)
-        delta_min = TimeDelta(min_base, min_changed)
-        delta_avg = TimeDelta(avg_base, avg_changed)
-        return (("Min: %(min_base).2f -> %(min_changed).2f:" +
-                 " %(delta_min)s\n" +
-                 "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
-                 " %(delta_avg)s")
-                % locals())
+        return CompareMultipleRuns(base_times, changed_times)
 
 
+def CompareMultipleRuns(base_times, changed_times):
+    """Compare multiple control vs experiment runs of the same benchmark.
 
-def ParseSpitfireOutput(output):
+    Args:
+        base_times: iterable of float times (control).
+        changed_times: iterable of float times (experiment).
+
+    Returns:
+        A string summarizing the difference between the runs, suitable for
+        human consumption.
+    """
+    assert len(base_times) == len(changed_times)
+    base_times = sorted(base_times)
+    changed_times = sorted(changed_times)
+
+    min_base, min_changed = base_times[0], changed_times[0]
+    avg_base, avg_changed = avg(base_times), avg(changed_times)
+    delta_min = TimeDelta(min_base, min_changed)
+    delta_avg = TimeDelta(avg_base, avg_changed)
+    return (("Min: %(min_base).2f -> %(min_changed).2f:" +
+             " %(delta_min)s\n" +
+             "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
+             " %(delta_avg)s")
+             % locals())
+
+
+def ParseTemplateOutput(output, benchmark_title):
+    """Parse the output from Spitfire's bigtable.py, looking for results.
+
+    Args:
+        output: string, bigtable.py's stdout.
+        benchmark_title: the string prefix of the benchmark we want results
+            for.
+
+    Returns:
+        The time it took the given benchmark to run, as a float.
+
+    Raises:
+        ValueError: if the given `benchmark_title` isn't found.
+    """
     for line in output.splitlines():
-        # We consider -O4 because presumably no-one is running Spitfire
-        # at lower optimization levels.
-        if line.startswith("Spitfire template -O4"):
+        if line.startswith(benchmark_title):
             # -1 == "ms", -2 is the timing data we want.
             number = line.split()[-2]
             return float(number)
-    raise ValueError("Invalid Spitfire output")
+    raise ValueError("Invalid bigtable.py output")
 
 
-def MeasureSpitfire(python, psyco_build_dir, options):
+def MeasureTemplates(python, psyco_build_dir, options):
+    DJANGO_DIR = Relative("lib/django")
     SPITFIRE_DIR = Relative("lib/spitfire")
-    SPITFIRE_PROG = Relative("lib/spitfire/tests/perf/bigtable.py")
+    TEST_PROG = Relative("lib/spitfire/tests/perf/bigtable.py")
 
-    spitfire_env = {"PYTHONPATH": ":".join([SPITFIRE_DIR, psyco_build_dir])}
+    python_path = ":".join([SPITFIRE_DIR, DJANGO_DIR, psyco_build_dir])
+    spitfire_env = {"PYTHONPATH": python_path}
 
     with open("/dev/null", "wb") as dev_null:
         # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall([python, "-O", SPITFIRE_PROG]),
+        subprocess.check_call(LogCall([python, "-O", TEST_PROG]),
                               stdout=dev_null, stderr=dev_null,
                               env=spitfire_env)
         if options.rigorous:
             trials = 15
         else:
             trials = 6
-        times = []
+        spitfire_times = []
+        django_times = []
         for _ in range(trials):
-            spitfire = subprocess.Popen(LogCall([python, "-O", SPITFIRE_PROG]),
+            spitfire = subprocess.Popen(LogCall([python, "-O", TEST_PROG]),
                                   stdout=subprocess.PIPE, stderr=dev_null,
                                   env=spitfire_env)
             result, err = spitfire.communicate()
             if spitfire.returncode != 0:
                 return "Spitfire died: " + err
 
-            elapsed = ParseSpitfireOutput(result)
+            # We consider Spitfire with -O4 because presumably people aren't
+            # using lower optimization settings.
+            elapsed = ParseTemplateOutput(result, "Spitfire template -O4")
             assert elapsed != 0
-            times.append(elapsed)
+            spitfire_times.append(elapsed)
 
-    return times
+            elapsed = ParseTemplateOutput(result, "Djange template")  # Sic.
+            assert elapsed != 0
+            django_times.append(elapsed)
+
+    return {"Spitfire": spitfire_times, "Django": django_times}
 
 
 def BuildPsyco(python):
+    """Build Psyco against the given Python binary.
+
+    Args:
+        python: path to the Python binary.
+
+    Returns:
+        Path to Psyco's build directory. Putting this on your PYTHONPATH will
+        make "import psyco" work.
+    """
     PSYCO_SRC_DIR = Relative("lib/psyco")
 
     info("Building Psyco with %s", python)
@@ -242,16 +288,13 @@ def BuildPsyco(python):
     return psyco_build_dir
 
 
-def BM_Spitfire(base_python, changed_python, options):
+def BM_Templates(base_python, changed_python, options):
     changed_psyco_dir = BuildPsyco(changed_python)
     base_psyco_dir = BuildPsyco(base_python)
     try:
-        changed_times = sorted(MeasureSpitfire(changed_python,
-                                               changed_psyco_dir,
-                                               options))
-        base_times = sorted(MeasureSpitfire(base_python,
-                                            base_psyco_dir,
-                                            options))
+        all_changed_times = MeasureTemplates(changed_python, changed_psyco_dir,
+                                             options)
+        all_base_times = MeasureTemplates(base_python, base_psyco_dir, options)
     except subprocess.CalledProcessError, e:
         return str(e)
     finally:
@@ -261,17 +304,12 @@ def BM_Spitfire(base_python, changed_python, options):
         except OSError:
             pass
 
-    assert len(base_times) == len(changed_times)
-
-    min_base, min_changed = base_times[0], changed_times[0]
-    avg_base, avg_changed = avg(base_times), avg(changed_times)
-    delta_min = TimeDelta(min_base, min_changed)
-    delta_avg = TimeDelta(avg_base, avg_changed)
-    return (("Min: %(min_base).2f -> %(min_changed).2f:" +
-             " %(delta_min)s\n" +
-             "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
-             " %(delta_avg)s")
-            % locals())
+    output = []
+    for template_name, changed_times in all_changed_times.items():
+        base_times = all_base_times[template_name]
+        comparison = CompareMultipleRuns(base_times, changed_times)
+        output.append(template_name + ":\n" + comparison)
+    return "\n\n".join(output)
 
 
 if __name__ == "__main__":
