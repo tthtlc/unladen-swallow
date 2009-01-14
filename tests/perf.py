@@ -93,17 +93,17 @@ def BM_PyBench(base_python, changed_python, options):
                                tempfile.NamedTemporaryFile(prefix="baseline."),
                                tempfile.NamedTemporaryFile(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
-            subprocess.check_call(LogCall([changed_python, "-O",
+            subprocess.check_call(LogCall([changed_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", changed_pybench.name,
                                            ]), stdout=dev_null)
-            subprocess.check_call(LogCall([base_python, "-O",
+            subprocess.check_call(LogCall([base_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", base_pybench.name,
                                            ]), stdout=dev_null)
-            comparer = subprocess.Popen([base_python,
+            comparer = subprocess.Popen([base_python, "-E",
                                          PYBENCH_PATH,
                                          "-s", base_pybench.name,
                                          "-c", changed_pybench.name,
@@ -135,7 +135,7 @@ def Measure2to3(python, options):
 
     with open("/dev/null", "wb") as dev_null:
         # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall([python, "-O",
+        subprocess.check_call(LogCall([python, "-E", "-O",
                                        TWO_TO_THREE_PROG,
                                        "-f", "all",
                                        warmup_target]),
@@ -147,7 +147,7 @@ def Measure2to3(python, options):
         times = []
         for _ in range(trials):
             start_time = GetChildUserTime()
-            subprocess.check_call(LogCall([python, "-O",
+            subprocess.check_call(LogCall([python, "-E", "-O",
                                            TWO_TO_THREE_PROG,
                                            "-f", "all",
                                            TWO_TO_THREE_DIR]),
@@ -296,7 +296,7 @@ if __name__ == "__main__":
 
     benchmarks = [(name[3:], func)
                   for name, func in sorted(globals().iteritems())
-                  if name.startswith("BM_")]
+                  if name.startswith("BM_2")]
 
     results = []
     for name, func in benchmarks:
