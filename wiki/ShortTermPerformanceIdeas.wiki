@@ -17,7 +17,7 @@ Phase One of Unladen Swallow will be based on making the current implementation 
 <li>Localized type inference for list.append: http://bugs.python.org/issue4264</li>
 <li>Speed up for/while/if with better bytecode: http://bugs.python.org/issue2459</li>
 <li>Faster globals/builtins access: http://bugs.python.org/issue1518</li>
-<li>Speed up function calls: http://bugs.python.org/issue1479611</li>
+<li>Speed up function calls: http://bugs.python.org/issue1479611, http://bugs.python.org/issue1107887</li>
 </ol>
 
 
