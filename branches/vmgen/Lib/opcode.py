@@ -78,8 +78,8 @@ arg_op('BUILD_MAP', 'Number of dict entries (upto 255)')
 name_op('LOAD_ATTR', 'Index in name list')
 arg_op('COMPARE_OP', 'Comparison operator')
 hascompare.append(opmap['COMPARE_OP'])
-name_op('IMPORT_NAME', 'Index in name list')
-name_op('IMPORT_FROM', 'Index in name list')
+# name_op('IMPORT_NAME', 'Index in name list')   # Replaced by #@import_name.
+# name_op('IMPORT_FROM', 'Index in name list')   # Replaced by #@import_from.
 
 jrel_op('JUMP_FORWARD', 'Number of bytes to skip')
 jrel_op('JUMP_IF_FALSE', 'Number of bytes to skip')
@@ -101,7 +101,7 @@ arg_op('DELETE_FAST', 'Local variable number')
 haslocal.append(opmap['DELETE_FAST'])
 
 arg_op('CALL_FUNCTION', '#args + (#kwargs << 8)')
-arg_op('MAKE_FUNCTION', 'Number of args with default values')
+# arg_op('MAKE_FUNCTION', 'Number of args with default values')  Replaced by #@make_function calls.
 arg_op('MAKE_CLOSURE', '???')
 arg_op('LOAD_CLOSURE', '???')
 hasfree.append(opmap['LOAD_CLOSURE'])

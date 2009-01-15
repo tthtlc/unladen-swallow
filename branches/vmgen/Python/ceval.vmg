@@ -316,98 +316,6 @@ err = PyObject_SetItem(a2, a3, a1);
 DELETE_SUBSCR ( a1 a2 -- dec:a1 dec:a2  next:error )
 err = PyObject_DelItem(a1, a2);
 
-\ _ , PRINT
-PRINT_EXPR ( a1 -- dec:a1  next:on_error )
-a2 = PySys_GetObject("displayhook");
-why = WHY_NOT;  /* Redundant, but clearer. */
-if (a2 == NULL) {
-        PyErr_SetString(PyExc_RuntimeError, "lost sys.displayhook");
-        why = WHY_EXCEPTION;
-        x = NULL;
-}
-if (why == WHY_NOT) {
-        x = PyTuple_Pack(1, a1);
-        if (x == NULL)
-                why = WHY_EXCEPTION;
-}
-if (why == WHY_NOT) {
-        a2 = PyEval_CallObject(a2, x);
-        Py_XDECREF(a2);
-        if (a2 == NULL)
-                why = WHY_EXCEPTION;
-}
-Py_XDECREF(x);
-
-PRINT_ITEM_TO ( a1 -- )
-a2 = stream = a1;
-goto print_item_fallthrough;
-
-PRINT_ITEM ( --  next:error )
-print_item_fallthrough:
-a1 = POP();
-err = 0;
-if (stream == NULL || stream == Py_None) {
-        a2 = PySys_GetObject("stdout");
-        if (a2 == NULL) {
-                PyErr_SetString(PyExc_RuntimeError,
-                                "lost sys.stdout");
-                err = -1;
-        }
-}
-/* PyFile_SoftSpace() can exececute arbitrary code
-   if sys.stdout is an instance with a __getattr__.
-   If __getattr__ raises an exception, w will
-   be freed, so we need to prevent that temporarily. */
-Py_XINCREF(a2);
-if (a2 != NULL && PyFile_SoftSpace(a2, 0))
-        err = PyFile_WriteString(" ", a2);
-if (err == 0)
-        err = PyFile_WriteObject(a1, a2, Py_PRINT_RAW);
-if (err == 0) {
-        /* XXX move into writeobject() ? */
-        if (PyString_Check(a1)) {
-                char *s = PyString_AS_STRING(a1);
-                Py_ssize_t len = PyString_GET_SIZE(a1);
-                if (len == 0 ||
-                    !isspace(Py_CHARMASK(s[len-1])) ||
-                    s[len-1] == ' ')
-                        PyFile_SoftSpace(a2, 1);
-        } else
-                PyFile_SoftSpace(a2, 1);
-}
-Py_XDECREF(a1);
-Py_XDECREF(a2);
-Py_XDECREF(stream);
-stream = NULL;
-
-PRINT_NEWLINE_TO ( a1 -- )
-a2 = stream = a1;
-goto print_newline_fallthrough;
-
-PRINT_NEWLINE ( -- next:on_error )
-print_newline_fallthrough:
-if (stream == NULL || stream == Py_None) {
-        a2 = PySys_GetObject("stdout");
-        if (a2 == NULL) {
-                PyErr_SetString(PyExc_RuntimeError,
-                                "lost sys.stdout");
-                why = WHY_EXCEPTION;
-        }
-}
-if (a2 != NULL) {
-        /* a2.write() may replace sys.stdout, so we
-         * have to keep our reference to it */
-        Py_INCREF(a2);
-        err = PyFile_WriteString("\n", a2);
-        if (err == 0)
-                PyFile_SoftSpace(a2, 0);
-        else
-                why = WHY_EXCEPTION;
-        Py_DECREF(a2);
-}
-Py_XDECREF(stream);
-stream = NULL;
-
 \ _ , RAISE_VARARGS
 RAISE_VARARGS_ZERO ( -- next:on_error )
 why = do_raise(NULL, NULL, NULL);
@@ -422,16 +330,6 @@ RAISE_VARARGS_THREE ( a1 a2 a3 -- next:on_error )
 why = do_raise(a1, a2, a3);
 
 \ _ , LOAD
-LOAD_LOCALS ( -- )
-if ((x = f->f_locals) != NULL) {
-        Py_INCREF(x);
-        PUSH(x);
-        NEXT();
-}
-PyErr_SetString(PyExc_SystemError, "no locals");
-why = WHY_EXCEPTION;
-ERROR();
-
 LOAD_NAME ( #i -- )
 a2 = GETITEM(names, i);
 if ((a1 = f->f_locals) == NULL) {
@@ -567,11 +465,6 @@ retval = a;
 f->f_stacktop = stack_pointer;
 why = WHY_YIELD;
 
-\ _ , EXEC_STMT
-EXEC_STMT ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:on_error )
-if (exec_statement(f, a1, a2, a3) != 0)
-        why = WHY_EXCEPTION;
-
 \ _ , POP_BLOCK
 POP_BLOCK ( -- next:next_opcode )
 PyTryBlock *b = PyFrame_BlockPop(f);
@@ -600,11 +493,6 @@ if (PyInt_Check(a1)) {
 Py_DECREF(a1);
 
 \ _ , BUILD
-BUILD_CLASS ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:on_error )
-a = build_class(a3, a2, a1);
-if (a == NULL)
-        why = WHY_EXCEPTION;
-
 BUILD_TUPLE ( #i -- )
 x = PyTuple_New(i);
 if (x != NULL) {
@@ -772,66 +660,6 @@ if (PyInt_CheckExact(a2) && PyInt_CheckExact(a1)) {
         }
 } else
         a = cmp_outcome(i, a1, a2);
-
-\ _ , IMPORT
-IMPORT_NAME ( #i -- )
-a3 = GETITEM(names, i);
-x = PyDict_GetItemString(f->f_builtins, "__import__");
-if (x == NULL) {
-        PyErr_SetString(PyExc_ImportError, "__import__ not found");
-        why = WHY_EXCEPTION;
-        ERROR();
-}
-Py_INCREF(x);
-a2 = POP();
-a1 = TOP();
-if (PyInt_AsLong(a1) != -1 || PyErr_Occurred())
-        a3 = PyTuple_Pack(5,
-                          a3,
-                          f->f_globals,
-                          f->f_locals == NULL ? Py_None : f->f_locals,
-                          a2,
-                          a1);
-else
-        a3 = PyTuple_Pack(4,
-                          a3,
-                          f->f_globals,
-                          f->f_locals == NULL ? Py_None : f->f_locals,
-                          a2);
-Py_DECREF(a2);
-Py_DECREF(a1);
-if (a3 == NULL) {
-        a1 = POP();
-        Py_DECREF(x);
-        why = WHY_EXCEPTION;
-        ERROR();
-}
-a2 = x;
-x = PyEval_CallObject(a2, a3);
-Py_DECREF(a2);
-Py_DECREF(a3);
-SET_TOP(x);
-if (x != NULL) NEXT();
-why = WHY_EXCEPTION;
-ERROR();
-
-IMPORT_STAR ( a1 -- )
-PyFrame_FastToLocals(f);
-if ((x = f->f_locals) == NULL) {
-        PyErr_SetString(PyExc_SystemError, "no locals found during 'import *'");
-        why = WHY_EXCEPTION;
-        ERROR();
-}
-err = import_all_from(x, a1);
-PyFrame_LocalsToFast(f, 0);
-Py_DECREF(a1);
-if (err == 0) NEXT();
-why = WHY_EXCEPTION;
-ERROR();
-
-IMPORT_FROM ( #i a1 -- a1 a3  next:a3 )
-a2 = GETITEM(names, i);
-a3 = import_from(a1, a2);
 
 \ _ , JUMP
 JUMP_FORWARD ( #i -- )
@@ -1071,30 +899,6 @@ why = WHY_EXCEPTION;
 ERROR();
 
 \ _ , MAKE
-MAKE_FUNCTION ( #i -- )
-a1 = POP(); /* code object */
-x = PyFunction_New(a1, f->f_globals);
-Py_DECREF(a1);
-/* XXX Maybe this should be a separate opcode? */
-if (x != NULL && i > 0) {
-        a1 = PyTuple_New(i);
-        if (a1 == NULL) {
-                Py_DECREF(x);
-                why = WHY_EXCEPTION;
-                ERROR();
-        }
-        while (--i >= 0) {
-                a2 = POP();
-                PyTuple_SET_ITEM(a1, i, a2);
-        }
-        if (PyFunction_SetDefaults(x, a1) != 0)
-                why = WHY_EXCEPTION;
-        Py_DECREF(a1);
-}
-PUSH(x);
-if (x == NULL) why = WHY_EXCEPTION;
-ERROR();
-
 MAKE_CLOSURE ( #i -- )
 a1 = POP(); /* code object */
 if ((x = PyFunction_New(a1, f->f_globals)) == NULL)

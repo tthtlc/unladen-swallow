@@ -12,12 +12,13 @@ def _f(a):
     return 1
 
 dis_f = """\
- %-4d         0 LOAD_FAST                0 (a)
-              2 PRINT_ITEM
-              3 PRINT_NEWLINE
+ %-4d         0 LOAD_GLOBAL              0 (#@print_stmt)
+              2 LOAD_FAST                0 (a)
+              4 CALL_FUNCTION            1
+              6 POP_TOP
 
- %-4d         4 LOAD_CONST               1 (1)
-              6 RETURN_VALUE
+ %-4d         7 LOAD_CONST               1 (1)
+              9 RETURN_VALUE
 """%(_f.func_code.co_firstlineno + 1,
      _f.func_code.co_firstlineno + 2)
 

@@ -156,6 +156,7 @@ static int compiler_addop_j(struct compiler *, int, basicblock *, int);
 static basicblock *compiler_use_new_block(struct compiler *);
 static int compiler_error(struct compiler *, const char *);
 static int compiler_nameop(struct compiler *, identifier, expr_context_ty);
+static int compiler_load_global(struct compiler *, const char *);
 
 static PyCodeObject *compiler_mod(struct compiler *, mod_ty);
 static int compiler_visit_stmt(struct compiler *, stmt_ty);
@@ -761,16 +762,6 @@ opcode_stack_effect(int opcode, int oparg)
 		case GET_ITER:
 			return 0;
 
-		case PRINT_EXPR:
-			return -1;
-		case PRINT_ITEM:
-			return -1;
-		case PRINT_NEWLINE:
-			return 0;
-		case PRINT_ITEM_TO:
-			return -2;
-		case PRINT_NEWLINE_TO:
-			return -1;
 		case INPLACE_LSHIFT:
 		case INPLACE_RSHIFT:
 		case INPLACE_AND:
@@ -781,14 +772,8 @@ opcode_stack_effect(int opcode, int oparg)
 			return 0;
 		case WITH_CLEANUP:
 			return -1; /* XXX Sometimes more */
-		case LOAD_LOCALS:
-			return 1;
 		case RETURN_VALUE:
 			return -1;
-		case IMPORT_STAR:
-			return -1;
-		case EXEC_STMT:
-			return -3;
 		case YIELD_VALUE:
 			return 0;
 
@@ -796,8 +781,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return 0;
 		case END_FINALLY:
 			return -1; /* or -2 or -3 if exception occurred */
-		case BUILD_CLASS:
-			return -2;
 
 		case STORE_NAME:
 			return -1;
@@ -833,10 +816,6 @@ opcode_stack_effect(int opcode, int oparg)
 			return 0;
 		case COMPARE_OP:
 			return -1;
-		case IMPORT_NAME:
-			return 0;
-		case IMPORT_FROM:
-			return 1;
 
 		case JUMP_FORWARD:
 		case JUMP_IF_FALSE:
@@ -875,9 +854,7 @@ opcode_stack_effect(int opcode, int oparg)
 			return -NARGS(oparg);
 		case CALL_FUNCTION_VAR_KW:
 			return -NARGS(oparg>>16) - ((oparg&1) + ((oparg>>1)&1));
-#undef NARGS
-		case MAKE_FUNCTION:
-			return -oparg;
+#undef NARGS			
 		case BUILD_SLICE_TWO:
 			return -1;
 		case BUILD_SLICE_THREE:
@@ -1288,13 +1265,21 @@ compiler_lookup_arg(PyObject *dict, PyObject *name)
 }
 
 static int
-compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
+compiler_make_closure(struct compiler *c, PyCodeObject *co, asdl_seq *defaults)
 {
-	int i, free = PyCode_GetNumFree(co);
+	int i, free = PyCode_GetNumFree(co), ndefaults = 0;
 	if (free == 0) {
-	    ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
-	    ADDOP_I(c, MAKE_FUNCTION, args);
-	    return 1;
+		if (!compiler_load_global(c, "#@make_function"))
+			return 0;
+		ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
+		if (defaults)
+			VISIT_SEQ(c, expr, defaults);
+		ADDOP_I(c, CALL_FUNCTION, asdl_seq_LEN(defaults) + 1);
+		return 1;
+	}
+	if (defaults) {
+		ndefaults = asdl_seq_LEN(defaults);
+		VISIT_SEQ(c, expr, defaults);
 	}
 	for (i = 0; i < free; ++i) {
 		/* Bypass com_addop_varname because it will generate
@@ -1317,8 +1302,8 @@ compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
 		if (arg == -1) {
 			printf("lookup %s in %s %d %d\n"
 				"freevars of %s: %s\n",
-				PyObject_REPR(name), 
-				PyString_AS_STRING(c->u->u_name), 
+				PyObject_REPR(name),
+				PyString_AS_STRING(c->u->u_name),
 				reftype, arg,
 				PyString_AS_STRING(co->co_name),
 				PyObject_REPR(co->co_freevars));
@@ -1328,7 +1313,7 @@ compiler_make_closure(struct compiler *c, PyCodeObject *co, int args)
 	}
 	ADDOP_I(c, BUILD_TUPLE, free);
 	ADDOP_O(c, LOAD_CONST, (PyObject*)co, consts);
-	ADDOP_I(c, MAKE_CLOSURE, args);
+	ADDOP_I(c, MAKE_CLOSURE, ndefaults);
 	return 1;
 }
 
@@ -1384,8 +1369,6 @@ compiler_function(struct compiler *c, stmt_ty s)
 
 	if (!compiler_decorators(c, decos))
 		return 0;
-	if (args->defaults)
-		VISIT_SEQ(c, expr, args->defaults);
 	if (!compiler_enter_scope(c, s->v.FunctionDef.name, (void *)s,
 				  s->lineno))
 		return 0;
@@ -1393,10 +1376,10 @@ compiler_function(struct compiler *c, stmt_ty s)
 	st = (stmt_ty)asdl_seq_GET(s->v.FunctionDef.body, 0);
 	docstring = compiler_isdocstring(st);
 	if (docstring && Py_OptimizeFlag < 2)
-	    first_const = st->v.Expr.value->v.Str.s;
-	if (compiler_add_o(c, c->u->u_consts, first_const) < 0)	 {
-	    compiler_exit_scope(c);
-	    return 0;
+		first_const = st->v.Expr.value->v.Str.s;
+	if (compiler_add_o(c, c->u->u_consts, first_const) < 0) {
+		compiler_exit_scope(c);
+		return 0;
 	}
 
 	/* unpack nested arguments */
@@ -1414,7 +1397,7 @@ compiler_function(struct compiler *c, stmt_ty s)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
+	compiler_make_closure(c, co, args->defaults);
 	Py_DECREF(co);
 
 	for (i = 0; i < asdl_seq_LEN(decos); i++) {
@@ -1431,11 +1414,14 @@ compiler_class(struct compiler *c, stmt_ty s)
 	PyCodeObject *co;
 	PyObject *str;
 	asdl_seq* decos = s->v.ClassDef.decorator_list;
-	
+
 	if (!compiler_decorators(c, decos))
 		return 0;
 
-	/* push class name on stack, needed by BUILD_CLASS */
+	if (!compiler_load_global(c, "#@buildclass"))
+		return 0;
+
+	/* push class name on stack, needed by #@buildclass */
 	ADDOP_O(c, LOAD_CONST, s->v.ClassDef.name, consts);
 	/* push the tuple of base classes on the stack */
 	n = asdl_seq_LEN(s->v.ClassDef.bases);
@@ -1454,7 +1440,7 @@ compiler_class(struct compiler *c, stmt_ty s)
 		compiler_exit_scope(c);
 		return 0;
 	}
-	
+
 	Py_DECREF(str);
 	str = PyString_InternFromString("__module__");
 	if (!str || !compiler_nameop(c, str, Store)) {
@@ -1469,18 +1455,24 @@ compiler_class(struct compiler *c, stmt_ty s)
 		return 0;
 	}
 
-	ADDOP_IN_SCOPE(c, LOAD_LOCALS);
+	if (!compiler_load_global(c, "#@locals"))
+		return 0;
+	ADDOP_I(c, CALL_FUNCTION, 0);
+
 	ADDOP_IN_SCOPE(c, RETURN_VALUE);
 	co = assemble(c, 1);
 	compiler_exit_scope(c);
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, 0);
+	compiler_make_closure(c, co, NULL);
 	Py_DECREF(co);
 
 	ADDOP_I(c, CALL_FUNCTION, 0);
-	ADDOP(c, BUILD_CLASS);
+
+	/* Call #@buildclass */
+	ADDOP_I(c, CALL_FUNCTION, 3);
+
 	/* apply decorators */
 	for (i = 0; i < asdl_seq_LEN(decos); i++) {
 		ADDOP_I(c, CALL_FUNCTION, 1);
@@ -1491,10 +1483,33 @@ compiler_class(struct compiler *c, stmt_ty s)
 }
 
 static int
+compiler_exec(struct compiler *c, stmt_ty s)
+{
+	if (!compiler_load_global(c, "#@exec"))
+		return 0;
+
+	VISIT(c, expr, s->v.Exec.body);
+	if (s->v.Exec.globals) {
+		VISIT(c, expr, s->v.Exec.globals);
+		if (s->v.Exec.locals) {
+			VISIT(c, expr, s->v.Exec.locals);
+		} else {
+			ADDOP(c, DUP_TOP);
+		}
+	} else {
+		ADDOP_O(c, LOAD_CONST, Py_None, consts);
+		ADDOP(c, DUP_TOP);
+	}
+	ADDOP_I(c, CALL_FUNCTION, 3);
+	ADDOP(c, POP_TOP);
+	return 1;
+}
+
+static int
 compiler_ifexp(struct compiler *c, expr_ty e)
 {
 	basicblock *end, *next;
-	
+
 	assert(e->kind == IfExp_kind);
 	end = compiler_new_block(c);
 	if (end == NULL)
@@ -1528,14 +1543,12 @@ compiler_lambda(struct compiler *c, expr_ty e)
 			return 0;
 	}
 
-	if (args->defaults)
-		VISIT_SEQ(c, expr, args->defaults);
 	if (!compiler_enter_scope(c, name, (void *)e, e->lineno))
 		return 0;
 
 	/* unpack nested arguments */
 	compiler_arguments(c, args);
-	
+
 	c->u->u_argcount = asdl_seq_LEN(args->args);
 	VISIT_IN_SCOPE(c, expr, e->v.Lambda.body);
 	ADDOP_IN_SCOPE(c, RETURN_VALUE);
@@ -1544,7 +1557,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, asdl_seq_LEN(args->defaults));
+	compiler_make_closure(c, co, args->defaults);
 	Py_DECREF(co);
 
 	return 1;
@@ -1553,37 +1566,43 @@ compiler_lambda(struct compiler *c, expr_ty e)
 static int
 compiler_print(struct compiler *c, stmt_ty s)
 {
-	int i, n;
-	bool dest;
+	int i, n, kwargs = 0;
+	PyObject *str;
 
 	assert(s->kind == Print_kind);
 	n = asdl_seq_LEN(s->v.Print.values);
-	dest = false;
-	if (s->v.Print.dest) {
-		VISIT(c, expr, s->v.Print.dest);
-		dest = true;
-	}
+
+	if (!compiler_load_global(c, "#@print_stmt"))
+		return 0;
+
 	for (i = 0; i < n; i++) {
 		expr_ty e = (expr_ty)asdl_seq_GET(s->v.Print.values, i);
-		if (dest) {
-			ADDOP(c, DUP_TOP);
-			VISIT(c, expr, e);
-			ADDOP(c, ROT_TWO);
-			ADDOP(c, PRINT_ITEM_TO);
-		}
-		else {
-			VISIT(c, expr, e);
-			ADDOP(c, PRINT_ITEM);
-		}
+		VISIT(c, expr, e);
 	}
-	if (s->v.Print.nl) {
-		if (dest)
-			ADDOP(c, PRINT_NEWLINE_TO)
-		else
-			ADDOP(c, PRINT_NEWLINE)
+	if (!s->v.Print.nl) {
+		str = PyString_InternFromString("end");
+		if (!str)
+			return 0;
+		ADDOP_O(c, LOAD_CONST, str, consts);
+		Py_DECREF(str);
+		str = PyString_FromString("");
+		if (!str)
+			return 0;
+		ADDOP_O(c, LOAD_CONST, str, consts);
+		Py_DECREF(str);
+		kwargs++;
 	}
-	else if (dest)
-		ADDOP(c, POP_TOP);
+	if (s->v.Print.dest) {
+		str = PyString_InternFromString("file");
+		if (!str)
+			return 0;
+		ADDOP_O(c, LOAD_CONST, str, consts);
+		Py_DECREF(str);
+		VISIT(c, expr, s->v.Print.dest);
+		kwargs++;
+	}
+	ADDOP_I(c, CALL_FUNCTION, n | (kwargs << 8));
+	ADDOP(c, POP_TOP);
 	return 1;
 }
 
@@ -1598,8 +1617,8 @@ compiler_if(struct compiler *c, stmt_ty s)
 		return 0;
 	next = compiler_new_block(c);
 	if (next == NULL)
-	    return 0;
-	
+		return 0;
+
 	constant = expr_constant(s->v.If.test);
 	/* constant = 0: "if 0"
 	 * constant = 1: "if 1", "if 2", ...
@@ -1907,7 +1926,7 @@ compiler_try_except(struct compiler *c, stmt_ty s)
 static int
 compiler_import_as(struct compiler *c, identifier name, identifier asname)
 {
-	/* The IMPORT_NAME opcode was already generated.  This function
+	/* The #@import_name call was already generated.  This function
 	   merely needs to bind the result to a name.
 
 	   If there is a dot in name, we need to split it and emit a 
@@ -1959,10 +1978,13 @@ compiler_import(struct compiler *c, stmt_ty s)
 		if (level == NULL)
 			return 0;
 
+		if (!compiler_load_global(c, "#@import_name"))
+			return 0;
 		ADDOP_O(c, LOAD_CONST, level, consts);
 		Py_DECREF(level);
 		ADDOP_O(c, LOAD_CONST, Py_None, consts);
-		ADDOP_NAME(c, IMPORT_NAME, alias->name, names);
+		ADDOP_O(c, LOAD_CONST, alias->name, consts);
+		ADDOP_I(c, CALL_FUNCTION, 3);
 
 		if (alias->asname) {
 			r = compiler_import_as(c, alias->name, alias->asname);
@@ -1974,7 +1996,7 @@ compiler_import(struct compiler *c, stmt_ty s)
 			const char *base = PyString_AS_STRING(alias->name);
 			char *dot = strchr(base, '.');
 			if (dot)
-				tmp = PyString_FromStringAndSize(base, 
+				tmp = PyString_FromStringAndSize(base,
 								 dot - base);
 			r = compiler_nameop(c, tmp, Store);
 			if (dot) {
@@ -1994,7 +2016,8 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 
 	PyObject *names = PyTuple_New(n);
 	PyObject *level;
-	
+	alias_ty alias;
+
 	if (!names)
 		return 0;
 
@@ -2011,7 +2034,7 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 
 	/* build up the names */
 	for (i = 0; i < n; i++) {
-		alias_ty alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
+		alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		Py_INCREF(alias->name);
 		PyTuple_SET_ITEM(names, i, alias->name);
 	}
@@ -2021,29 +2044,51 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 			    "__future__")) {
 			Py_DECREF(level);
 			Py_DECREF(names);
-			return compiler_error(c, 
+			return compiler_error(c,
 				      "from __future__ imports must occur "
 				      "at the beginning of the file");
 
 		}
 	}
 
+	/* Handle 'from x import *' */
+	alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, 0);
+	if (PyString_AS_STRING(alias->name)[0] == '*') {
+		assert(n == 1);
+		if (!compiler_load_global(c, "#@import_star"))
+			return 0;
+		if (!compiler_load_global(c, "#@import_name"))
+			return 0;
+		ADDOP_O(c, LOAD_CONST, level, consts);
+		Py_DECREF(level);
+		ADDOP_O(c, LOAD_CONST, names, consts);
+		Py_DECREF(names);
+		ADDOP_O(c, LOAD_CONST, s->v.ImportFrom.module, consts);
+		ADDOP_I(c, CALL_FUNCTION, 3);
+		ADDOP_I(c, CALL_FUNCTION, 1);
+		ADDOP(c, POP_TOP);
+		return 1;
+	}
+	/* Handle all other imports. */
+	if (!compiler_load_global(c, "#@import_from"))
+		return 0;
+	if (!compiler_load_global(c, "#@import_name"))
+		return 0;
 	ADDOP_O(c, LOAD_CONST, level, consts);
 	Py_DECREF(level);
 	ADDOP_O(c, LOAD_CONST, names, consts);
 	Py_DECREF(names);
-	ADDOP_NAME(c, IMPORT_NAME, s->v.ImportFrom.module, names);
+	ADDOP_O(c, LOAD_CONST, s->v.ImportFrom.module, consts);
+	ADDOP_I(c, CALL_FUNCTION, 3);
 	for (i = 0; i < n; i++) {
-		alias_ty alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
+		alias = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
 		identifier store_name;
 
-		if (i == 0 && *PyString_AS_STRING(alias->name) == '*') {
-			assert(n == 1);
-			ADDOP(c, IMPORT_STAR);
-			return 1;
-		}
-		    
-		ADDOP_NAME(c, IMPORT_FROM, alias->name, names);
+		/* The DUP_TOP_TWO ends up duplicating [#@import_from, module],
+		where module is the return value from #@import_name. */
+		ADDOP(c, DUP_TOP_TWO);
+		ADDOP_O(c, LOAD_CONST, alias->name, consts);
+		ADDOP_I(c, CALL_FUNCTION, 2);
 		store_name = alias->name;
 		if (alias->asname)
 			store_name = alias->asname;
@@ -2053,8 +2098,8 @@ compiler_from_import(struct compiler *c, stmt_ty s)
 			return 0;
 		}
 	}
-	/* remove imported module */
-	ADDOP(c, POP_TOP);
+	ADDOP(c, POP_TOP);  /* remove imported module */
+	ADDOP(c, POP_TOP);  /* remove #@import_from function */
 	return 1;
 }
 
@@ -2174,26 +2219,16 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 	case ImportFrom_kind:
 		return compiler_from_import(c, s);
 	case Exec_kind:
-		VISIT(c, expr, s->v.Exec.body);
-		if (s->v.Exec.globals) {
-			VISIT(c, expr, s->v.Exec.globals);
-			if (s->v.Exec.locals) {
-				VISIT(c, expr, s->v.Exec.locals);
-			} else {
-				ADDOP(c, DUP_TOP);
-			}
-		} else {
-			ADDOP_O(c, LOAD_CONST, Py_None, consts);
-			ADDOP(c, DUP_TOP);
-		}
-		ADDOP(c, EXEC_STMT);
-		break;
+		return compiler_exec(c, s);
 	case Global_kind:
 		break;
 	case Expr_kind:
 		if (c->c_interactive && c->c_nestlevel <= 1) {
+			if (!compiler_load_global(c, "#@displayhook"))
+				return 0;
 			VISIT(c, expr, s->v.Expr.value);
-			ADDOP(c, PRINT_EXPR);
+			ADDOP_I(c, CALL_FUNCTION, 1);
+			ADDOP(c, POP_TOP);
 		}
 		else if (s->v.Expr.value->kind != Str_kind &&
 			 s->v.Expr.value->kind != Num_kind) {
@@ -2469,6 +2504,28 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
 	if (arg < 0)
 		return 0;
 	return compiler_addop_i(c, op, arg);
+}
+
+static int
+compiler_load_global(struct compiler *c, const char *global_name)
+{
+    int arg;
+    PyObject *str = PyString_InternFromString(global_name);
+    if (!str) {
+    	compiler_exit_scope(c);
+    	return 0;
+    }
+    arg = compiler_add_o(c, c->u->u_names, str);
+    Py_DECREF(str);
+    if (arg < 0) {
+    	compiler_exit_scope(c);
+    	return 0;
+    }
+    if (!compiler_addop_i(c, LOAD_GLOBAL, arg)) {
+    	compiler_exit_scope(c);
+    	return 0;
+    }
+    return 1;
 }
 
 static int
@@ -2801,7 +2858,7 @@ compiler_genexp(struct compiler *c, expr_ty e)
 	if (co == NULL)
 		return 0;
 
-	compiler_make_closure(c, co, 0);
+	compiler_make_closure(c, co, NULL);
 	Py_DECREF(co);
 
 	VISIT(c, expr, outermost_iter);
