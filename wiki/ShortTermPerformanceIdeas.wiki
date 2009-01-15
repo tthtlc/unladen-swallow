@@ -24,12 +24,13 @@ Phase One of Unladen Swallow will be based on making the current implementation 
 
 ==Implemented/In progress==
 <ol>
+<li>Convert the Python eval loop's dispatch mechanism to threaded code. This will provide much better CPU-level branch prediction. This is being implemented in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/branches/vmgen vmgen branch].</li>
 <li>Merged http://bugs.python.org/issue4074 into trunk. Much better GC behaviour in the face of large numbers of long-lived objects.</li>
-<li>*Replace slow/rarely-used opcodes with function calls.* Hypothesis: by eliminating stack variables and shrinking the physical size of PyEval_EvalFrameEx, we a) make it faster to call EvalFrameEx, b) save icache space. This is now in trunk. The speedup is marginal, but cleans up the eval loop.</li>
+<li>Replace slow/rarely-used opcodes with function calls. Hypothesis: by eliminating stack variables and shrinking the physical size of PyEval_EvalFrameEx, we a) make it faster to call EvalFrameEx, b) save icache space. This is now in trunk. The speedup is marginal, but cleans up the eval loop.</li>
 </ol>
 
 
 ==Considered, Rejected==
 <ol>
-<li>*Iterative eval loop*. Hypothesis: if we can reuse a single "instance" of the PyEval_EvalFrameEx C stack frame for Python-to-Python function calls, that will be faster than creating a new stack frame for each Python function call. Making this work with the current implementation would have introduced a prohibitively-high amount of new complication for what we estimate to have been a relatively minor performance improvement.</li>
+<li>Iterative eval loop. Hypothesis: if we can reuse a single "instance" of the PyEval_EvalFrameEx C stack frame for Python-to-Python function calls, that will be faster than creating a new stack frame for each Python function call. Making this work with the current implementation would have introduced a prohibitively-high amount of new complication for what we estimate to have been a relatively minor performance improvement.</li>
 </ol>
