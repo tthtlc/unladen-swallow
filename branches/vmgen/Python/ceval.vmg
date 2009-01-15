@@ -45,6 +45,7 @@ if (a == NULL) {
                 PyExc_UnboundLocalError,
                 UNBOUNDLOCAL_ERROR_MSG,
                 PyTuple_GetItem(co->co_varnames, i));
+        why = WHY_EXCEPTION;
         /* On exception, make sure the stack is valid. */
         STACKADJ(-1);
         ERROR();
@@ -92,6 +93,7 @@ if (err == 0) {
         NEXT();
 }
 STACKADJ(-1);
+why = WHY_EXCEPTION;
 ERROR();
 
 UNARY_CONVERT ( a1 -- a2  dec:a1  next:a2 )
@@ -317,21 +319,22 @@ err = PyObject_DelItem(a1, a2);
 \ _ , PRINT
 PRINT_EXPR ( a1 -- dec:a1  next:on_error )
 a2 = PySys_GetObject("displayhook");
+why = WHY_NOT;  /* Redundant, but clearer. */
 if (a2 == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "lost sys.displayhook");
-        err = -1;
+        why = WHY_EXCEPTION;
         x = NULL;
 }
-if (err == 0) {
+if (why == WHY_NOT) {
         x = PyTuple_Pack(1, a1);
         if (x == NULL)
-                err = -1;
+                why = WHY_EXCEPTION;
 }
-if (err == 0) {
+if (why == WHY_NOT) {
         a2 = PyEval_CallObject(a2, x);
         Py_XDECREF(a2);
         if (a2 == NULL)
-                err = -1;
+                why = WHY_EXCEPTION;
 }
 Py_XDECREF(x);
 
@@ -342,6 +345,7 @@ goto print_item_fallthrough;
 PRINT_ITEM ( --  next:error )
 print_item_fallthrough:
 a1 = POP();
+err = 0;
 if (stream == NULL || stream == Py_None) {
         a2 = PySys_GetObject("stdout");
         if (a2 == NULL) {
@@ -397,6 +401,8 @@ if (a2 != NULL) {
         err = PyFile_WriteString("\n", a2);
         if (err == 0)
                 PyFile_SoftSpace(a2, 0);
+        else
+                why = WHY_EXCEPTION;
         Py_DECREF(a2);
 }
 Py_XDECREF(stream);
@@ -423,6 +429,7 @@ if ((x = f->f_locals) != NULL) {
         NEXT();
 }
 PyErr_SetString(PyExc_SystemError, "no locals");
+why = WHY_EXCEPTION;
 ERROR();
 
 LOAD_NAME ( #i -- )
@@ -440,8 +447,10 @@ if (PyDict_CheckExact(a1)) {
 } else {
         x = PyObject_GetItem(a1, a2);
         if (x == NULL && PyErr_Occurred()) {
-                if (!PyErr_ExceptionMatches(PyExc_KeyError))
+                if (!PyErr_ExceptionMatches(PyExc_KeyError)) {
+                        why = WHY_EXCEPTION;
                         ERROR();
+                }
                 PyErr_Clear();
         }
 }
@@ -451,6 +460,7 @@ if (x == NULL) {
                 x = PyDict_GetItem(f->f_builtins, a2);
                 if (x == NULL) {
                         format_exc_check_arg(PyExc_NameError, NAME_ERROR_MSG, a2);
+                        why = WHY_EXCEPTION;
                         ERROR();
                 }
         }
@@ -470,7 +480,7 @@ if (PyString_CheckExact(a1)) {
                 PyDictObject *d = (PyDictObject *)(f->f_globals);
                 PyDictEntry  *e = d->ma_lookup(d, a1, hash);
                 if (e == NULL) {
-                        x = NULL;
+                        why = WHY_EXCEPTION;
                         ERROR();
                 }
                 x = e->me_value;
@@ -482,7 +492,7 @@ if (PyString_CheckExact(a1)) {
                 d = (PyDictObject *)(f->f_builtins);
                 e = d->ma_lookup(d, a1, hash);
                 if (e == NULL) {
-                        x = NULL;
+                        why = WHY_EXCEPTION;
                         ERROR();
                 }
                 x = e->me_value;
@@ -504,6 +514,7 @@ if (x == NULL) {
                         PyExc_NameError,
                         GLOBAL_NAME_ERROR_MSG,
                         a1);
+                why = WHY_EXCEPTION;
                 ERROR();
         }
 }
@@ -521,7 +532,7 @@ if (a2 != NULL) {
         PUSH(a2);
         NEXT();
 }
-err = -1;
+why = WHY_EXCEPTION;
 /* Don't stomp existing exception */
 if (PyErr_Occurred())
         ERROR();
@@ -558,7 +569,8 @@ why = WHY_YIELD;
 
 \ _ , EXEC_STMT
 EXEC_STMT ( a1 a2 a3 -- dec:a1 dec:a2 dec:a3  next:on_error )
-err = exec_statement(f, a1, a2, a3);
+if (exec_statement(f, a1, a2, a3) != 0)
+        why = WHY_EXCEPTION;
 
 \ _ , POP_BLOCK
 POP_BLOCK ( -- next:next_opcode )
@@ -589,7 +601,9 @@ Py_DECREF(a1);
 
 \ _ , BUILD
 BUILD_CLASS ( a1 a2 a3 -- a  dec:a1 dec:a2 dec:a3  next:on_error )
-x = a = build_class(a3, a2, a1);
+a = build_class(a3, a2, a1);
+if (a == NULL)
+        why = WHY_EXCEPTION;
 
 BUILD_TUPLE ( #i -- )
 x = PyTuple_New(i);
@@ -601,6 +615,7 @@ if (x != NULL) {
         PUSH(x);
         NEXT();
 }
+why = WHY_EXCEPTION;
 ERROR();
 
 BUILD_LIST ( #i -- )
@@ -613,6 +628,7 @@ if (x != NULL) {
         PUSH(x);
         NEXT();
 }
+why = WHY_EXCEPTION;
 ERROR();
 
 BUILD_MAP ( #i -- a  next:a )
@@ -640,11 +656,13 @@ if ((x = f->f_locals) != NULL) {
                 err = PyObject_SetItem(x, a2, a1);
         Py_DECREF(a1);
         if (err == 0) NEXT();
+        why = WHY_EXCEPTION;
         ERROR();
 }
 PyErr_Format(PyExc_SystemError,
              "no locals found when storing %s",
              PyObject_REPR(a2));
+why = WHY_EXCEPTION;
 ERROR();
 
 STORE_ATTR ( #i a1 a2 -- dec:a1 dec:a2  next:error )
@@ -663,23 +681,29 @@ PyCell_Set(x, a);
 DELETE_NAME ( #i -- )
 a1 = GETITEM(names, i);
 if ((x = f->f_locals) != NULL) {
-        if ((err = PyObject_DelItem(x, a1)) != 0)
+        if ((err = PyObject_DelItem(x, a1)) != 0) {
                 format_exc_check_arg(PyExc_NameError, NAME_ERROR_MSG, a1);
+                why = WHY_EXCEPTION;
+        }
         ERROR();
 }
 PyErr_Format(PyExc_SystemError,
              "no locals when deleting %s",
              PyObject_REPR(a1));
+why = WHY_EXCEPTION;
 ERROR();
 
 DELETE_ATTR ( #i a1 -- dec:a1  next:on_error )
 a2 = GETITEM(names, i);
-err = PyObject_SetAttr(a1, a2, (PyObject *) NULL); /* del a1.a2 */
+if (0 != PyObject_SetAttr(a1, a2, (PyObject *) NULL) /* del a1.a2 */)
+        why = WHY_EXCEPTION;
 
 DELETE_GLOBAL ( #i -- next:on_error )
 a1 = GETITEM(names, i);
-if ((err = PyDict_DelItem(f->f_globals, a1)) != 0)
+if ((err = PyDict_DelItem(f->f_globals, a1)) != 0) {
         format_exc_check_arg(PyExc_NameError, GLOBAL_NAME_ERROR_MSG, a1);
+        why = WHY_EXCEPTION;
+}
 
 DELETE_FAST ( #i -- )
 x = GETLOCAL(i);
@@ -691,6 +715,7 @@ format_exc_check_arg(
         PyExc_UnboundLocalError,
         UNBOUNDLOCAL_ERROR_MSG,
         PyTuple_GetItem(co->co_varnames, i));
+why = WHY_EXCEPTION;
 ERROR();
 
 \ _ , UNPACK_SEQUENCE
@@ -754,6 +779,7 @@ a3 = GETITEM(names, i);
 x = PyDict_GetItemString(f->f_builtins, "__import__");
 if (x == NULL) {
         PyErr_SetString(PyExc_ImportError, "__import__ not found");
+        why = WHY_EXCEPTION;
         ERROR();
 }
 Py_INCREF(x);
@@ -777,7 +803,7 @@ Py_DECREF(a1);
 if (a3 == NULL) {
         a1 = POP();
         Py_DECREF(x);
-        x = NULL;
+        why = WHY_EXCEPTION;
         ERROR();
 }
 a2 = x;
@@ -786,18 +812,21 @@ Py_DECREF(a2);
 Py_DECREF(a3);
 SET_TOP(x);
 if (x != NULL) NEXT();
+why = WHY_EXCEPTION;
 ERROR();
 
 IMPORT_STAR ( a1 -- )
 PyFrame_FastToLocals(f);
 if ((x = f->f_locals) == NULL) {
         PyErr_SetString(PyExc_SystemError, "no locals found during 'import *'");
+        why = WHY_EXCEPTION;
         ERROR();
 }
 err = import_all_from(x, a1);
 PyFrame_LocalsToFast(f, 0);
 Py_DECREF(a1);
 if (err == 0) NEXT();
+why = WHY_EXCEPTION;
 ERROR();
 
 IMPORT_FROM ( #i a1 -- a1 a3  next:a3 )
@@ -815,12 +844,12 @@ else if (a1 == Py_False)
         JUMPBY(i);
 else {
         err = PyObject_IsTrue(a1);
-        if (err > 0)
-                err = 0;
+        if (err < 0) {
+                why = WHY_EXCEPTION;
+                ERROR();
+        }
         else if (err == 0)
                 JUMPBY(i);
-        else
-                ERROR();
         NEXT();
 }
 
@@ -831,13 +860,12 @@ else if (a1 == Py_True)
         JUMPBY(i);
 else {
         err = PyObject_IsTrue(a1);
-        if (err > 0) {
-                err = 0;
-                JUMPBY(i);
-        } else if (err == 0)
-                ;
-        else
+        if (err < 0) {
+                why = WHY_EXCEPTION;
                 ERROR();
+        }
+        else if (err > 0)
+                JUMPBY(i);
         NEXT();
 }
 
@@ -855,6 +883,7 @@ if (x != NULL) {
         NEXT();
 }
 STACKADJ(-1);
+why = WHY_EXCEPTION;
 ERROR();
 
 FOR_ITER ( #i -- )
@@ -866,12 +895,14 @@ if (x != NULL) {
         NEXT();
 }
 if (PyErr_Occurred()) {
-        if (!PyErr_ExceptionMatches(PyExc_StopIteration))
+        if (!PyErr_ExceptionMatches(PyExc_StopIteration)) {
+                why = WHY_EXCEPTION;
                 ERROR();
+        }
         PyErr_Clear();
 }
 /* iterator ended normally */
-x = a1 = POP();
+a1 = POP();
 Py_DECREF(a1);
 JUMPBY(i);
 NEXT();
@@ -883,7 +914,7 @@ why = WHY_BREAK;
 CONTINUE_LOOP ( #i -- )
 retval = PyInt_FromLong(i);
 if (!retval) {
-        x = NULL;
+        why = WHY_EXCEPTION;
         ERROR();
 }
 why = WHY_CONTINUE;
@@ -963,17 +994,20 @@ WITH_CLEANUP ( -- )
         x = PyObject_CallFunctionObjArgs(exit_func, a1, a2, a3,
                                          NULL);
         Py_DECREF(exit_func);
-        if (x == NULL)
+        if (x == NULL) {
+                why = WHY_EXCEPTION;
                 ERROR(); /* Go to error exit */
+        }
         if (a1 != Py_None)
                 err = PyObject_IsTrue(x);
         else
                 err = 0;
         Py_DECREF(x);
-        if (err < 0)
+        if (err < 0) {
+                why = WHY_EXCEPTION;
                 ERROR(); /* Go to error exit */
+        }
         else if (err > 0) {
-                err = 0;
                 /* There was an exception and a true return */
                 STACKADJ(-2);
                 Py_INCREF(Py_None);
@@ -995,6 +1029,7 @@ x = call_function(&sp, i);
 stack_pointer = sp;
 PUSH(x);
 if (x != NULL) NEXT();
+why = WHY_EXCEPTION;
 ERROR();
 
 CALL_FUNCTION_VAR_KW ( #i -- )
@@ -1032,6 +1067,7 @@ while (stack_pointer > pfunc) {
 }
 PUSH(x);
 if (x != NULL) NEXT();
+why = WHY_EXCEPTION;
 ERROR();
 
 \ _ , MAKE
@@ -1044,22 +1080,25 @@ if (x != NULL && i > 0) {
         a1 = PyTuple_New(i);
         if (a1 == NULL) {
                 Py_DECREF(x);
-                x = NULL;
+                why = WHY_EXCEPTION;
                 ERROR();
         }
         while (--i >= 0) {
                 a2 = POP();
                 PyTuple_SET_ITEM(a1, i, a2);
         }
-        err = PyFunction_SetDefaults(x, a1);
+        if (PyFunction_SetDefaults(x, a1) != 0)
+                why = WHY_EXCEPTION;
         Py_DECREF(a1);
 }
 PUSH(x);
+if (x == NULL) why = WHY_EXCEPTION;
 ERROR();
 
 MAKE_CLOSURE ( #i -- )
 a1 = POP(); /* code object */
-x = PyFunction_New(a1, f->f_globals);
+if ((x = PyFunction_New(a1, f->f_globals)) == NULL)
+        why = WHY_EXCEPTION;
 Py_DECREF(a1);
 if (x != NULL) {
         a1 = POP();
@@ -1073,7 +1112,7 @@ if (x != NULL && i > 0) {
         a1 = PyTuple_New(i);
         if (a1 == NULL) {
                 Py_DECREF(x);
-                x = NULL;
+                why = WHY_EXCEPTION;
                 ERROR();
         }
         while (--i >= 0) {

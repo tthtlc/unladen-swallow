@@ -603,16 +603,18 @@ typedef PyObject *Obj;
 #define vm_fast_yield2next(_x,_y)     ({goto fast_yield;})
 #define vm_a2next(a,_)                           \
         ({if ((a) != NULL) {                     \
-                  x = Py_None;                   \
+                  why = WHY_NOT;                 \
                   NEXT();                        \
          } else {                                \
-                  x = NULL;                      \
+                  why = WHY_EXCEPTION;           \
                   ERROR();                       \
          }})
 #define vm_error2next(_x,_y)                     \
         ({if (err == 0) {                        \
+		  why = WHY_NOT;                 \
                   NEXT();                        \
          } else {                                \
+		  why = WHY_EXCEPTION;           \
                   ERROR();                       \
          }})
 
@@ -664,8 +666,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	Inst *next_instr;
 	register enum why_code why; /* Reason for block stack unwind */
 	register int err;	/* Error status -- nonzero if error */
-	register PyObject *x;	/* Result object -- NULL if error */
-	PyObject *a1;	        /* Temporary objects popped off stack */
+	register PyObject *x;	/* Temporary objects popped off stack */
+	PyObject *a1;
 	PyObject *a2;
 	PyObject *a3;
 	PyObject *stream = NULL;    /* for PRINT opcodes */
@@ -845,8 +847,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #endif
 
 	why = WHY_NOT;
-	err = 0;
-	x = Py_None;	/* Not a reference, just anything non-NULL */
 	a1 = a2 = NULL;
 
 	if (throwflag) { /* support for generator.throw() */
@@ -935,10 +935,14 @@ fast_next_opcode:
 		}
 		if (err) {
 			/* trace function raised an exception */
+			why = WHY_EXCEPTION;
 			goto on_error;
 		}
 	}
 
+	assert(why == WHY_NOT);
+	/* XXX(jyasskin): Add an assertion under CHECKEXC that
+	   !PyErr_Occurred(). */
 	/* Dispatch */
         goto *(next_instr->opcode);
 
@@ -949,12 +953,20 @@ on_error:
         /* Quickly continue if no error occurred */
 
         if (why == WHY_NOT) {
-                if (err == 0 && x != NULL) {
-                        NEXT(); /* Normal, fast path */
-                }
-                why = WHY_EXCEPTION;
-                x = Py_None;
-                err = 0;
+#ifdef CHECKEXC
+		/* This check is expensive! */
+		if (PyErr_Occurred()) {
+			fprintf(stderr,
+				"XXX undetected error\n");
+			why = WHY_EXCEPTION;
+		}
+		else {
+#endif
+			READ_TIMESTAMP(loop1);
+			NEXT(); /* Normal, fast path */
+#ifdef CHECKEXC
+		}
+#endif
         }
 
         /* Double-check exception status */
@@ -1037,6 +1049,11 @@ fast_block_end:
                                         PUSH(tb);
                                 PUSH(val);
                                 PUSH(exc);
+                                /* Within the except or finally block,
+                                   PyErr_Occurred() should be false.
+                                   END_FINALLY will restore the
+                                   exception if necessary. */
+                                PyErr_Clear();
                         }
                         else {
                                 if (why & (WHY_RETURN | WHY_CONTINUE))
