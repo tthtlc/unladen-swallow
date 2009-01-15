@@ -232,8 +232,8 @@ def MeasureTemplates(python, psyco_build_dir, options):
     SPITFIRE_DIR = Relative("lib/spitfire")
     TEST_PROG = Relative("lib/spitfire/tests/perf/bigtable.py")
 
-    python_path = ":".join([SPITFIRE_DIR, DJANGO_DIR, psyco_build_dir])
-    spitfire_env = {"PYTHONPATH": python_path}
+    valid_paths = filter(bool, [SPITFIRE_DIR, DJANGO_DIR, psyco_build_dir])
+    spitfire_env = {"PYTHONPATH": ":".join(valid_paths)}
 
     with open("/dev/null", "wb") as dev_null:
         # Warm up the cache and .pyc files.
@@ -267,6 +267,26 @@ def MeasureTemplates(python, psyco_build_dir, options):
     return {"Spitfire": spitfire_times, "Django": django_times}
 
 
+def ComesWithPsyco(python):
+    """Determine whether the given Python binary already has Psyco.
+
+    If the answer is no, we should build it (see BuildPsyco()).
+
+    Args:
+        python: path to the Python binary.
+
+    Returns:
+        True if we can "import psyco" with the given Python, False if not.
+    """
+    try:
+        with open("/dev/null", "wb") as dev_null:
+            subprocess.check_call([python, "-E", "-c", "import psyco"],
+                                  stdout=dev_null, stderr=dev_null)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
 def BuildPsyco(python):
     """Build Psyco against the given Python binary.
 
@@ -279,7 +299,7 @@ def BuildPsyco(python):
     """
     PSYCO_SRC_DIR = Relative("lib/psyco")
 
-    info("Building Psyco with %s", python)
+    info("Building Psyco for %s", python)
     psyco_build_dir = tempfile.mkdtemp()
     abs_python = os.path.abspath(python)
     with ChangeDir(PSYCO_SRC_DIR):
@@ -289,8 +309,11 @@ def BuildPsyco(python):
 
 
 def BM_Templates(base_python, changed_python, options):
-    changed_psyco_dir = BuildPsyco(changed_python)
-    base_psyco_dir = BuildPsyco(base_python)
+    changed_psyco_dir = base_psyco_dir = ""
+    if not ComesWithPsyco(changed_python):
+        changed_psyco_dir = BuildPsyco(changed_python)
+    if not ComesWithPsyco(base_python):
+        base_psyco_dir = BuildPsyco(base_python)
     try:
         all_changed_times = MeasureTemplates(changed_python, changed_psyco_dir,
                                              options)
