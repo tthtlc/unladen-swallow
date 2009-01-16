@@ -342,7 +342,38 @@ def BM_Templates(base_python, changed_python, options):
     return "\n\n".join(output)
 
 
+def ParseBenchmarksOption(options, legal_benchmarks):
+    """Parses and verifies the --benchmarks option so ShouldRun can use it.
+
+    Sets options.positive_benchmarks and options.negative_benchmarks.
+    """
+    benchmarks = options.benchmarks.split(",")
+    options.positive_benchmarks = set(
+        bm.lower() for bm in benchmarks if bm and bm[0] != "-")
+    options.negative_benchmarks = set(
+        bm[1:].lower() for bm in benchmarks if bm and bm[0] == "-")
+
+    legal_benchmarks = set(name.lower() for (name, func) in legal_benchmarks)
+    for bm in options.positive_benchmarks | options.negative_benchmarks:
+        if bm not in legal_benchmarks:
+            logging.warning("No benchmark named %s", bm)
+
+
+def ShouldRun(benchmark, options):
+    """Returns true if the options indicate that we should run 'benchmark'."""
+    benchmark = benchmark.lower()
+    if benchmark in options.negative_benchmarks:
+        return False
+    if options.positive_benchmarks:
+        return benchmark in options.positive_benchmarks
+    return True
+
+
 if __name__ == "__main__":
+    benchmarks = [(name[3:], func)
+                  for name, func in sorted(globals().iteritems())
+                  if name.startswith("BM_")]
+
     parser = optparse.OptionParser(
         usage="%prog [options] baseline_python changed_python",
         description=("Compares the performance of baseline_python with" +
@@ -354,6 +385,15 @@ if __name__ == "__main__":
                       help=("Get rough answers quickly"))
     parser.add_option("-v", "--verbose", action="store_true",
                       help=("Print more output"))
+    parser.add_option("-b", "--benchmarks", metavar="BM_LIST", default="",
+                      help=("Comma-separated list of benchmarks to run.  Can" +
+                            " contain both positive and negative arguments:" +
+                            "  --benchmarks=run_this,also_this,-not_this.  If" +
+                            " there are no positive arguments, we'll run all" +
+                            " benchmarks except the negative arguments. " +
+                            " Otherwise we run only the positive arguments. " +
+                            " Valid benchmarks are: " +
+                            ", ".join(name for (name, func) in benchmarks)))
 
     options, args = parser.parse_args()
     if len(args) != 2:
@@ -362,14 +402,13 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    benchmarks = [(name[3:], func)
-                  for name, func in sorted(globals().iteritems())
-                  if name.startswith("BM_")]
+    ParseBenchmarksOption(options, benchmarks)
 
     results = []
     for name, func in benchmarks:
-        print "Running %s..." % name
-        results.append((name, func(base, changed, options)))
+        if ShouldRun(name, options):
+            print "Running %s..." % name
+            results.append((name, func(base, changed, options)))
 
     print
     print "Report on %s" % " ".join(platform.uname())
