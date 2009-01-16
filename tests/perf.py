@@ -87,6 +87,7 @@ def BM_PyBench(base_python, changed_python, options):
         warp = "100"
 
     PYBENCH_PATH = Relative("performance/pybench/pybench.py")
+    PYBENCH_ENV = {"PYTHONPATH": ""}
 
     try:
         with contextlib.nested(open("/dev/null", "wb"),
@@ -97,17 +98,20 @@ def BM_PyBench(base_python, changed_python, options):
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", changed_pybench.name,
-                                           ]), stdout=dev_null)
+                                           ]), stdout=dev_null,
+                                           env=PYBENCH_ENV)
             subprocess.check_call(LogCall([base_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", base_pybench.name,
-                                           ]), stdout=dev_null)
+                                           ]), stdout=dev_null,
+                                           env=PYBENCH_ENV)
             comparer = subprocess.Popen([base_python, "-E",
                                          PYBENCH_PATH,
                                          "-s", base_pybench.name,
                                          "-c", changed_pybench.name,
-                                         ], stdout=subprocess.PIPE)
+                                         ], stdout=subprocess.PIPE,
+                                         env=PYBENCH_ENV)
             result, err = comparer.communicate()
             if comparer.returncode != 0:
                 return "pybench died: " + err
@@ -127,6 +131,7 @@ def BM_PyBench(base_python, changed_python, options):
 def Measure2to3(python, options):
     TWO_TO_THREE_PROG = Relative("lib/2to3/2to3")
     TWO_TO_THREE_DIR = Relative("lib/2to3")
+    TWO_TO_THREE_ENV = {"PYTHONPATH": ""}
 
     if options.fast:
         warmup_target = TWO_TO_THREE_PROG
@@ -139,7 +144,8 @@ def Measure2to3(python, options):
                                        TWO_TO_THREE_PROG,
                                        "-f", "all",
                                        warmup_target]),
-                              stdout=dev_null, stderr=dev_null)
+                              stdout=dev_null, stderr=dev_null,
+                              env=TWO_TO_THREE_ENV)
         if options.rigorous:
             trials = 5
         else:
@@ -151,7 +157,8 @@ def Measure2to3(python, options):
                                            TWO_TO_THREE_PROG,
                                            "-f", "all",
                                            TWO_TO_THREE_DIR]),
-                                  stdout=dev_null, stderr=dev_null)
+                                  stdout=dev_null, stderr=dev_null,
+                                  env=TWO_TO_THREE_ENV)
             end_time = GetChildUserTime()
             elapsed = end_time - start_time
             assert elapsed != 0
