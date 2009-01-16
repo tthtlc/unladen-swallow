@@ -575,6 +575,7 @@ typedef PyObject *Obj;
 #define NEXT_P0 do { \
 		f->f_lasti = INSTR_OFFSET(); \
 		next_instr++; \
+		next_label = next_instr->opcode; \
 	} while (0)
 
 /* Reference counting annotations */
@@ -587,7 +588,7 @@ typedef PyObject *Obj;
 #define NEXT_P1 /* Nothing */
 #define NEXT_P2 do { \
 		if (_Py_TracingPossible) goto fast_next_opcode; \
-		goto *(next_instr->opcode); \
+		goto *next_label; \
 	} while(0)
 
 /* Most instructions dispatch as indicated by their next: annotation.
@@ -659,6 +660,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 {
 	PyObject **stack_pointer;   /* Next free slot in value stack */
 	Inst *next_instr;
+	void *next_label;  /* Caches next_instr->opcode so error
+                              conditions can override it. */
 	register enum why_code why; /* Reason for block stack unwind */
 	register int err;	/* Error status -- nonzero if error */
 	register PyObject *x;	/* Temporary objects popped off stack */
@@ -705,8 +708,14 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define JUMPBY(x)       INC_IP(x)
 #define IP              (next_instr)
 #define IPTOS           (*next_instr)
-#define INC_IP(n)       ({next_instr += (n);})
-#define SET_IP(target)  ({next_instr = (target);})
+#define INC_IP(n)       do { \
+                next_instr += (n); \
+                next_label = next_instr->opcode; \
+        } while(0)
+#define SET_IP(target)  do { \
+                next_instr = (target); \
+                next_label = next_instr->opcode; \
+        } while(0)
 
 /* Stack manipulation macros */
 
