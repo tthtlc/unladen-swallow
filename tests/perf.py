@@ -244,7 +244,8 @@ def MeasureTemplates(python, psyco_build_dir, options):
 
     with open("/dev/null", "wb") as dev_null:
         # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall([python, "-O", TEST_PROG]),
+        subprocess.check_call(LogCall([python, "-O", TEST_PROG,
+                                       "django", "spitfire_o4"]),
                               stdout=dev_null, stderr=dev_null,
                               env=spitfire_env)
         if options.rigorous:
@@ -254,9 +255,10 @@ def MeasureTemplates(python, psyco_build_dir, options):
         spitfire_times = []
         django_times = []
         for _ in range(trials):
-            spitfire = subprocess.Popen(LogCall([python, "-O", TEST_PROG]),
-                                  stdout=subprocess.PIPE, stderr=dev_null,
-                                  env=spitfire_env)
+            spitfire = subprocess.Popen(LogCall([python, "-O", TEST_PROG,
+                                                 "django", "spitfire_o4"]),
+                                        stdout=subprocess.PIPE, stderr=dev_null,
+                                        env=spitfire_env)
             result, err = spitfire.communicate()
             if spitfire.returncode != 0:
                 return "Spitfire died: " + err
