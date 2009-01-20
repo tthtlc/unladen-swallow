@@ -249,9 +249,9 @@ def MeasureTemplates(python, psyco_build_dir, options):
                               stdout=dev_null, stderr=dev_null,
                               env=spitfire_env)
         if options.rigorous:
-            trials = 15
+            trials = 50
         else:
-            trials = 6
+            trials = 20
         spitfire_times = []
         django_times = []
         for _ in range(trials):
