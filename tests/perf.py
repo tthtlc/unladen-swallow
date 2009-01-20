@@ -50,6 +50,16 @@ def GetChildUserTime():
     return resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
 
+@contextlib.contextmanager
+def TemporaryFilename(prefix):
+    fd, name = tempfile.mkstemp(prefix=prefix)
+    os.close(fd)
+    try:
+        yield name
+    finally:
+        os.remove(name)
+
+
 def TimeDelta(old, new):
     delta = ((new - old) / new) * 100
     if delta > 0:
@@ -91,25 +101,25 @@ def BM_PyBench(base_python, changed_python, options):
 
     try:
         with contextlib.nested(open("/dev/null", "wb"),
-                               tempfile.NamedTemporaryFile(prefix="baseline."),
-                               tempfile.NamedTemporaryFile(prefix="changed.")
+                               TemporaryFilename(prefix="baseline."),
+                               TemporaryFilename(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
             subprocess.check_call(LogCall([changed_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
-                                           "-f", changed_pybench.name,
+                                           "-f", changed_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
             subprocess.check_call(LogCall([base_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
-                                           "-f", base_pybench.name,
+                                           "-f", base_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
             comparer = subprocess.Popen([base_python, "-E",
                                          PYBENCH_PATH,
-                                         "-s", base_pybench.name,
-                                         "-c", changed_pybench.name,
+                                         "-s", base_pybench,
+                                         "-c", changed_pybench,
                                          ], stdout=subprocess.PIPE,
                                          env=PYBENCH_ENV)
             result, err = comparer.communicate()
