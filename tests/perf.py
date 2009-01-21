@@ -217,9 +217,9 @@ def CompareMultipleRuns(base_times, changed_times):
     avg_base, avg_changed = avg(base_times), avg(changed_times)
     delta_min = TimeDelta(min_base, min_changed)
     delta_avg = TimeDelta(avg_base, avg_changed)
-    return (("Min: %(min_base).2f -> %(min_changed).2f:" +
+    return (("Min: %(min_base).3f -> %(min_changed).3f:" +
              " %(delta_min)s\n" +
-             "Avg: %(avg_base).2f -> %(avg_changed).2f:" +
+             "Avg: %(avg_base).3f -> %(avg_changed).3f:" +
              " %(delta_avg)s")
              % locals())
 
