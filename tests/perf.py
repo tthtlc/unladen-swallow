@@ -42,6 +42,7 @@ def Relative(path):
 
 
 def LogCall(command):
+    command = map(str, command)
     info("Running %s", " ".join(command))
     return command
 
@@ -222,69 +223,37 @@ def CompareMultipleRuns(base_times, changed_times):
              % locals())
 
 
-def ParseTemplateOutput(output, benchmark_title):
-    """Parse the output from Spitfire's bigtable.py, looking for results.
-
-    Args:
-        output: string, bigtable.py's stdout.
-        benchmark_title: the string prefix of the benchmark we want results
-            for.
-
-    Returns:
-        The time it took the given benchmark to run, as a float.
-
-    Raises:
-        ValueError: if the given `benchmark_title` isn't found.
-    """
-    for line in output.splitlines():
-        if line.startswith(benchmark_title):
-            # -1 == "ms", -2 is the timing data we want.
-            number = line.split()[-2]
-            return float(number)
-    raise ValueError("Invalid bigtable.py output")
-
-
-def MeasureTemplates(python, psyco_build_dir, options):
+def MeasureDjango(python, options):
     DJANGO_DIR = Relative("lib/django")
-    SPITFIRE_DIR = Relative("lib/spitfire")
-    TEST_PROG = Relative("lib/spitfire/tests/perf/bigtable.py")
+    TEST_PROG = Relative("performance/macro_django.py")
 
-    valid_paths = filter(bool, [SPITFIRE_DIR, DJANGO_DIR, psyco_build_dir])
-    spitfire_env = {"PYTHONPATH": ":".join(valid_paths)}
+    django_env = {"PYTHONPATH": DJANGO_DIR}
 
     with open("/dev/null", "wb") as dev_null:
-        # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall([python, "-O", TEST_PROG,
-                                       "django", "spitfire_o4"]),
-                              stdout=dev_null, stderr=dev_null,
-                              env=spitfire_env)
-        trials = 20
+        trials = 50
         if options.rigorous:
-            trials = 50
+            trials = 100
         elif options.fast:
             trials = 5
-        spitfire_times = []
-        django_times = []
-        for _ in range(trials):
-            spitfire = subprocess.Popen(LogCall([python, "-O", TEST_PROG,
-                                                 "django", "spitfire_o4"]),
-                                        stdout=subprocess.PIPE, stderr=dev_null,
-                                        env=spitfire_env)
-            result, err = spitfire.communicate()
-            if spitfire.returncode != 0:
-                return "Spitfire died: " + err
 
-            # We consider Spitfire with -O4 because presumably people aren't
-            # using lower optimization settings.
-            elapsed = ParseTemplateOutput(result, "Spitfire template -O4")
-            assert elapsed != 0
-            spitfire_times.append(elapsed)
+        command = [python, "-O", TEST_PROG, "-n", trials]
+        django = subprocess.Popen(LogCall(command),
+                                  stdout=subprocess.PIPE, stderr=dev_null,
+                                  env=django_env)
+        result, err = django.communicate()
+        if django.returncode != 0:
+            return "Django test died: " + err
+        return [float(line) for line in result.splitlines()]
 
-            elapsed = ParseTemplateOutput(result, "Djange template")  # Sic.
-            assert elapsed != 0
-            django_times.append(elapsed)
 
-    return {"Spitfire": spitfire_times, "Django": django_times}
+def BM_Django(base_python, changed_python, options):
+    try:
+        changed_times = MeasureDjango(changed_python, options)
+        base_times = MeasureDjango(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareMultipleRuns(base_times, changed_times)
 
 
 def ComesWithPsyco(python):
@@ -328,31 +297,88 @@ def BuildPsyco(python):
     return psyco_build_dir
 
 
-def BM_Templates(base_python, changed_python, options):
-    changed_psyco_dir = base_psyco_dir = ""
-    if not ComesWithPsyco(changed_python):
-        changed_psyco_dir = BuildPsyco(changed_python)
-    if not ComesWithPsyco(base_python):
-        base_psyco_dir = BuildPsyco(base_python)
+def MeasureSpitfire(python, options, env={}, extra_args=[]):
+    """Use Spitfire to test a Python binary's performance.
+
+    Args:
+        python: path to the Python binary to test.
+        options: optparse.Values instance.
+        env: optional; dict of environment variables to pass to Python.
+        extra_args: optional; list of arguments to append to the Python
+            command.
+
+    Returns:
+        List of floats, each the time it took to run the Spitfire test once.
+    """
+    TEST_PROG = Relative("performance/macro_spitfire.py")
+
+    with open("/dev/null", "wb") as dev_null:
+        trials = 50
+        if options.rigorous:
+            trials = 100
+        elif options.fast:
+            trials = 5
+
+        command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
+        spitfire = subprocess.Popen(LogCall(command),
+                                    stdout=subprocess.PIPE, stderr=dev_null,
+                                    env=env)
+        result, err = spitfire.communicate()
+        if spitfire.returncode != 0:
+            return "Spitfire test died: " + err
+        return [float(line) for line in result.splitlines()]
+
+
+def MeasureSpitfireWithPsyco(python, options):
+    """Use Spitfire to measure Python's performance.
+
+    Args:
+        python: path to the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        List of floats, each the time it took to run the Spitfire test once.
+    """
+    SPITFIRE_DIR = Relative("lib/spitfire")
+
+    psyco_dir = ""
+    if not ComesWithPsyco(python):
+        psyco_dir = BuildPsyco(python)
+
+    env_dirs = filter(bool, [SPITFIRE_DIR, psyco_dir])
+    spitfire_env = {"PYTHONPATH": ":".join(env_dirs)}
+
     try:
-        all_changed_times = MeasureTemplates(changed_python, changed_psyco_dir,
-                                             options)
-        all_base_times = MeasureTemplates(base_python, base_psyco_dir, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
+        return MeasureSpitfire(python, options, spitfire_env)
     finally:
         try:
-            shutil.rmtree(changed_psyco_dir)
-            shutil.rmtree(base_psyco_dir)
+            shutil.rmtree(psyco_dir)
         except OSError:
             pass
 
-    output = []
-    for template_name, changed_times in all_changed_times.items():
-        base_times = all_base_times[template_name]
-        comparison = CompareMultipleRuns(base_times, changed_times)
-        output.append(template_name + ":\n" + comparison)
-    return "\n\n".join(output)
+
+def BM_Spitfire(base_python, changed_python, options):
+    try:
+        changed_times = MeasureSpitfireWithPsyco(changed_python, options)
+        base_times = MeasureSpitfireWithPsyco(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareMultipleRuns(base_times, changed_times)
+
+
+def BM_SlowSpitfire(base_python, changed_python, options):
+    extra_args = ["--disable_psyco"]
+    spitfire_env = {"PYTHONPATH": Relative("lib/spitfire")}
+    try:
+        changed_times = MeasureSpitfire(changed_python, options,
+                                        spitfire_env, extra_args)
+        base_times = MeasureSpitfire(base_python, options,
+                                     spitfire_env, extra_args)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareMultipleRuns(base_times, changed_times)
 
 
 def ParseBenchmarksOption(options, legal_benchmarks):
