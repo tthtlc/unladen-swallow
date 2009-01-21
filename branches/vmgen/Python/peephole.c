@@ -378,6 +378,42 @@ combine_to_superinstructions(PyPInst *inststr, Py_ssize_t codelen,
 	}
 }
 
+/* Takes 'super', an instruction index, and fills the component
+   primitive instructions into the 'prims' array, which must hold at
+   least 'prims_len' elements.  Returns the number of primitive
+   instructions now in the array.  The instructions are returned in
+   reverse order, so if _PyCode_UncombineSuperInstruction returns 3,
+   prims[2] will hold the first component instruction, prims[1] will
+   hold the second, and prims[0] will hold the third.  Returns -1 if
+   prims_len is too small. */
+int _PyCode_UncombineSuperInstruction(int super, int *prims, int prims_len)
+{
+	int num_prims = 0;
+	const int num_supers =
+		sizeof(peephole_table) / sizeof(peephole_table[0]);
+	int super_found = true;
+	while (super_found) {
+		int i;
+		super_found = false;
+		for (i = 0; i < num_supers; i++) {
+			if (peephole_table[i].combination == super) {
+				if (num_prims >= prims_len) {
+					return -1;
+				}
+				super = peephole_table[i].prefix;
+				prims[num_prims++] = peephole_table[i].lastprim;
+				super_found = true;
+				break;
+			}
+		}
+	}
+	if (num_prims >= prims_len) {
+		return -1;
+	}
+	prims[num_prims++] = super;
+	return num_prims;
+}
+
 /* Perform basic peephole optimizations to components of a code object.
    The consts object should still be in list form to allow new constants 
    to be appended.

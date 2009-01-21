@@ -116,6 +116,17 @@ PyAPI_FUNC(int) PyCode_CheckLineNumber(PyCodeObject* co,
 PyAPI_FUNC(PyObject*) PyCode_Optimize(PyObject *code, PyObject* consts,
                                       PyObject *names, PyObject *lineno_obj);
 
+/* Takes 'super', an instruction index, and fills the component
+   primitive instructions into the 'prims' array, which must hold at
+   least 'prims_len' elements.  Returns the number of primitive
+   instructions now in the array.  The instructions are returned in
+   reverse order, so if _PyCode_UncombineSuperInstruction returns 3,
+   prims[2] will hold the first component instruction, prims[1] will
+   hold the second, and prims[0] will hold the third.  Returns -1 if
+   prims_len is too small. */
+PyAPI_FUNC(int) _PyCode_UncombineSuperInstruction(
+	int super, int *prims, int prims_len);
+
 #ifdef __cplusplus
 }
 #endif
