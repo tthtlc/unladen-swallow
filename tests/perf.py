@@ -140,21 +140,22 @@ def BM_PyBench(base_python, changed_python, options):
 
 
 def Measure2to3(python, options):
+    FAST_TARGET = Relative("lib/2to3/lib2to3/refactor.py")
     TWO_TO_THREE_PROG = Relative("lib/2to3/2to3")
     TWO_TO_THREE_DIR = Relative("lib/2to3")
     TWO_TO_THREE_ENV = {"PYTHONPATH": ""}
 
     if options.fast:
-        warmup_target = TWO_TO_THREE_PROG
+        target = FAST_TARGET
     else:
-        warmup_target = TWO_TO_THREE_DIR
+        target = TWO_TO_THREE_DIR
 
     with open("/dev/null", "wb") as dev_null:
         # Warm up the cache and .pyc files.
         subprocess.check_call(LogCall([python, "-E", "-O",
                                        TWO_TO_THREE_PROG,
                                        "-f", "all",
-                                       warmup_target]),
+                                       target]),
                               stdout=dev_null, stderr=dev_null,
                               env=TWO_TO_THREE_ENV)
         if options.rigorous:
@@ -167,7 +168,7 @@ def Measure2to3(python, options):
             subprocess.check_call(LogCall([python, "-E", "-O",
                                            TWO_TO_THREE_PROG,
                                            "-f", "all",
-                                           TWO_TO_THREE_DIR]),
+                                           target]),
                                   stdout=dev_null, stderr=dev_null,
                                   env=TWO_TO_THREE_ENV)
             end_time = GetChildUserTime()
