@@ -309,9 +309,12 @@ class PyBuildExt(build_ext):
         return sys.platform
 
     def detect_modules(self):
+        use_system_paths = not os.getenv('IGNORE_SYSTEM_PATHS')
+
         # Ensure that /usr/local is always used
-        add_dir_to_list(self.compiler.library_dirs, '/usr/local/lib')
-        add_dir_to_list(self.compiler.include_dirs, '/usr/local/include')
+        if use_system_paths:
+            add_dir_to_list(self.compiler.library_dirs, '/usr/local/lib')
+            add_dir_to_list(self.compiler.include_dirs, '/usr/local/include')
 
         # Add paths specified in the environment variables LDFLAGS and
         # CPPFLAGS for header and library files.
@@ -361,11 +364,14 @@ class PyBuildExt(build_ext):
         # lib_dirs and inc_dirs are used to search for files;
         # if a file is found in one of those directories, it can
         # be assumed that no additional -I,-L directives are needed.
-        lib_dirs = self.compiler.library_dirs + [
-            '/lib64', '/usr/lib64',
-            '/lib', '/usr/lib',
-            ]
-        inc_dirs = self.compiler.include_dirs + ['/usr/include']
+        lib_dirs = list(self.compiler.library_dirs)
+        inc_dirs = list(self.compiler.include_dirs)
+        if use_system_paths:
+            lib_dirs += [
+                '/lib64', '/usr/lib64',
+                '/lib', '/usr/lib',
+                ]
+            inc_dirs += ['/usr/include']
         exts = []
         missing = []
 
@@ -377,16 +383,18 @@ class PyBuildExt(build_ext):
 
         # Check for AtheOS which has libraries in non-standard locations
         if platform == 'atheos':
-            lib_dirs += ['/system/libs', '/atheos/autolnk/lib']
-            lib_dirs += os.getenv('LIBRARY_PATH', '').split(os.pathsep)
-            inc_dirs += ['/system/include', '/atheos/autolnk/include']
-            inc_dirs += os.getenv('C_INCLUDE_PATH', '').split(os.pathsep)
+            if use_system_paths:
+                lib_dirs += ['/system/libs', '/atheos/autolnk/lib']
+                lib_dirs += os.getenv('LIBRARY_PATH', '').split(os.pathsep)
+                inc_dirs += ['/system/include', '/atheos/autolnk/include']
+                inc_dirs += os.getenv('C_INCLUDE_PATH', '').split(os.pathsep)
 
         # OSF/1 and Unixware have some stuff in /usr/ccs/lib (like -ldb)
-        if platform in ['osf1', 'unixware7', 'openunix8']:
+        if (platform in ['osf1', 'unixware7', 'openunix8'] and
+            use_system_paths):
             lib_dirs += ['/usr/ccs/lib']
 
-        if platform == 'darwin':
+        if platform == 'darwin' or platform == 'linux2':
             # This should work on any unixy platform ;-)
             # If the user has bothered specifying additional -I and -L flags
             # in OPT and LDFLAGS we might as well use them here.
@@ -901,6 +909,8 @@ class PyBuildExt(build_ext):
                     db_incdir.replace("include", 'lib'),
                 ]
                 db_dirs_to_check = filter(os.path.isdir, db_dirs_to_check)
+                # Search directories in the library directories first.
+                db_dirs_to_check.sort(key=lambda d:0 if d in lib_dirs else 1)
 
                 # Look for a version specific db-X.Y before an ambiguoius dbX
                 # XXX should we -ever- look for a dbX name?  Do any
@@ -964,6 +974,7 @@ class PyBuildExt(build_ext):
         # where /usr/include contains an old version of sqlite.
         for d in inc_dirs + sqlite_inc_paths:
             f = os.path.join(d, "sqlite3.h")
+            if sqlite_setup_debug: print "sqlite: looking for sqlite3.h in", f
             if os.path.exists(f):
                 if sqlite_setup_debug: print "sqlite: found %s"%f
                 incf = open(f).read()
@@ -993,10 +1004,15 @@ class PyBuildExt(build_ext):
                 os.path.join(sqlite_incdir, '..', '..', 'lib64'),
                 os.path.join(sqlite_incdir, '..', '..', 'lib'),
             ]
+            # Search directories in the library directories first.
+            sqlite_dirs_to_check.sort(key=lambda d:0 if d in lib_dirs else 1)
             sqlite_libfile = self.compiler.find_library_file(
                                 sqlite_dirs_to_check + lib_dirs, 'sqlite3')
             if sqlite_libfile:
                 sqlite_libdir = [os.path.abspath(os.path.dirname(sqlite_libfile))]
+            elif sqlite_setup_debug:
+                print ("sqlite: no sqlite3 library in %s" %
+                       (sqlite_dirs_to_check + lib_dirs))
 
         if sqlite_incdir and sqlite_libdir:
             sqlite_srcs = ['_sqlite/cache.c',
