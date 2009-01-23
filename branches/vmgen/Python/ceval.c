@@ -586,10 +586,18 @@ typedef PyObject *Obj;
    Firstly, we want to use certain instructions as superinstruction-prefixes,
    and these should dispatch via NEXT_P2. */
 #define NEXT_P1 /* Nothing */
+#ifndef DYNAMIC_EXECUTION_PROFILE
+/* Put an indirect jump in every opcode to take advantage of the
+   processor's branch predictor. */
 #define NEXT_P2 do { \
 		if (_Py_TracingPossible) goto fast_next_opcode; \
 		goto *next_label; \
 	} while(0)
+#else  /* DYNAMIC_EXECUTION_PROFILE defined */
+/* Every instruction needs to go through the profiling code for the
+   profile to be accurate. */
+#define NEXT_P2 goto fast_next_opcode
+#endif  /* DYNAMIC_EXECUTION_PROFILE */
 
 /* Most instructions dispatch as indicated by their next: annotation.
    Vmgen will insert a vm_foo2next() macro just before NEXT_P2. */
@@ -658,6 +666,9 @@ PyEval_EvalFrame(PyFrameObject *f) {
 PyObject *
 PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 {
+#ifdef DXPAIRS
+	int lastopcode = 0;
+#endif
 	PyObject **stack_pointer;   /* Next free slot in value stack */
 	Inst *next_instr;
 	void *next_label;  /* Caches next_instr->opcode so error
@@ -701,6 +712,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 /* Code access macros */
 
 #define INSTR_OFFSET()	((int)(next_instr - first_instr))
+#define CURRENT_OPCODE() \
+	PyPInst_GET_OPCODE(&((PyInstructionsObject*)co->co_code) \
+			    ->inst[INSTR_OFFSET()])
 #define NEXTOP()	(*next_instr++)
 #define NEXTARG()	(next_instr += 2, (next_instr[-1]<<8) + next_instr[-2])
 #define PEEKARG()	((next_instr[2]<<8) + next_instr[1])
@@ -942,6 +956,14 @@ fast_next_opcode:
 			goto on_error;
 		}
 	}
+
+#ifdef DYNAMIC_EXECUTION_PROFILE
+#ifdef DXPAIRS
+	dxpairs[lastopcode][CURRENT_OPCODE()]++;
+	lastopcode = CURRENT_OPCODE();
+#endif
+	dxp[CURRENT_OPCODE()]++;
+#endif
 
 	assert(why == WHY_NOT);
 	/* XXX(jyasskin): Add an assertion under CHECKEXC that
