@@ -91,6 +91,13 @@ def find_module_file(module, dirlist):
         log.info("WARNING: multiple copies of %s found"%module)
     return os.path.join(list[0], module)
 
+def combine_dirs_to_check(extra_dirs, orig_lib_dirs):
+    extra_dirs = filter(os.path.isdir, extra_dirs)
+    # First search extra directories that already appear in the
+    # original list.
+    extra_dirs.sort(key=lambda d:0 if d in orig_lib_dirs else 1)
+    return extra_dirs + orig_lib_dirs
+
 class PyBuildExt(build_ext):
 
     def __init__(self, dist):
@@ -311,8 +318,8 @@ class PyBuildExt(build_ext):
     def detect_modules(self):
         use_system_paths = not os.getenv('IGNORE_SYSTEM_PATHS')
 
-        # Ensure that /usr/local is always used
         if use_system_paths:
+            # Ensure that /usr/local is always used
             add_dir_to_list(self.compiler.library_dirs, '/usr/local/lib')
             add_dir_to_list(self.compiler.include_dirs, '/usr/local/include')
 
@@ -680,7 +687,9 @@ class PyBuildExt(build_ext):
         exts.append( Extension('_socket', ['socketmodule.c'],
                                depends = ['socketmodule.h']) )
         # Detect SSL support for the socket module (via _ssl)
-        search_for_ssl_incs_in = [
+        search_for_ssl_incs_in = []
+        if use_system_paths:
+            search_for_ssl_incs_in = [
                               '/usr/local/ssl/include',
                               '/usr/contrib/ssl/include/'
                              ]
@@ -688,14 +697,15 @@ class PyBuildExt(build_ext):
                              search_for_ssl_incs_in
                              )
         if ssl_incs is not None:
-            krb5_h = find_file('krb5.h', inc_dirs,
-                               ['/usr/kerberos/include'])
+            krb5_h = find_file(
+                'krb5.h', inc_dirs,
+                ['/usr/kerberos/include'] if use_system_paths else [])
             if krb5_h:
                 ssl_incs += krb5_h
         ssl_libs = find_library_file(self.compiler, 'ssl',lib_dirs,
                                      ['/usr/local/ssl/lib',
                                       '/usr/contrib/ssl/lib/'
-                                     ] )
+                                     ] if use_system_paths else [])
 
         if (ssl_incs is not None and
             ssl_libs is not None):
@@ -807,34 +817,36 @@ class PyBuildExt(build_ext):
 
         # construct a list of paths to look for the header file in on
         # top of the normal inc_dirs.
-        db_inc_paths = [
-            '/usr/include/db4',
-            '/usr/local/include/db4',
-            '/opt/sfw/include/db4',
-            '/usr/include/db3',
-            '/usr/local/include/db3',
-            '/opt/sfw/include/db3',
-            # Fink defaults (http://fink.sourceforge.net/)
-            '/sw/include/db4',
-            '/sw/include/db3',
-        ]
-        # 4.x minor number specific paths
-        for x in gen_db_minor_ver_nums(4):
-            db_inc_paths.append('/usr/include/db4%d' % x)
-            db_inc_paths.append('/usr/include/db4.%d' % x)
-            db_inc_paths.append('/usr/local/BerkeleyDB.4.%d/include' % x)
-            db_inc_paths.append('/usr/local/include/db4%d' % x)
-            db_inc_paths.append('/pkg/db-4.%d/include' % x)
-            db_inc_paths.append('/opt/db-4.%d/include' % x)
-            # MacPorts default (http://www.macports.org/)
-            db_inc_paths.append('/opt/local/include/db4%d' % x)
-        # 3.x minor number specific paths
-        for x in gen_db_minor_ver_nums(3):
-            db_inc_paths.append('/usr/include/db3%d' % x)
-            db_inc_paths.append('/usr/local/BerkeleyDB.3.%d/include' % x)
-            db_inc_paths.append('/usr/local/include/db3%d' % x)
-            db_inc_paths.append('/pkg/db-3.%d/include' % x)
-            db_inc_paths.append('/opt/db-3.%d/include' % x)
+        db_inc_paths = []
+        if use_system_paths:
+            db_inc_paths.extend([
+                '/usr/include/db4',
+                '/usr/local/include/db4',
+                '/opt/sfw/include/db4',
+                '/usr/include/db3',
+                '/usr/local/include/db3',
+                '/opt/sfw/include/db3',
+                # Fink defaults (http://fink.sourceforge.net/)
+                '/sw/include/db4',
+                '/sw/include/db3',
+                ])
+            # 4.x minor number specific paths
+            for x in gen_db_minor_ver_nums(4):
+                db_inc_paths.append('/usr/include/db4%d' % x)
+                db_inc_paths.append('/usr/include/db4.%d' % x)
+                db_inc_paths.append('/usr/local/BerkeleyDB.4.%d/include' % x)
+                db_inc_paths.append('/usr/local/include/db4%d' % x)
+                db_inc_paths.append('/pkg/db-4.%d/include' % x)
+                db_inc_paths.append('/opt/db-4.%d/include' % x)
+                # MacPorts default (http://www.macports.org/)
+                db_inc_paths.append('/opt/local/include/db4%d' % x)
+            # 3.x minor number specific paths
+            for x in gen_db_minor_ver_nums(3):
+                db_inc_paths.append('/usr/include/db3%d' % x)
+                db_inc_paths.append('/usr/local/BerkeleyDB.3.%d/include' % x)
+                db_inc_paths.append('/usr/local/include/db3%d' % x)
+                db_inc_paths.append('/pkg/db-3.%d/include' % x)
+                db_inc_paths.append('/opt/db-3.%d/include' % x)
 
         # Add some common subdirectories for Sleepycat DB to the list,
         # based on the standard include directories. This way DB3/4 gets
@@ -904,13 +916,10 @@ class PyBuildExt(build_ext):
                 db_incdir = db_ver_inc_map[db_ver]
 
                 # check lib directories parallel to the location of the header
-                db_dirs_to_check = [
+                db_dirs_to_check = combine_dirs_to_check([
                     db_incdir.replace("include", 'lib64'),
                     db_incdir.replace("include", 'lib'),
-                ]
-                db_dirs_to_check = filter(os.path.isdir, db_dirs_to_check)
-                # Search directories in the library directories first.
-                db_dirs_to_check.sort(key=lambda d:0 if d in lib_dirs else 1)
+                    ], lib_dirs)
 
                 # Look for a version specific db-X.Y before an ambiguoius dbX
                 # XXX should we -ever- look for a dbX name?  Do any
@@ -920,7 +929,7 @@ class PyBuildExt(build_ext):
                               ('db%d%d' % db_ver),
                               ('db%d' % db_ver[0])):
                     dblib_file = self.compiler.find_library_file(
-                                    db_dirs_to_check + lib_dirs, dblib )
+                                    db_dirs_to_check, dblib )
                     if dblib_file:
                         dblib_dir = [ os.path.abspath(os.path.dirname(dblib_file)) ]
                         raise db_found
@@ -958,13 +967,15 @@ class PyBuildExt(build_ext):
         # We hunt for #define SQLITE_VERSION "n.n.n"
         # We need to find >= sqlite version 3.0.8
         sqlite_incdir = sqlite_libdir = None
-        sqlite_inc_paths = [ '/usr/include',
-                             '/usr/include/sqlite',
-                             '/usr/include/sqlite3',
-                             '/usr/local/include',
-                             '/usr/local/include/sqlite',
-                             '/usr/local/include/sqlite3',
-                           ]
+        sqlite_inc_paths = []
+        if use_system_paths:
+            sqlite_inc_paths = [ '/usr/include',
+                                 '/usr/include/sqlite',
+                                 '/usr/include/sqlite3',
+                                 '/usr/local/include',
+                                 '/usr/local/include/sqlite',
+                                 '/usr/local/include/sqlite3',
+                                 ]
         MIN_SQLITE_VERSION_NUMBER = (3, 0, 8)
         MIN_SQLITE_VERSION = ".".join([str(x)
                                     for x in MIN_SQLITE_VERSION_NUMBER])
@@ -998,21 +1009,19 @@ class PyBuildExt(build_ext):
                     print "sqlite: %s had no SQLITE_VERSION"%(f,)
 
         if sqlite_incdir:
-            sqlite_dirs_to_check = [
+            sqlite_dirs_to_check = combine_dirs_to_check([
                 os.path.join(sqlite_incdir, '..', 'lib64'),
                 os.path.join(sqlite_incdir, '..', 'lib'),
                 os.path.join(sqlite_incdir, '..', '..', 'lib64'),
                 os.path.join(sqlite_incdir, '..', '..', 'lib'),
-            ]
-            # Search directories in the library directories first.
-            sqlite_dirs_to_check.sort(key=lambda d:0 if d in lib_dirs else 1)
+                ], lib_dirs)
             sqlite_libfile = self.compiler.find_library_file(
-                                sqlite_dirs_to_check + lib_dirs, 'sqlite3')
+                                sqlite_dirs_to_check, 'sqlite3')
             if sqlite_libfile:
                 sqlite_libdir = [os.path.abspath(os.path.dirname(sqlite_libfile))]
             elif sqlite_setup_debug:
                 print ("sqlite: no sqlite3 library in %s" %
-                       (sqlite_dirs_to_check + lib_dirs))
+                       (sqlite_dirs_to_check))
 
         if sqlite_incdir and sqlite_libdir:
             sqlite_srcs = ['_sqlite/cache.c',
@@ -1065,7 +1074,7 @@ class PyBuildExt(build_ext):
         # the more recent berkeleydb's db.h file first in the include path
         # when attempting to compile and it will fail.
         f = "/usr/include/db.h"
-        if os.path.exists(f) and not db_incs:
+        if use_system_paths and os.path.exists(f) and not db_incs:
             data = open(f).read()
             m = re.search(r"#s*define\s+HASHVERSION\s+2\s*", data)
             if m is not None:
@@ -1820,7 +1829,7 @@ class PyBuildExt(build_ext):
         if not '--with-system-ffi' in sysconfig.get_config_var("CONFIG_ARGS"):
             return
 
-        if sys.platform == 'darwin':
+        if sys.platform == 'darwin' and use_system_paths:
             # OS X 10.5 comes with libffi.dylib; the include files are
             # in /usr/include/ffi
             inc_dirs.append('/usr/include/ffi')
