@@ -92,7 +92,7 @@ def find_module_file(module, dirlist):
     return os.path.join(list[0], module)
 
 def combine_dirs_to_check(extra_dirs, orig_lib_dirs):
-    extra_dirs = filter(os.path.isdir, extra_dirs)
+    extra_dirs = [d for d in extra_dirs if os.path.isdir(d)]
     # First search extra directories that already appear in the
     # original list.
     extra_dirs.sort(key=lambda d:0 if d in orig_lib_dirs else 1)
