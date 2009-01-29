@@ -37,6 +37,11 @@ def ChangeDir(new_cwd):
     os.chdir(former_cwd)
 
 
+def RemovePycs():
+    subprocess.check_call(["find", ".", "-name", "*.py[co]",
+                           "-exec", "rm", "-f", "{}", ";"])
+
+
 def Relative(path):
     return os.path.join(os.path.dirname(sys.argv[0]), path)
 
@@ -105,12 +110,14 @@ def BM_PyBench(base_python, changed_python, options):
                                TemporaryFilename(prefix="baseline."),
                                TemporaryFilename(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
+            RemovePycs()
             subprocess.check_call(LogCall([changed_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", changed_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
+            RemovePycs()
             subprocess.check_call(LogCall([base_python, "-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
@@ -151,6 +158,7 @@ def Measure2to3(python, options):
         target = TWO_TO_THREE_DIR
 
     with open("/dev/null", "wb") as dev_null:
+        RemovePycs()
         # Warm up the cache and .pyc files.
         subprocess.check_call(LogCall([python, "-E", "-O",
                                        TWO_TO_THREE_PROG,
@@ -237,6 +245,8 @@ def MeasureDjango(python, options):
         elif options.fast:
             trials = 5
 
+        RemovePycs()
+
         command = [python, "-O", TEST_PROG, "-n", trials]
         django = subprocess.Popen(LogCall(command),
                                   stdout=subprocess.PIPE, stderr=dev_null,
@@ -320,6 +330,7 @@ def MeasureSpitfire(python, options, env={}, extra_args=[]):
         elif options.fast:
             trials = 5
 
+        RemovePycs()
         command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
         spitfire = subprocess.Popen(LogCall(command),
                                     stdout=subprocess.PIPE, stderr=dev_null,
