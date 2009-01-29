@@ -53,14 +53,15 @@ def bug708901():
                      10):
         pass
 
-dis_bug708901 = """\
+if __debug__:
+    dis_bug708901 = """\
  %-4d         0 SETUP_LOOP              15 (to 17)
               2 LOAD_GLOBAL              0 (range)
+              4 LOAD_CONST               1 (1)
 
- %-4d         4 CC:
-                  LOAD_CONST               1 (1)
+ %-4d         6 C_CALL_FUNCTION:
                   LOAD_CONST               2 (10)
-              7 CALL_FUNCTION            2
+                  CALL_FUNCTION            2
               9 GET_ITER
         >>   10 FOR_ITER                 4 (to 16)
              12 STORE_FAST               0 (res)
@@ -72,6 +73,26 @@ dis_bug708901 = """\
 """%(bug708901.func_code.co_firstlineno + 1,
      bug708901.func_code.co_firstlineno + 2,
      bug708901.func_code.co_firstlineno + 3)
+else:
+    dis_bug708901 = """\
+ %-4d         0 SETUP_LOOP              14 (to 16)
+              2 LOAD_GLOBAL              0 (range)
+
+ %-4d         4 CC_CALL_FUNCTION:
+                  LOAD_CONST               1 (1)
+                  LOAD_CONST               2 (10)
+                  CALL_FUNCTION            2
+              8 GET_ITER
+        >>    9 FOR_ITER                 4 (to 15)
+             11 STORE_FAST               0 (res)
+
+ %-4d        13 JUMP_ABSOLUTE            9
+        >>   15 POP_BLOCK
+        >>   16 LOAD_CONST               0 (None)
+             18 RETURN_VALUE
+"""%(bug708901.func_code.co_firstlineno + 1,
+     bug708901.func_code.co_firstlineno + 2,
+     bug708901.func_code.co_firstlineno + 3)
 
 
 def bug1333982(x=[]):
@@ -80,31 +101,33 @@ def bug1333982(x=[]):
     pass
 
 dis_bug1333982 = """\
- %-4d         0 LOAD_CONST               1 (0)
-              2 JUMP_IF_TRUE            27 (to 31)
+%3d           0 LOAD_CONST               1 (0)
+              2 JUMP_IF_TRUE            25 (to 29)
               4 POP_TOP
               5 LOAD_GLOBAL              0 (AssertionError)
               7 BUILD_LIST               0
               9 DUP_TOP
-             10 STORE_FAST               1 (_[1])
-             12 LOAD_FAST                0 (x)
-             14 GET_ITER
-        >>   15 FOR_ITER                 9 (to 26)
-             17 STORE_FAST               2 (s)
-             19 LOAD_FAST                1 (_[1])
-             21 LOAD_FAST                2 (s)
-             23 LIST_APPEND
-             24 JUMP_ABSOLUTE           15
-        >>   26 DELETE_FAST              1 (_[1])
+             10 STORE_LOAD_FAST:
+                  STORE_FAST               1 (_[1])
+                  LOAD_FAST                0 (x)
+             13 GET_ITER
+        >>   14 FOR_ITER                 8 (to 24)
+             16 STORE_LOAD_FAST:
+                  STORE_FAST               2 (s)
+                  LOAD_FAST                1 (_[1])
+             19 LOAD_FAST                2 (s)
+             21 LIST_APPEND
+             22 JUMP_ABSOLUTE           14
+        >>   24 DELETE_FAST              1 (_[1])
 
- %-4d        28 CBINARY_ADD:
+%3d          26 CBINARY_ADD:
                   LOAD_CONST               2 (1)
                   BINARY_ADD
-             30 RAISE_VARARGS_TWO
-        >>   31 POP_TOP
+             28 RAISE_VARARGS_TWO
+        >>   29 POP_TOP
 
- %-4d        32 LOAD_CONST               0 (None)
-             34 RETURN_VALUE
+%3d          30 LOAD_CONST               0 (None)
+             32 RETURN_VALUE
 """%(bug1333982.func_code.co_firstlineno + 1,
      bug1333982.func_code.co_firstlineno + 2,
      bug1333982.func_code.co_firstlineno + 3)

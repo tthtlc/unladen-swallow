@@ -246,7 +246,7 @@ fold_unaryops_on_constants(PyPInst *inststr, PyObject *consts)
    jump target. Consider whether we want to prevent optimizations that blur
    a line boundary too, and under what circumstances. */
 static unsigned int *
-markblocks(PyPInst *code, Py_ssize_t len)
+markblocks(PyPInst *code, Py_ssize_t len, PyObject *lineno_obj)
 {
 	unsigned int *blocks = (unsigned int *)PyMem_Malloc(len*sizeof(int));
 	int i,j, blockcnt = 0;
@@ -276,7 +276,26 @@ markblocks(PyPInst *code, Py_ssize_t len)
 				break;
 		}
 	}
-	/* Build block numbers in the second pass */
+	if (!Py_OptimizeFlag) {
+		/* If -O wasn't passed, we want to avoid combining
+		   instructions across line number boundaries.  This
+		   both makes code easier to debug and allows users to
+		   sensibly set the line number.  In -O mode, we'll
+		   disable jumping to avoid crashes. */
+		unsigned char *lineno =
+				(unsigned char *)PyString_AS_STRING(lineno_obj);
+		Py_ssize_t tabsiz = PyString_GET_SIZE(lineno_obj);
+		Py_ssize_t code_index = 0;
+		Py_ssize_t i;
+		for (i=0; i < tabsiz; i+=2) {
+			code_index += lineno[i];
+			/* This actually makes sense: a trace function
+			   can jump to the start of any line, so each
+			   line is a basic block. */
+			blocks[code_index] = 1;
+		}
+	}
+	/* Build block numbers in the last pass */
 	for (i=0 ; i<len ; i++) {
 		blockcnt += blocks[i];	/* increment blockcnt over labels */
 		blocks[i] = blockcnt;
@@ -488,7 +507,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	if (addrmap == NULL)
 		goto exitUnchanged;
 
-	blocks = markblocks(inststr, Py_SIZE(modcode));
+	blocks = markblocks(inststr, Py_SIZE(modcode), lineno_obj);
 	if (blocks == NULL)
 		goto exitUnchanged;
 	assert(PyList_Check(consts));
@@ -759,6 +778,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 				continue;
 
 			case JUMP_ABSOLUTE:
+			case POP_JUMP_ABSOLUTE:
 			case CONTINUE_LOOP:
 				j = addrmap[GETARG(inststr, i)];
 				SETARG(inststr, i, j);

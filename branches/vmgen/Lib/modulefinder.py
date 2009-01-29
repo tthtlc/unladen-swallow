@@ -16,8 +16,8 @@ else:
     READ_MODE = "r"
 
 LOAD_GLOBAL = dis.opname.index('LOAD_GLOBAL')
-LOAD_CONST = dis.opname.index('LOAD_CONST')
 CC = dis.opname.index('CC')
+C_CALL_FUNCTION = dis.opname.index('C_CALL_FUNCTION')
 STORE_NAME = dis.opname.index('STORE_NAME')
 STORE_GLOBAL = dis.opname.index('STORE_GLOBAL')
 STORE_OPS = [STORE_NAME, STORE_GLOBAL]
@@ -353,12 +353,12 @@ class ModuleFinder:
                 yield "store", (names[oparg],)
                 code = code[2:]
                 continue
-            if (len(code) >= 7 and
+            if (len(code) >= 8 and
                 dis.get_opcode(code[0]) == LOAD_GLOBAL and
                 '#@import_name' in names and
                 dis.get_argument(code[1]) == names.index('#@import_name') and
                 dis.get_opcode(code[2]) == CC and
-                dis.get_opcode(code[5]) == LOAD_CONST):
+                dis.get_opcode(code[5]) == C_CALL_FUNCTION):
                 oparg_1, oparg_2, oparg_3 = (dis.get_argument(code[x])
                                              for x in (3,4,6))
                 level = consts[oparg_1]
@@ -368,7 +368,7 @@ class ModuleFinder:
                     yield "absolute_import", (consts[oparg_2], consts[oparg_3])
                 else: # relative import
                     yield "relative_import", (level, consts[oparg_2], consts[oparg_3])
-                code = code[7:]
+                code = code[8:]
                 continue
             code = code[1:]
             while code and dis.is_argument(code[0]):

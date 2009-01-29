@@ -48,12 +48,13 @@ frame_getlineno(PyFrameObject *f, void *closure)
 	return PyInt_FromLong(lineno);
 }
 
-/* Setter for f_lineno - you can set f_lineno from within a trace function in
- * order to jump to a given line of code, subject to some restrictions.	 Most
- * lines are OK to jump to because they don't make any assumptions about the
- * state of the stack (obvious because you could remove the line and the code
- * would still work without any stack errors), but there are some constructs
- * that limit jumping:
+/* Setter for f_lineno - as long as you didn't pass -O, you can set
+ * f_lineno from within a trace function in order to jump to a given
+ * line of code, subject to some restrictions.  Most lines are OK to
+ * jump to because they don't make any assumptions about the state of
+ * the stack (obvious because you could remove the line and the code
+ * would still work without any stack errors), but there are some
+ * constructs that limit jumping:
  *
  *  o Lines with an 'except' statement on them can't be jumped to, because
  *    they expect an exception to be on the top of the stack.
@@ -62,6 +63,8 @@ frame_getlineno(PyFrameObject *f, void *closure)
  *  o 'try'/'for'/'while' blocks can't be jumped into because the blockstack
  *    needs to be set up before their code runs, and for 'for' loops the
  *    iterator needs to be on the stack.
+ *  o With -O, the peephole optimizer will combine some instructions
+ *    across line boundaries, making all jumping unsafe.
  */
 static int
 frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
@@ -87,6 +90,14 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 	int in_finally[CO_MAXBLOCKS];	/* (ditto) */
 	int blockstack_top = 0;		/* (ditto) */
 	unsigned char setup_op = 0;	/* (ditto) */
+
+	/* Can't set f_lineno in -O mode. */
+	if (Py_OptimizeFlag) {
+		PyErr_SetString(
+			PyExc_AttributeError,
+			"f_lineno attribute is read-only when running with -O");
+		return -1;
+	}
 
 	/* f_lineno must be an integer. */
 	if (!PyInt_Check(p_new_lineno)) {
