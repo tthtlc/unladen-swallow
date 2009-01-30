@@ -511,7 +511,7 @@ PyObject* psyco_proxycode(PyFunctionObject* func, int rec)
   static PyObject *varnames = NULL;
   static PyObject *free_cell_vars = NULL;
   static PyObject *empty_string = NULL;
-  PyPInst proxy_bytecode[] = {
+  PyInst proxy_bytecode[] = {
     {false, LOAD_CONST}, {true, 1},
     {false, LOAD_FAST}, {true, 0},
     {false, LOAD_FAST}, {true, 1},

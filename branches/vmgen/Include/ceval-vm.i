@@ -521,7 +521,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else if (PyString_CheckExact(a1) && PyString_CheckExact(a2)) {
         /* Look in the parallel PyInstructions object to find the
            symbolic opcode. */
-        int opcode = PyPInst_GET_OPCODE(
+        int opcode = PyInst_GET_OPCODE(
                 &((PyInstructionsObject *)co->co_code)->inst[INSTR_OFFSET()]);
         a = string_concatenate(a1, a2, f, opcode, (next_instr+1)->oparg);
         /* string_concatenate consumed the ref to v */
@@ -925,7 +925,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else if (PyString_CheckExact(a1) && PyString_CheckExact(a2)) {
         /* Look in the parallel PyInstructions object to find the
            symbolic opcode. */
-        int opcode = PyPInst_GET_OPCODE(
+        int opcode = PyInst_GET_OPCODE(
                 &((PyInstructionsObject *)co->co_code)->inst[INSTR_OFFSET()]);
         a = string_concatenate(a1, a2, f, opcode, (next_instr+1)->oparg);
         /* string_concatenate consumed the ref to v */
@@ -3148,7 +3148,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else if (PyString_CheckExact(a1) && PyString_CheckExact(a2)) {
         /* Look in the parallel PyInstructions object to find the
            symbolic opcode. */
-        int opcode = PyPInst_GET_OPCODE(
+        int opcode = PyInst_GET_OPCODE(
                 &((PyInstructionsObject *)co->co_code)->inst[INSTR_OFFSET()]);
         a = string_concatenate(a1, a2, f, opcode, (next_instr+1)->oparg);
         /* string_concatenate consumed the ref to v */
@@ -3577,7 +3577,7 @@ if (PyInt_CheckExact(a1) && PyInt_CheckExact(a2)) {
 } else if (PyString_CheckExact(a1) && PyString_CheckExact(a2)) {
         /* Look in the parallel PyInstructions object to find the
            symbolic opcode. */
-        int opcode = PyPInst_GET_OPCODE(
+        int opcode = PyInst_GET_OPCODE(
                 &((PyInstructionsObject *)co->co_code)->inst[INSTR_OFFSET()]);
         a = string_concatenate(a1, a2, f, opcode, (next_instr+1)->oparg);
         /* string_concatenate consumed the ref to v */

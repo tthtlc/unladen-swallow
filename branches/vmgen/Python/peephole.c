@@ -14,21 +14,21 @@
 
 static void prepare_peeptable(void);
 
-#define GETOP(inst) PyPInst_GET_OPCODE(&(inst))
+#define GETOP(inst) PyInst_GET_OPCODE(&(inst))
 #define OP_EQ(inst, EXPECTED) (!(inst).is_arg && GETOP(inst) == EXPECTED)
-#define GETARG(arr, i) PyPInst_GET_ARG(&(arr)[(i)+1])
+#define GETARG(arr, i) PyInst_GET_ARG(&(arr)[(i)+1])
 #define UNCONDITIONAL_JUMP(op)	(op==JUMP_ABSOLUTE || op==JUMP_FORWARD)
 #define ABSOLUTE_JUMP(op) (op==JUMP_ABSOLUTE || op==CONTINUE_LOOP)
 #define GETJUMPTGT(arr, i) (GETARG(arr,i) +	\
 			    (ABSOLUTE_JUMP(GETOP((arr)[(i)])) ? 0 : i+2))
-#define SETOP(inst, val) PyPInst_SET_OPCODE(&(inst), (val));
-#define SETARG(arr, i, val) PyPInst_SET_ARG(&(arr)[(i)+1], (val))
+#define SETOP(inst, val) PyInst_SET_OPCODE(&(inst), (val));
+#define SETARG(arr, i, val) PyInst_SET_ARG(&(arr)[(i)+1], (val))
 #define ISBASICBLOCK(blocks, start, bytes) \
 	(blocks[start]==blocks[start+bytes-1])
 
 static void
-set_nops(PyPInst *inststr, Py_ssize_t num_nops) {
-	PyPInst *last_inst = inststr + num_nops;
+set_nops(PyInst *inststr, Py_ssize_t num_nops) {
+	PyInst *last_inst = inststr + num_nops;
 	for (; inststr != last_inst; ++inststr) {
 		SETOP(*inststr, NOP);
 	}
@@ -43,7 +43,7 @@ set_nops(PyPInst *inststr, Py_ssize_t num_nops) {
    Also works for BUILD_LIST when followed by an "in" or "not in" test.
 */
 static int
-tuple_of_constants(PyPInst *inststr, Py_ssize_t n, PyObject *consts)
+tuple_of_constants(PyInst *inststr, Py_ssize_t n, PyObject *consts)
 {
 	PyObject *newconst, *constant;
 	Py_ssize_t i, arg, len_consts;
@@ -95,7 +95,7 @@ tuple_of_constants(PyPInst *inststr, Py_ssize_t n, PyObject *consts)
    becoming large in the presence of code like:	 (None,)*1000.
 */
 static int
-fold_binops_on_constants(PyPInst *inststr, PyObject *consts)
+fold_binops_on_constants(PyInst *inststr, PyObject *consts)
 {
 	PyObject *newconst, *v, *w;
 	Py_ssize_t len_consts, size;
@@ -190,7 +190,7 @@ fold_binops_on_constants(PyPInst *inststr, PyObject *consts)
 }
 
 static int
-fold_unaryops_on_constants(PyPInst *inststr, PyObject *consts)
+fold_unaryops_on_constants(PyInst *inststr, PyObject *consts)
 {
 	PyObject *newconst=NULL, *v;
 	Py_ssize_t len_consts;
@@ -245,7 +245,7 @@ fold_unaryops_on_constants(PyPInst *inststr, PyObject *consts)
 /* Marks instructions that can be the targets of jumps so we keep them
    distinct through the peephole optimizer. */
 static unsigned int *
-markblocks(PyPInst *code, Py_ssize_t len, PyObject *lineno_obj)
+markblocks(PyInst *code, Py_ssize_t len, PyObject *lineno_obj)
 {
 	unsigned int *blocks = (unsigned int *)PyMem_Malloc(len*sizeof(int));
 	int i,j, blockcnt = 0;
@@ -364,7 +364,7 @@ combine_two(int op1, int op2)
 
 /* Combines basic instructions into superinstructions */
 static void
-combine_to_superinstructions(PyPInst *inststr, Py_ssize_t codelen,
+combine_to_superinstructions(PyInst *inststr, Py_ssize_t codelen,
 			     unsigned int *blocks)
 {
 	/* First element of inststr is always an opcode. */
@@ -457,7 +457,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	int nops, h;
 	int tgt, tgttgt, opcode;
 	PyInstructionsObject *modcode = NULL;
-	PyPInst *inststr;
+	PyInst *inststr;
 	unsigned char *lineno;
 	int *addrmap = NULL;
 	int new_code, cum_orig_code_offset, last_code, tabsiz;

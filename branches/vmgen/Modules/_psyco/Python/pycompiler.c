@@ -839,9 +839,9 @@ void psyco_pycompiler_init(void)
                                      po->pr.stack_base+po->pr.stack_level+(n) < \
                                      po->vlocals.count)
 
-#define NEXTOP()	(PyPInst_GET_OPCODE(&bytecode[next_instr++]))
+#define NEXTOP()	(PyInst_GET_OPCODE(&bytecode[next_instr++]))
 #define NEXTARG()	(next_instr++,                                       \
-                         (PyPInst_GET_ARG(&bytecode[next_instr-1])))
+                         (PyInst_GET_ARG(&bytecode[next_instr-1])))
 
 #define PUSH(v)         (CHKSTACK(0), stack_a[po->pr.stack_level++] = v)
 #define POP(targ)       (CHKSTACK(-1), targ = stack_a[--po->pr.stack_level],   \
@@ -1747,7 +1747,7 @@ code_t* psyco_pycompiler_mainloop(PsycoObject* po)
     {
       /* 'co' is the code object we are interpreting/compiling */
       PyCodeObject* co = po->pr.co;
-      PyPInst* bytecode = ((PyInstructionsObject*)co->co_code)->inst;
+      PyInst* bytecode = ((PyInstructionsObject*)co->co_code)->inst;
       int next_insts[10];  /* superinstructions hold less than 10 instructions */
       int next_inst_index = 0;
       vinfo_t *u, *v,	/* temporary objects    */
@@ -1777,7 +1777,7 @@ code_t* psyco_pycompiler_mainloop(PsycoObject* po)
 	
 	if (next_inst_index == 0) {
 		next_inst_index = _PyCode_UncombineSuperInstruction(
-			PyPInst_GET_OPCODE(&bytecode[next_instr++]),
+			PyInst_GET_OPCODE(&bytecode[next_instr++]),
 			next_insts, 10);
 	}
 	opcode = next_insts[--next_inst_index];

@@ -3578,7 +3578,7 @@ assemble_free(struct assembler *a)
 		PyObject_Free(a->a_postorder);
 }
 
-/* Return the size of a basic block in PyPInst (usually 4-byte) units. */
+/* Return the size of a basic block in PyInst (usually 4-byte) units. */
 
 static int
 instrsize(struct instr *instr)
@@ -3748,7 +3748,7 @@ assemble_emit(struct assembler *a, struct instr *i)
 {
 	int size, arg = 0, ext = 0;
 	Py_ssize_t len = Py_SIZE(a->a_code);
-	PyPInst *code;
+	PyInst *code;
 
 	size = instrsize(i);
 	if (i->i_hasarg) {
@@ -3765,10 +3765,10 @@ assemble_emit(struct assembler *a, struct instr *i)
 	}
 	code = a->a_code->inst + a->a_offset;
 	a->a_offset += size;
-	PyPInst_SET_OPCODE(code++, i->i_opcode);
+	PyInst_SET_OPCODE(code++, i->i_opcode);
 	if (i->i_hasarg) {
 		assert(size == 2);
-		PyPInst_SET_ARG(code++, arg);
+		PyInst_SET_ARG(code++, arg);
 	}
 	return 1;
 }

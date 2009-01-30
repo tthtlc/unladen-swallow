@@ -730,8 +730,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
 #define INSTR_OFFSET()	((int)(next_instr - first_instr))
 #define CURRENT_OPCODE() \
-	PyPInst_GET_OPCODE(&((PyInstructionsObject*)co->co_code) \
-			    ->inst[INSTR_OFFSET()])
+	PyInst_GET_OPCODE(&((PyInstructionsObject*)co->co_code) \
+			   ->inst[INSTR_OFFSET()])
 #define NEXTOP()	(*next_instr++)
 #define NEXTARG()	(next_instr += 2, (next_instr[-1]<<8) + next_instr[-2])
 #define PEEKARG()	((next_instr[2]<<8) + next_instr[1])
@@ -844,7 +844,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
 	if (first_instr == NULL) {
 		Py_ssize_t len, i;
-		PyPInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
+		PyInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
 		len = Py_SIZE(co->co_code);
 		first_instr = PyMem_NEW(Inst, len);
 		if (first_instr == NULL)
@@ -852,11 +852,11 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 		for (i = 0; i < len; ++i) {
 			if (pinsts[i].is_arg) {
 				first_instr[i].oparg =
-					PyPInst_GET_ARG(pinsts + i);
+					PyInst_GET_ARG(pinsts + i);
 			}
 			else {
 				first_instr[i].opcode =
-					labels[PyPInst_GET_OPCODE(pinsts + i)];
+					labels[PyInst_GET_OPCODE(pinsts + i)];
 			}
 		}
 		co->co_tcode = first_instr;

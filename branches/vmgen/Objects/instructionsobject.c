@@ -1,7 +1,7 @@
 #include "Python.h"
 #include "instructionsobject.h"
 
-static inline unsigned int pinst_to_int(PyPInst inst) {
+static inline unsigned int pinst_to_int(PyInst inst) {
     return inst.opcode_or_arg << 1 | inst.is_arg;
 }
 
@@ -53,7 +53,7 @@ _PyInstructions_Resize(PyInstructionsObject **vec, Py_ssize_t new_size) {
     _Py_DEC_REFTOTAL;
     _Py_ForgetReference((PyObject *)*vec);
     *vec = (PyInstructionsObject *)PyObject_REALLOC(
-        old, sizeof(PyInstructionsObject) + new_size * sizeof(PyPInst));
+        old, sizeof(PyInstructionsObject) + new_size * sizeof(PyInst));
     if (*vec == NULL) {
         PyObject_Del(old);
         PyErr_NoMemory();
@@ -149,7 +149,7 @@ PyTypeObject PyInstructions_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "instructions",			/* tp_name */
     sizeof(PyInstructionsObject),	/* tp_basicsize */
-    sizeof(PyPInst),		/* tp_itemsize */
+    sizeof(PyInst),		/* tp_itemsize */
     0,			 	/* tp_dealloc */
     0,				/* tp_print */
     0, 				/* tp_getattr */
@@ -185,4 +185,3 @@ PyTypeObject PyInstructions_Type = {
     0,				/* tp_alloc */
     0,				/* tp_new */
 };
-

@@ -489,7 +489,7 @@ PyObject* psyco_build_merge_points(PyCodeObject* co, int module)
   mergepoint_t* mp;
   int mp_flags = MP_FLAGS_EXTRA;
   int length = Py_SIZE(co->co_code);
-  PyPInst* source =  ((PyInstructionsObject*)co->co_code)->inst;
+  PyInst* source =  ((PyInstructionsObject*)co->co_code)->inst;
   int next_insts[10];  /* superinstructions hold less than 10 instructions */
   int next_inst_index = 0;
   size_t ibytes = (length+1) * sizeof(struct instrnode_s);
@@ -540,7 +540,7 @@ PyObject* psyco_build_merge_points(PyCodeObject* co, int module)
       if (next_inst_index == 0)
         {
           next_inst_index = _PyCode_UncombineSuperInstruction(
-              PyPInst_GET_OPCODE(&source[i++]),
+              PyInst_GET_OPCODE(&source[i++]),
               next_insts, 10);
         }
       op = next_insts[--next_inst_index];
@@ -548,7 +548,7 @@ PyObject* psyco_build_merge_points(PyCodeObject* co, int module)
       if (HAS_ARG(op))
         {
           i++;
-          oparg = PyPInst_GET_ARG(&source[i-1]);
+          oparg = PyInst_GET_ARG(&source[i-1]);
           instrnodes[i0+1].back = instrnodes[i-1].back = (i-1) - i0;
           instrnodes[i0+1].mask = instrnodes[i-1].mask = oparg;  /* save oparg */
         }
