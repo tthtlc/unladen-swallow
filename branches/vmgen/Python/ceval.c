@@ -112,7 +112,7 @@ static int call_trace_protected(Py_tracefunc, PyObject *,
 				 PyFrameObject *, int, PyObject *);
 static void call_exc_trace(Py_tracefunc, PyObject *, PyFrameObject *);
 static int maybe_call_line_trace(Py_tracefunc, PyObject *,
-				 PyFrameObject *, int *, int *, int *);
+				  PyFrameObject *, int *, int *, int *);
 
 static PyObject * apply_slice(PyObject *, PyObject *, PyObject *);
 static int assign_slice(PyObject *, PyObject *,
@@ -547,16 +547,18 @@ volatile int _Py_Ticker = 100;
 
 #define LABEL(inst)     I_##inst:
 #define INST_ADDR(inst) ((Opcode) &&I_##inst)
+#define NAME(inst) /* Nothing */
 
-/* XXX patched pythonrun.c */
-#define MAYBE(stmt) /* if (Py_IsInitialized() == 42) { (stmt); } */
-#define NAME(inst)  MAYBE(printf("%s: %s: %d: %s [%d] {%p, %p} NOS==%p\n", \
-                                 PyString_AS_STRING(co->co_filename),   \
-                                 PyString_AS_STRING(co->co_name),       \
-                                 INSTR_OFFSET(), inst, STACK_LEVEL(),   \
-                                 TOP(), stack_pointerTOS, SECOND()));
+#define DEF_CA                /* Nothing */
+#define LABEL2(inst_name)     /* Nothing */
+#define MAYBE_UNUSED          __attribute__((unused))
+#define IMM_ARG(access,value) (access)
 
-/* Vmgen's tracing stuff */
+/* We don't cache the top of the stack in a local variable. */
+#define stack_pointerTOS       TOP()
+#define IF_stack_pointerTOS(x) /* Nothing */
+
+/* Vmgen's tracing support */
 #undef VM_DEBUG
 #define vm_out stdout
 int vm_debug = 1;
@@ -566,10 +568,14 @@ static void printarg_a(PyObject *a)  { PyObject_Print(a, stdout, 0); }
 
 /* Instruction stream & value stack types; see also code.h */
 typedef PyObject *Obj;
-#define vm_Cell2i(inst,arg) ({(arg) = (inst).oparg;})
-#define vm_Cell2Cell(c1,c2) ({(c2) = (c1);})
-#define vm_Obj2a(obj,a)     ({(a) = (obj);})
-#define vm_a2Obj(a,obj)     ({(obj) = (a);})
+#define vm_Cell2i(inst,arg) ((arg) = (inst).oparg)
+#define vm_Cell2Cell(c1,c2) ((c2) = (c1))
+#define vm_Obj2a(obj,a)     ((a) = (obj))
+#define vm_a2Obj(a,obj)     ((obj) = (a))
+
+/* Reference counting annotations */
+#define vm_a2decref(a,_) Py_DECREF(a)
+#define vm_a2incref(a,_) Py_INCREF(a)
 
 /* This is the first code executed in any instruction. */
 #define NEXT_P0 do { \
@@ -578,13 +584,27 @@ typedef PyObject *Obj;
 		next_label = next_instr->opcode; \
 	} while (0)
 
-/* Reference counting annotations */
-#define vm_a2decref(a,_) Py_DECREF(a)
-#define vm_a2incref(a,_) Py_INCREF(a)
+/* There are three ``kinds'' of instructions as far as dispatch is
+   concerned.
 
-/* There are three ``kinds'' of instructions as far as dispatch is concerned.
-   Firstly, we want to use certain instructions as superinstruction-prefixes,
-   and these should dispatch via NEXT_P2. */
+   1. We use certain instructions as superinstruction-prefixes.  These
+   must dispatch via NEXT_P2 by falling off the end of the instruction
+   definition or including INST_TAIL.
+
+   2. Most instructions include a next:xxx annotation at the end of their
+   stack effect:
+      STORE_ATTR ( #i a1 a2 -- dec:a1 dec:a2  next:error )
+   The effect of this is determined by the vm_xxx2next macro below.
+
+   3. Finally, a few instructions are too hairy to be conveniently
+   described by Vmgen's stack effect language.  For these, we
+   manipulate the stack manually and use NEXT() and ERROR() to
+   dispatch to the next instruction or the error-handling block, as
+   appropriate.
+*/
+
+/* --- Type 1 dispatch: fallthrough and INST_TAIL --- */
+
 #define NEXT_P1 /* Nothing */
 #ifndef DYNAMIC_EXECUTION_PROFILE
 /* Put an indirect jump in every opcode to take advantage of the
@@ -599,44 +619,41 @@ typedef PyObject *Obj;
 #define NEXT_P2 goto fast_next_opcode
 #endif  /* DYNAMIC_EXECUTION_PROFILE */
 
-/* Most instructions dispatch as indicated by their next: annotation.
-   Vmgen will insert a vm_foo2next() macro just before NEXT_P2. */
+/* --- Type 2 dispatch: next:xxx stack effect --- */
+
 #define vm_next_opcode2next(_x,_y)    NEXT()
 #define vm_on_error2next(_x,_y)       ERROR()
-#define vm_fast_block_end2next(_x,_y) ({goto fast_block_end;})
-#define vm_fast_yield2next(_x,_y)     ({goto fast_yield;})
-#define vm_a2next(a,_)                           \
-        ({if ((a) != NULL) {                     \
-                  why = WHY_NOT;                 \
-                  NEXT();                        \
-         } else {                                \
-                  why = WHY_EXCEPTION;           \
-                  ERROR();                       \
-         }})
-#define vm_error2next(_x,_y)                     \
-        ({if (err == 0) {                        \
-		  why = WHY_NOT;                 \
-                  NEXT();                        \
-         } else {                                \
-		  why = WHY_EXCEPTION;           \
-                  ERROR();                       \
-         }})
+#define vm_fast_block_end2next(_x,_y) goto fast_block_end
+#define vm_fast_yield2next(_x,_y)     goto fast_yield
+#define vm_a2next(a,_) do { \
+		if ((a) != NULL) { \
+			why = WHY_NOT; \
+			NEXT(); \
+		} else { \
+			why = WHY_EXCEPTION; \
+			ERROR(); \
+		} \
+	} while (0)
+#define vm_error2next(_x,_y) do { \
+		if (err == 0) { \
+			why = WHY_NOT; \
+			NEXT(); \
+		} else { \
+			why = WHY_EXCEPTION; \
+			ERROR(); \
+		} \
+	} while (0)
 
-/* Finally, a few instructions are just too hairy to be conveniently described
-   by Vmgen's stack effect language.
-   For these, we do stack manipulation manually and use the following macros
-   directly to dispatch the next instruction. */
-#define NEXT()     ({if (--_Py_Ticker < 0) goto next_opcode; else NEXT_P2;})
-#define ERROR()    ({goto on_error;})
+/* --- Type 3 dispatch: explicit control --- */
 
-/* Misc */
-#define DEF_CA                /* Nothing */
-#define LABEL2(inst_name)     /* Nothing */
-#define MAYBE_UNUSED          __attribute__((unused))
-#define IMM_ARG(access,value) (access)
-
-/* Communicate instruction addresses to translator */
-Opcode *vm_prim;
+#define NEXT() do { \
+		if (--_Py_Ticker < 0) \
+			goto next_opcode; \
+		else { \
+			NEXT_P2; \
+		} \
+	} while (0)
+#define ERROR()    goto on_error
 
 /* end of Vmgen stuff */
 
@@ -723,13 +740,13 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define IP              (next_instr)
 #define IPTOS           (*next_instr)
 #define INC_IP(n)       do { \
-                next_instr += (n); \
-                next_label = next_instr->opcode; \
-        } while(0)
+		next_instr += (n); \
+		next_label = next_instr->opcode; \
+	} while(0)
 #define SET_IP(target)  do { \
-                next_instr = (target); \
-                next_label = next_instr->opcode; \
-        } while(0)
+		next_instr = (target); \
+		next_label = next_instr->opcode; \
+	} while(0)
 
 /* Stack manipulation macros */
 
@@ -753,9 +770,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #define POP()		BASIC_POP()
 #define STACKADJ(n)	BASIC_STACKADJ(n)
 #define EXT_POP(STACK_POINTER) (*--(STACK_POINTER))
-
-#define stack_pointerTOS       TOP()
-#define IF_stack_pointerTOS(x) /* Nothing */
 
 /* Local variable macros */
 
@@ -821,30 +835,32 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	consts = co->co_consts;
 	fastlocals = f->f_localsplus;
 	freevars = f->f_localsplus + co->co_nlocals;
-        first_instr = co->co_tcode;
-        /* Export instruction addresses, then translate CPython bytecode
-           to DTC. Store result in the code object. */
-        static Opcode labels[] = {
+	first_instr = co->co_tcode;
+	/* Export instruction addresses, then translate CPython bytecode
+	   to DTC. Store result in the code object. */
+	static Opcode labels[] = {
 #include "ceval-labels.i"
-        };
+	};
 
-        if (first_instr == NULL) {
-                Py_ssize_t len, i;
-                PyPInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
-                len = Py_SIZE(co->co_code);
-                first_instr = (Inst *) calloc(len, sizeof(Inst));
-                for (i = 0; i < len; ++i) {
-                        if (pinsts[i].is_arg) {
-                                first_instr[i].oparg =
-                                        PyPInst_GET_ARG(pinsts + i);
-                        }
-                        else {
-                                first_instr[i].opcode =
-                                        labels[PyPInst_GET_OPCODE(pinsts + i)];
-                        }
-                }
-                co->co_tcode = first_instr;
-        }
+	if (first_instr == NULL) {
+		Py_ssize_t len, i;
+		PyPInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
+		len = Py_SIZE(co->co_code);
+		first_instr = PyMem_NEW(Inst, len);
+		if (first_instr == NULL)
+			return PyErr_NoMemory();
+		for (i = 0; i < len; ++i) {
+			if (pinsts[i].is_arg) {
+				first_instr[i].oparg =
+					PyPInst_GET_ARG(pinsts + i);
+			}
+			else {
+				first_instr[i].opcode =
+					labels[PyPInst_GET_OPCODE(pinsts + i)];
+			}
+		}
+		co->co_tcode = first_instr;
+	}
 
 	/* An explanation is in order for the next line.
 
@@ -872,61 +888,61 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	}
 
 next_opcode:
-        assert(stack_pointer >= f->f_valuestack); /* else underflow */
-        assert(STACK_LEVEL() <= co->co_stacksize);  /* else overflow */
+	assert(stack_pointer >= f->f_valuestack); /* else underflow */
+	assert(STACK_LEVEL() <= co->co_stacksize);  /* else overflow */
 
-        /* Do periodic things.  Doing this every time through
-           the loop would add too much overhead, so we do it
-           only every Nth instruction.  We also do it if
-           ``things_to_do'' is set, i.e. when an asynchronous
-           event needs attention (e.g. a signal handler or
-           async I/O handler); see Py_AddPendingCall() and
-           Py_MakePendingCalls() above. */
+	/* Do periodic things.  Doing this every time through
+	   the loop would add too much overhead, so we do it
+	   only every Nth instruction.  We also do it if
+	   ``things_to_do'' is set, i.e. when an asynchronous
+	   event needs attention (e.g. a signal handler or
+	   async I/O handler); see Py_AddPendingCall() and
+	   Py_MakePendingCalls() above. */
 
-        if (next_instr->opcode == INST_ADDR(SETUP_FINALLY)) {
-                /* Make the last opcode before
-                   a try: finally: block uninterruptable. */
-                goto fast_next_opcode;
-        }
-        _Py_Ticker = _Py_CheckInterval;
-        tstate->tick_counter++;
-        if (things_to_do) {
-                if (Py_MakePendingCalls() < 0) {
-                        why = WHY_EXCEPTION;
-                        goto on_error;
-                }
-                if (things_to_do)
-                        /* MakePendingCalls() didn't succeed.
-                           Force early re-execution of this
-                           "periodic" code, possibly after
-                           a thread switch */
-                        _Py_Ticker = 0;
-        }
+	if (next_instr->opcode == INST_ADDR(SETUP_FINALLY)) {
+		/* Make the last opcode before
+		   a try: finally: block uninterruptable. */
+		goto fast_next_opcode;
+	}
+	_Py_Ticker = _Py_CheckInterval;
+	tstate->tick_counter++;
+	if (things_to_do) {
+		if (Py_MakePendingCalls() < 0) {
+			why = WHY_EXCEPTION;
+			goto on_error;
+		}
+		if (things_to_do)
+			/* MakePendingCalls() didn't succeed.
+			   Force early re-execution of this
+			   "periodic" code, possibly after
+			   a thread switch */
+			_Py_Ticker = 0;
+	}
 #ifdef WITH_THREAD
-        if (interpreter_lock) {
-                /* Give another thread a chance */
+	if (interpreter_lock) {
+		/* Give another thread a chance */
 
-                if (PyThreadState_Swap(NULL) != tstate)
-                        Py_FatalError("ceval: tstate mix-up");
-                PyThread_release_lock(interpreter_lock);
+		if (PyThreadState_Swap(NULL) != tstate)
+			Py_FatalError("ceval: tstate mix-up");
+		PyThread_release_lock(interpreter_lock);
 
-                /* Other threads may run now */
+		/* Other threads may run now */
 
-                PyThread_acquire_lock(interpreter_lock, 1);
-                if (PyThreadState_Swap(tstate) != NULL)
-                        Py_FatalError("ceval: orphan tstate");
+		PyThread_acquire_lock(interpreter_lock, 1);
+		if (PyThreadState_Swap(tstate) != NULL)
+			Py_FatalError("ceval: orphan tstate");
 
-                /* Check for thread interrupts */
+		/* Check for thread interrupts */
 
-                if (tstate->async_exc != NULL) {
-                        x = tstate->async_exc;
-                        tstate->async_exc = NULL;
-                        PyErr_SetNone(x);
-                        Py_DECREF(x);
-                        why = WHY_EXCEPTION;
-                        goto on_error;
-                }
-        }
+		if (tstate->async_exc != NULL) {
+			x = tstate->async_exc;
+			tstate->async_exc = NULL;
+			PyErr_SetNone(x);
+			Py_DECREF(x);
+			why = WHY_EXCEPTION;
+			goto on_error;
+		}
+	}
 #endif
 
 fast_next_opcode:
@@ -969,15 +985,15 @@ fast_next_opcode:
 	/* XXX(jyasskin): Add an assertion under CHECKEXC that
 	   !PyErr_Occurred(). */
 	/* Dispatch */
-        goto *(next_instr->opcode);
+	goto *(next_instr->opcode);
 
 #include "ceval-vm.i"
 
 on_error:
 
-        /* Quickly continue if no error occurred */
+	/* Quickly continue if no error occurred */
 
-        if (why == WHY_NOT) {
+	if (why == WHY_NOT) {
 #ifdef CHECKEXC
 		/* This check is expensive! */
 		if (PyErr_Occurred()) {
@@ -992,112 +1008,112 @@ on_error:
 #ifdef CHECKEXC
 		}
 #endif
-        }
+	}
 
-        /* Double-check exception status */
+	/* Double-check exception status */
 
-        if (why == WHY_EXCEPTION || why == WHY_RERAISE) {
-                if (!PyErr_Occurred()) {
-                        PyErr_SetString(PyExc_SystemError,
+	if (why == WHY_EXCEPTION || why == WHY_RERAISE) {
+		if (!PyErr_Occurred()) {
+			PyErr_SetString(PyExc_SystemError,
 				"error return without exception set");
-                        why = WHY_EXCEPTION;
-                }
-        }
+			why = WHY_EXCEPTION;
+		}
+	}
 
-        /* Log traceback info if this is a real exception */
+	/* Log traceback info if this is a real exception */
 
-        if (why == WHY_EXCEPTION) {
-                PyTraceBack_Here(f);
+	if (why == WHY_EXCEPTION) {
+		PyTraceBack_Here(f);
 
-                if (tstate->c_tracefunc != NULL)
-                        call_exc_trace(tstate->c_tracefunc,
-                                       tstate->c_traceobj, f);
-        }
+		if (tstate->c_tracefunc != NULL)
+			call_exc_trace(tstate->c_tracefunc,
+				       tstate->c_traceobj, f);
+	}
 
-        /* For the rest, treat WHY_RERAISE as WHY_EXCEPTION */
+	/* For the rest, treat WHY_RERAISE as WHY_EXCEPTION */
 
-        if (why == WHY_RERAISE)
-                why = WHY_EXCEPTION;
+	if (why == WHY_RERAISE)
+		why = WHY_EXCEPTION;
 
-        /* Unwind stacks if a (pseudo) exception occurred */
+	/* Unwind stacks if a (pseudo) exception occurred */
 
 fast_block_end:
-        while (why != WHY_NOT && f->f_iblock > 0) {
-                PyTryBlock *b = PyFrame_BlockPop(f);
+	while (why != WHY_NOT && f->f_iblock > 0) {
+		PyTryBlock *b = PyFrame_BlockPop(f);
 
-                assert(why != WHY_YIELD);
-                if (b->b_type == SETUP_LOOP && why == WHY_CONTINUE) {
-                        /* For a continue inside a try block,
-                           don't pop the block for the loop. */
-                        PyFrame_BlockSetup(f, b->b_type, b->b_handler,
-                                           b->b_level);
-                        why = WHY_NOT;
-                        JUMPTO(PyInt_AS_LONG(retval));
-                        Py_DECREF(retval);
-                        break;
-                }
+		assert(why != WHY_YIELD);
+		if (b->b_type == SETUP_LOOP && why == WHY_CONTINUE) {
+			/* For a continue inside a try block,
+			   don't pop the block for the loop. */
+			PyFrame_BlockSetup(f, b->b_type, b->b_handler,
+					   b->b_level);
+			why = WHY_NOT;
+			JUMPTO(PyInt_AS_LONG(retval));
+			Py_DECREF(retval);
+			break;
+		}
 
-                while (STACK_LEVEL() > b->b_level) {
-                        a1 = POP();
-                        Py_XDECREF(a1);
-                }
-                if (b->b_type == SETUP_LOOP && why == WHY_BREAK) {
-                        why = WHY_NOT;
-                        JUMPTO(b->b_handler);
-                        break;
-                }
-                if (b->b_type == SETUP_FINALLY ||
-                    (b->b_type == SETUP_EXCEPT &&
-                     why == WHY_EXCEPTION)) {
-                        if (why == WHY_EXCEPTION) {
-                                PyObject *exc, *val, *tb;
-                                PyErr_Fetch(&exc, &val, &tb);
-                                if (val == NULL) {
-                                        val = Py_None;
-                                        Py_INCREF(val);
-                                }
-                                /* Make the raw exception data
-                                   available to the handler,
-                                   so a program can emulate the
-                                   Python main loop.  Don't do
-                                   this for 'finally'. */
-                                if (b->b_type == SETUP_EXCEPT) {
-                                        PyErr_NormalizeException(
-                                                &exc, &val, &tb);
-                                        set_exc_info(tstate,
-                                                     exc, val, tb);
-                                }
-                                if (tb == NULL) {
-                                        Py_INCREF(Py_None);
-                                        PUSH(Py_None);
-                                } else
-                                        PUSH(tb);
-                                PUSH(val);
-                                PUSH(exc);
-                                /* Within the except or finally block,
-                                   PyErr_Occurred() should be false.
-                                   END_FINALLY will restore the
-                                   exception if necessary. */
-                                PyErr_Clear();
-                        }
-                        else {
-                                if (why & (WHY_RETURN | WHY_CONTINUE))
-                                        PUSH(retval);
-                                a1 = PyInt_FromLong((long)why);
-                                PUSH(a1);
-                        }
-                        why = WHY_NOT;
-                        JUMPTO(b->b_handler);
-                        break;
-                }
-        } /* unwind stack */
+		while (STACK_LEVEL() > b->b_level) {
+			a1 = POP();
+			Py_XDECREF(a1);
+		}
+		if (b->b_type == SETUP_LOOP && why == WHY_BREAK) {
+			why = WHY_NOT;
+			JUMPTO(b->b_handler);
+			break;
+		}
+		if (b->b_type == SETUP_FINALLY ||
+		    (b->b_type == SETUP_EXCEPT &&
+		     why == WHY_EXCEPTION)) {
+			if (why == WHY_EXCEPTION) {
+				PyObject *exc, *val, *tb;
+				PyErr_Fetch(&exc, &val, &tb);
+				if (val == NULL) {
+					val = Py_None;
+					Py_INCREF(val);
+				}
+				/* Make the raw exception data
+				   available to the handler,
+				   so a program can emulate the
+				   Python main loop.  Don't do
+				   this for 'finally'. */
+				if (b->b_type == SETUP_EXCEPT) {
+					PyErr_NormalizeException(
+						&exc, &val, &tb);
+					set_exc_info(tstate,
+						     exc, val, tb);
+				}
+				if (tb == NULL) {
+					Py_INCREF(Py_None);
+					PUSH(Py_None);
+				} else
+					PUSH(tb);
+				PUSH(val);
+				PUSH(exc);
+				/* Within the except or finally block,
+				   PyErr_Occurred() should be false.
+				   END_FINALLY will restore the
+				   exception if necessary. */
+				PyErr_Clear();
+			}
+			else {
+				if (why & (WHY_RETURN | WHY_CONTINUE))
+					PUSH(retval);
+				a1 = PyInt_FromLong((long)why);
+				PUSH(a1);
+			}
+			why = WHY_NOT;
+			JUMPTO(b->b_handler);
+			break;
+		}
+	} /* unwind stack */
 
-        /* End the loop if we still have an error (or return) */
+	/* End the loop if we still have an error (or return) */
 
-        if (why != WHY_NOT)
-                goto block_end;
+	if (why != WHY_NOT)
+		goto block_end;
 
-        NEXT(); /* main loop */
+	NEXT(); /* main loop */
 
 block_end:
 	assert(why != WHY_YIELD);
@@ -2668,7 +2684,7 @@ string_concatenate(PyObject *v, PyObject *w,
 		 * 'variable'.  We try to delete the variable now to reduce
 		 * the refcnt to 1.
 		 */
-                switch (opcode) {
+		switch (opcode) {
 		case STORE_FAST:
 		{
 			PyObject **fastlocals = f->f_localsplus;

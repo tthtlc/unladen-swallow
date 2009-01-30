@@ -1779,7 +1779,7 @@ code_t* psyco_pycompiler_mainloop(PsycoObject* po)
 		next_inst_index = _PyCode_UncombineSuperInstruction(
 			PyPInst_GET_OPCODE(&bytecode[next_instr++]),
 			next_insts, 10);
-        }
+	}
 	opcode = next_insts[--next_inst_index];
 	if (HAS_ARG(opcode))
 		oparg = NEXTARG();
@@ -2123,8 +2123,8 @@ code_t* psyco_pycompiler_mainloop(PsycoObject* po)
 		switch (opcode) {
 		case RAISE_VARARGS_THREE:
 			u = NTOP(1); /* traceback */
-			v = NTOP(2); /* traceback */
-			w = NTOP(3); /* traceback */
+			v = NTOP(2); /* value */
+			w = NTOP(3); /* exc */
 			break;
 		case RAISE_VARARGS_TWO:
 			v = NTOP(1); /* value */

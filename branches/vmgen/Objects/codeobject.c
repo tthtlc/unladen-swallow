@@ -326,7 +326,7 @@ code_dealloc(PyCodeObject *co)
         if (co->co_zombieframe != NULL)
                 PyObject_GC_Del(co->co_zombieframe);
         if (co->co_tcode != NULL)
-                free(co->co_tcode);
+                PyMem_FREE(co->co_tcode);
 	PyObject_DEL(co);
 }
 

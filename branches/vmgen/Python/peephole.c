@@ -242,9 +242,8 @@ fold_unaryops_on_constants(PyPInst *inststr, PyObject *consts)
 	return 1;
 }
 
-/* XXX(jyasskin): This currently prevents optimizations that eliminate a
-   jump target. Consider whether we want to prevent optimizations that blur
-   a line boundary too, and under what circumstances. */
+/* Marks instructions that can be the targets of jumps so we keep them
+   distinct through the peephole optimizer. */
 static unsigned int *
 markblocks(PyPInst *code, Py_ssize_t len, PyObject *lineno_obj)
 {
@@ -336,8 +335,10 @@ prepare_peeptable()
 	long i;
 
 	for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
-		IdxCombination *c   = &(peephole_table[i]);
-		IdxCombination *p = (IdxCombination*) malloc(sizeof(*p));
+		IdxCombination *c = &(peephole_table[i]);
+		IdxCombination *p = PyMem_NEW(IdxCombination, 1);
+		if (p == NULL)
+			return;
 
 		p->prefix      = c->prefix;
 		p->lastprim    = c->lastprim;

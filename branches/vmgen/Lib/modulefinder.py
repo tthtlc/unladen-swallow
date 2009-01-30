@@ -21,11 +21,6 @@ C_CALL_FUNCTION = dis.opname.index('C_CALL_FUNCTION')
 STORE_NAME = dis.opname.index('STORE_NAME')
 STORE_GLOBAL = dis.opname.index('STORE_GLOBAL')
 STORE_OPS = [STORE_NAME, STORE_GLOBAL]
-wordcode = 0
-try:
-    HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
-except AttributeError:
-    wordcode = 1
 
 # Modulefinder does a good job at simulating Python's, but it can not
 # handle __path__ modifications packages make at runtime.  Therefore there

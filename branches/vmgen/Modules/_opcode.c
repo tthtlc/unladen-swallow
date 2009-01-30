@@ -29,9 +29,9 @@ err:
 }
 
 typedef struct idx_combination {
-	int prefix;      /* instruction or superinstruction prefix index */
-	int lastprim;    /* most recently added instruction index	*/
-	int combination; /* resulting superinstruction index	     */
+    int prefix;      /* instruction or superinstruction prefix index */
+    int lastprim;    /* most recently added instruction index */
+    int combination; /* resulting superinstruction index */
 } IdxCombination;
 
 static IdxCombination peephole_table[] = {
