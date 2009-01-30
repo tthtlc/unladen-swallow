@@ -17,7 +17,9 @@ dis_f = """\
               4 CALL_FUNCTION            1
               6 POP_TOP
 
- %-4d         7 LOAD_CONST               1 (1)
+ %-4d         7 RETURN_CONST:
+                  LOAD_CONST               1 (1)
+                  RETURN_VALUE
               9 RETURN_VALUE
 """%(_f.func_code.co_firstlineno + 1,
      _f.func_code.co_firstlineno + 2)
@@ -68,7 +70,9 @@ if __debug__:
 
  %-4d        14 JUMP_ABSOLUTE           10
         >>   16 POP_BLOCK
-        >>   17 LOAD_CONST               0 (None)
+        >>   17 RETURN_CONST:
+                  LOAD_CONST               0 (None)
+                  RETURN_VALUE
              19 RETURN_VALUE
 """%(bug708901.func_code.co_firstlineno + 1,
      bug708901.func_code.co_firstlineno + 2,
@@ -88,7 +92,9 @@ else:
 
  %-4d        13 JUMP_ABSOLUTE            9
         >>   15 POP_BLOCK
-        >>   16 LOAD_CONST               0 (None)
+        >>   16 RETURN_CONST:
+                  LOAD_CONST               0 (None)
+                  RETURN_VALUE
              18 RETURN_VALUE
 """%(bug708901.func_code.co_firstlineno + 1,
      bug708901.func_code.co_firstlineno + 2,
@@ -126,13 +132,23 @@ dis_bug1333982 = """\
              28 RAISE_VARARGS_TWO
         >>   29 POP_TOP
 
-%3d          30 LOAD_CONST               0 (None)
+%3d          30 RETURN_CONST:
+                  LOAD_CONST               0 (None)
+                  RETURN_VALUE
              32 RETURN_VALUE
 """%(bug1333982.func_code.co_firstlineno + 1,
      bug1333982.func_code.co_firstlineno + 2,
      bug1333982.func_code.co_firstlineno + 3)
 
-_BIG_LINENO_FORMAT = """\
+_BIG_LINENO_PEEPHOLED_FORMAT = """\
+%3d           0 LOAD_GLOBAL              0 (spam)
+              2 POP_TOP
+              3 RETURN_CONST:
+                  LOAD_CONST               0 (None)
+                  RETURN_VALUE
+              5 RETURN_VALUE
+"""
+_BIG_LINENO_UNPEEPHOLED_FORMAT = """\
 %3d           0 LOAD_GLOBAL              0 (spam)
               2 POP_TOP
               3 LOAD_CONST               0 (None)
@@ -192,12 +208,16 @@ class DisTests(unittest.TestCase):
 
         # Test all small ranges
         for i in xrange(1, 300):
-            expected = _BIG_LINENO_FORMAT % (i + 2)
+            if i < 254:
+                format = _BIG_LINENO_PEEPHOLED_FORMAT
+            else:
+                format = _BIG_LINENO_UNPEEPHOLED_FORMAT
+            expected = format % (i + 2)
             self.do_disassembly_test(func(i), expected)
 
         # Test some larger ranges too
         for i in xrange(300, 5000, 10):
-            expected = _BIG_LINENO_FORMAT % (i + 2)
+            expected = _BIG_LINENO_UNPEEPHOLED_FORMAT % (i + 2)
             self.do_disassembly_test(func(i), expected)
 
 def test_main():
