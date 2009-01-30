@@ -1944,6 +1944,35 @@ PyEval_GetRestricted(void)
 	return current_frame == NULL ? 0 : PyFrame_IsRestricted(current_frame);
 }
 
+#undef INST_ADDR
+#define INST_ADDR(CODE) #CODE
+static const char *const opcode_names[] = {
+#include "ceval-labels.i"
+};
+#undef INST_ADDR
+
+PyObject *
+_PyEval_GetOpcodeNames()
+{
+	Py_ssize_t i;
+	const Py_ssize_t num_opcodes =
+			sizeof(opcode_names) / sizeof(opcode_names[0]);
+	PyObject *opcode_tuple = PyTuple_New(num_opcodes);
+	if (opcode_tuple == NULL)
+		return NULL;
+	for (i = 0; i < num_opcodes; i++) {
+		PyObject *pyname = PyString_FromString(opcode_names[i]);
+		if (pyname == NULL)
+			goto err;
+		PyTuple_SET_ITEM(opcode_tuple, i, pyname);
+	}
+	return opcode_tuple;
+
+err:
+	Py_DECREF(opcode_tuple);
+	return NULL;
+}
+
 int
 PyEval_MergeCompilerFlags(PyCompilerFlags *cf)
 {

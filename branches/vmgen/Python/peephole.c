@@ -350,6 +350,37 @@ prepare_peeptable()
 	}
 }
 
+PyObject *
+_PyEval_GetSuperinstructionDefinitions()
+{
+	Py_ssize_t i;
+	PyObject *table = NULL, *key = NULL, *value = NULL;
+
+	table = PyDict_New();
+	if (table == NULL)
+		goto err;
+
+	for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
+		IdxCombination *c = &(peephole_table[i]);
+
+		key = Py_BuildValue("ii", c->prefix, c->lastprim);
+		value = PyInt_FromLong(c->combination);
+		if (key == NULL || value == NULL)
+			goto err;
+		if (PyDict_SetItem(table, key, value) != 0)
+			goto err;
+		Py_CLEAR(key);
+		Py_CLEAR(value);
+	}
+	return table;
+
+err:
+	Py_XDECREF(table);
+	Py_XDECREF(key);
+	Py_XDECREF(value);
+	return NULL;
+}
+
 static int
 combine_two(int op1, int op2)
 {
