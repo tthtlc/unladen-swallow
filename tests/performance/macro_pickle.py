@@ -10,9 +10,11 @@ __author__ = "collinwinter@google.com (Collin Winter)"
 
 # Python imports
 import datetime
+import gc
 import optparse
 import time
 
+gc.disable()  # Minimize jitter.
 
 # How many copies of the objects below to pickle/unpickle per test run.
 NUM_COPIES = 20000
