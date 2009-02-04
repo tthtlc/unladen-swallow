@@ -11,6 +11,7 @@ Crap benchmarks used for historical comparisons:
 Macro(ish)benchmarks:
     - gcbench.py: GC benchmark (allocate and deallocate lots of objects).
       Copied from PyPy's pypy/translator/goal/gcbench.py, r60845.
+    - macro_pickle.py: test picking/unpickling performance.    
 
 
 Microbenchmarks:

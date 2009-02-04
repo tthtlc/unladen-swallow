@@ -232,29 +232,46 @@ def CompareMultipleRuns(base_times, changed_times):
              % locals())
 
 
+def CallAndCaptureOutput(command, env={}):
+    """Run the given command, capturing stdout.
+
+    Args:
+        command: the command to run as a list, one argument per element.
+        env: optional; environment variables to set.
+
+    Returns:
+        The captured stdout as a string.
+
+    Raises:
+        RuntimeError: if the command failed. The value of the exception will
+        be the error message from the command.
+    """
+    subproc = subprocess.Popen(LogCall(command),
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,
+                               env=env)
+    result, err = subproc.communicate()
+    if subproc.returncode != 0:
+        raise RuntimeError("Benchmark died: " + err)
+    return result
+
+
 def MeasureDjango(python, options):
     DJANGO_DIR = Relative("lib/django")
     TEST_PROG = Relative("performance/macro_django.py")
 
     django_env = {"PYTHONPATH": DJANGO_DIR}
 
-    with open("/dev/null", "wb") as dev_null:
-        trials = 50
-        if options.rigorous:
-            trials = 100
-        elif options.fast:
-            trials = 5
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
 
-        RemovePycs()
-
-        command = [python, "-O", TEST_PROG, "-n", trials]
-        django = subprocess.Popen(LogCall(command),
-                                  stdout=subprocess.PIPE, stderr=dev_null,
-                                  env=django_env)
-        result, err = django.communicate()
-        if django.returncode != 0:
-            return "Django test died: " + err
-        return [float(line) for line in result.splitlines()]
+    RemovePycs()
+    command = [python, "-O", TEST_PROG, "-n", trials]
+    result = CallAndCaptureOutput(command, django_env)
+    return [float(line) for line in result.splitlines()]
 
 
 def BM_Django(base_python, changed_python, options):
@@ -323,22 +340,16 @@ def MeasureSpitfire(python, options, env={}, extra_args=[]):
     """
     TEST_PROG = Relative("performance/macro_spitfire.py")
 
-    with open("/dev/null", "wb") as dev_null:
-        trials = 50
-        if options.rigorous:
-            trials = 100
-        elif options.fast:
-            trials = 5
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
 
-        RemovePycs()
-        command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
-        spitfire = subprocess.Popen(LogCall(command),
-                                    stdout=subprocess.PIPE, stderr=dev_null,
-                                    env=env)
-        result, err = spitfire.communicate()
-        if spitfire.returncode != 0:
-            return "Spitfire test died: " + err
-        return [float(line) for line in result.splitlines()]
+    RemovePycs()
+    command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
+    result = CallAndCaptureOutput(command, env)
+    return [float(line) for line in result.splitlines()]
 
 
 def MeasureSpitfireWithPsyco(python, options):
@@ -390,6 +401,51 @@ def BM_SlowSpitfire(base_python, changed_python, options):
     except subprocess.CalledProcessError, e:
         return str(e)
 
+    return CompareMultipleRuns(base_times, changed_times)
+
+
+def MeasurePickle(python, options, direction):
+    """Test the performance of Python's pickle implementations.
+
+    Args:
+        python: path to the Python binary.
+        options: optparse.Values instance.
+        direction: either "pickle" or "unpickle".
+
+    Returns:
+        List of floats, each the time it took to run the pickle test once.
+    """
+    TEST_PROG = Relative("performance/macro_pickle.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = [python, "-O", TEST_PROG, "--use_cpickle",
+               "-n", trials, direction]
+    result = CallAndCaptureOutput(command, env=CLEAN_ENV)
+    return [float(line) for line in result.splitlines()]
+
+
+def BM_Pickle(base_python, changed_python, options):
+    try:
+        changed_times = MeasurePickle(changed_python, options, "pickle")
+        base_times = MeasurePickle(base_python, options, "pickle")
+    except subprocess.CalledProcessError, e:
+        return str(e)
+    return CompareMultipleRuns(base_times, changed_times)
+
+
+def BM_Unpickle(base_python, changed_python, options):
+    try:
+        changed_times = MeasurePickle(changed_python, options, "unpickle")
+        base_times = MeasurePickle(base_python, options, "unpickle")
+    except subprocess.CalledProcessError, e:
+        return str(e)
     return CompareMultipleRuns(base_times, changed_times)
 
 
