@@ -404,13 +404,13 @@ def BM_SlowSpitfire(base_python, changed_python, options):
     return CompareMultipleRuns(base_times, changed_times)
 
 
-def MeasurePickle(python, options, direction):
+def MeasurePickle(python, options, extra_args):
     """Test the performance of Python's pickle implementations.
 
     Args:
         python: path to the Python binary.
         options: optparse.Values instance.
-        direction: either "pickle" or "unpickle".
+        extra_args: list of arguments to append to the command line.
 
     Returns:
         List of floats, each the time it took to run the pickle test once.
@@ -425,28 +425,48 @@ def MeasurePickle(python, options, direction):
         trials = 5
 
     RemovePycs()
-    command = [python, "-O", TEST_PROG, "--use_cpickle",
-               "-n", trials, direction]
+    command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
     result = CallAndCaptureOutput(command, env=CLEAN_ENV)
     return [float(line) for line in result.splitlines()]
 
 
-def BM_Pickle(base_python, changed_python, options):
+def _PickleBenchmark(base_python, changed_python, options, extra_args):
+    """Test the performance of Python's pickle implementations.
+
+    Args:
+        base_python: path to the reference Python binary.
+        changed_python: path to the experimental Python binary.
+        options: optparse.Values instance.
+        extra_args: list of arguments to append to the command line.
+
+    Returns:
+        Summary of whether the experiemental Python is better/worse than the
+        baseline.
+    """
     try:
-        changed_times = MeasurePickle(changed_python, options, "pickle")
-        base_times = MeasurePickle(base_python, options, "pickle")
+        changed_times = MeasurePickle(changed_python, options, extra_args)
+        base_times = MeasurePickle(base_python, options, extra_args)
     except subprocess.CalledProcessError, e:
         return str(e)
     return CompareMultipleRuns(base_times, changed_times)
+
+
+def BM_Pickle(base_python, changed_python, options):
+    args = ["--use_cpickle", "pickle"]
+    return _PickleBenchmark(base_python, changed_python, options, args)
 
 
 def BM_Unpickle(base_python, changed_python, options):
-    try:
-        changed_times = MeasurePickle(changed_python, options, "unpickle")
-        base_times = MeasurePickle(base_python, options, "unpickle")
-    except subprocess.CalledProcessError, e:
-        return str(e)
-    return CompareMultipleRuns(base_times, changed_times)
+    args = ["--use_cpickle", "unpickle"]
+    return _PickleBenchmark(base_python, changed_python, options, args)
+
+
+def BM_SlowPickle(base_python, changed_python, options):
+    return _PickleBenchmark(base_python, changed_python, options, ["pickle"])
+
+
+def BM_SlowUnpickle(base_python, changed_python, options):
+    return _PickleBenchmark(base_python, changed_python, options, ["unpickle"])
 
 
 def ParseBenchmarksOption(options, legal_benchmarks):
