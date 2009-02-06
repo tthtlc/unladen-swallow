@@ -30,7 +30,7 @@ DJANGO_TMPL = Template("""<table>
 """)
 
 def test_django(count):
-    table = [xrange(100) for _ in xrange(100)]
+    table = [xrange(150) for _ in xrange(150)]
     context = Context({"table": table})
 
     # Warm up Django.
