@@ -836,27 +836,30 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	fastlocals = f->f_localsplus;
 	freevars = f->f_localsplus + co->co_nlocals;
 	first_instr = co->co_tcode;
-	/* Export instruction addresses, then translate CPython bytecode
-	   to DTC. Store result in the code object. */
+	/* Use the array of instruction addresses, to translate
+	   co->co_code->inst (an array of PyInsts) to direct-threaded
+	   code (where an opcode is the address of the sub-function
+	   that interprets it). We only compute the result once and
+	   store it in the code object. */
 	static Opcode labels[] = {
 #include "ceval-labels.i"
 	};
 
 	if (first_instr == NULL) {
 		Py_ssize_t len, i;
-		PyInst *pinsts = ((PyInstructionsObject *)co->co_code)->inst;
+		PyInst *insts = ((PyInstructionsObject *)co->co_code)->inst;
 		len = Py_SIZE(co->co_code);
 		first_instr = PyMem_NEW(Inst, len);
 		if (first_instr == NULL)
 			return PyErr_NoMemory();
 		for (i = 0; i < len; ++i) {
-			if (pinsts[i].is_arg) {
+			if (insts[i].is_arg) {
 				first_instr[i].oparg =
-					PyInst_GET_ARG(pinsts + i);
+					PyInst_GET_ARG(insts + i);
 			}
 			else {
 				first_instr[i].opcode =
-					labels[PyInst_GET_OPCODE(pinsts + i)];
+					labels[PyInst_GET_OPCODE(insts + i)];
 			}
 		}
 		co->co_tcode = first_instr;
@@ -880,7 +883,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 #endif
 
 	why = WHY_NOT;
-	a1 = a2 = NULL;
 
 	if (throwflag) { /* support for generator.throw() */
 		why = WHY_EXCEPTION;
@@ -1019,6 +1021,17 @@ on_error:
 			why = WHY_EXCEPTION;
 		}
 	}
+#ifdef CHECKEXC
+	else {
+		/* This check is expensive! */
+		if (PyErr_Occurred()) {
+			char buf[128];
+			sprintf(buf, "Stack unwind with exception "
+				"set and why=%d", why);
+			Py_FatalError(buf);
+		}
+	}
+#endif
 
 	/* Log traceback info if this is a real exception */
 
@@ -1962,15 +1975,13 @@ _PyEval_GetOpcodeNames()
 		return NULL;
 	for (i = 0; i < num_opcodes; i++) {
 		PyObject *pyname = PyString_FromString(opcode_names[i]);
-		if (pyname == NULL)
-			goto err;
+		if (pyname == NULL) {
+			Py_DECREF(opcode_tuple);
+			return NULL;
+		}
 		PyTuple_SET_ITEM(opcode_tuple, i, pyname);
 	}
 	return opcode_tuple;
-
-err:
-	Py_DECREF(opcode_tuple);
-	return NULL;
 }
 
 int

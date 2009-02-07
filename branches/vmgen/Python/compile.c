@@ -3304,8 +3304,7 @@ compiler_handle_subscr(struct compiler *c, const char *kind,
 static int
 compiler_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 {
-	const int build_slice[] = { -1, -1, BUILD_SLICE_TWO, BUILD_SLICE_THREE };
-	int n = 2;
+	int slice_has_three_args = 0;
 	assert(s->kind == Slice_kind);
 
 	/* only handles the cases where BUILD_SLICE is emitted */
@@ -3324,10 +3323,10 @@ compiler_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 	}
 
 	if (s->v.Slice.step) {
-		n++;
+		slice_has_three_args = 1;
 		VISIT(c, expr, s->v.Slice.step);
 	}
-	ADDOP(c, build_slice[n]);
+	ADDOP(c, slice_has_three_args ? BUILD_SLICE_THREE : BUILD_SLICE_TWO);
 	return 1;
 }
 
@@ -3339,7 +3338,7 @@ compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 				    STORE_SLICE_RIGHT, STORE_SLICE_BOTH };
 	const int delete_slice[] = { DELETE_SLICE_NONE, DELETE_SLICE_LEFT,
 				     DELETE_SLICE_RIGHT, DELETE_SLICE_BOTH };
-	const int *op = NULL;
+	const int *op_array = NULL;
 	int slice_offset = 0, stack_count = 0;
 
 	assert(s->v.Slice.step == NULL);
@@ -3373,10 +3372,10 @@ compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 
 	switch (ctx) {
 	case AugLoad: /* fall through to Load */
-	case Load: op = slice; break;
+	case Load: op_array = slice; break;
 	case AugStore:/* fall through to Store */
-	case Store: op = store_slice; break;
-	case Del: op = delete_slice; break;
+	case Store: op_array = store_slice; break;
+	case Del: op_array = delete_slice; break;
 	case Param:
 	default:
 		PyErr_SetString(PyExc_SystemError,
@@ -3384,7 +3383,7 @@ compiler_simple_slice(struct compiler *c, slice_ty s, expr_context_ty ctx)
 		return 0;
 	}
 
-	ADDOP(c, op[slice_offset]);
+	ADDOP(c, op_array[slice_offset]);
 	return 1;
 }
 

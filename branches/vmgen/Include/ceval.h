@@ -39,7 +39,7 @@ PyAPI_FUNC(int) PyEval_GetRestricted(void);
    definitions.  Most Python code will access these through the opcode
    module instead. */
 
-/* Returns a python list opcode_names such that
+/* Returns a python list of opcode names such that
    opcode_names[OPCODE] == "OPCODE" */
 PyAPI_FUNC(PyObject *) _PyEval_GetOpcodeNames(void);
 

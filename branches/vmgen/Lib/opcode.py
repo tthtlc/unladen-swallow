@@ -117,6 +117,11 @@ arg_op('CALL_FUNCTION_VAR_KW',
 
 del arg_op, name_op, jrel_op, jabs_op
 
+# The following functions help Python code manipulate encoded
+# instructions. When instructions are exposed to Python code, they get
+# encoded as integers. The lowest bit is 1 is the instruction is an
+# argument and 0 if the instruction is an opcode. The higher bits hold
+# the value of the argument or opcode.
 def is_argument(instruction):
     return bool(instruction & 1)
 

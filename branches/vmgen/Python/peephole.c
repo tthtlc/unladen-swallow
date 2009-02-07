@@ -323,7 +323,7 @@ typedef struct idx_combination {
 	struct idx_combination *next;
 } IdxCombination;
 
-static IdxCombination peephole_table[] = {
+static IdxCombination peephole_definitions[] = {
 #include "ceval-peephole.i"
 };
 
@@ -334,19 +334,21 @@ prepare_peeptable()
 {
 	long i;
 
-	for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
-		IdxCombination *c = &(peephole_table[i]);
-		IdxCombination *p = PyMem_NEW(IdxCombination, 1);
-		if (p == NULL)
+	for (i = 0;
+	     i < sizeof(peephole_definitions)/sizeof(peephole_definitions[0]);
+	     i++) {
+		IdxCombination *peephole_def = &(peephole_definitions[i]);
+		IdxCombination *peephash_node = PyMem_NEW(IdxCombination, 1);
+		if (peephash_node == NULL)
 			return;
 
-		p->prefix      = c->prefix;
-		p->lastprim    = c->lastprim;
-		p->combination = c->combination;
+		peephash_node->prefix      = peephole_def->prefix;
+		peephash_node->lastprim    = peephole_def->lastprim;
+		peephash_node->combination = peephole_def->combination;
 
-		long h       = HASH(p->prefix, p->lastprim);
-		p->next      = peeptable[h];
-		peeptable[h] = p;
+		long h = HASH(peephash_node->prefix, peephash_node->lastprim);
+		peephash_node->next = peeptable[h];
+		peeptable[h] = peephash_node;
 	}
 }
 
@@ -360,8 +362,8 @@ _PyEval_GetSuperinstructionDefinitions()
 	if (table == NULL)
 		goto err;
 
-	for (i = 0; i < sizeof(peephole_table)/sizeof(peephole_table[0]); i++) {
-		IdxCombination *c = &(peephole_table[i]);
+	for (i = 0; i < sizeof(peephole_definitions)/sizeof(peephole_definitions[0]); i++) {
+		IdxCombination *c = &(peephole_definitions[i]);
 
 		key = Py_BuildValue("ii", c->prefix, c->lastprim);
 		value = PyInt_FromLong(c->combination);
@@ -381,6 +383,9 @@ err:
 	return NULL;
 }
 
+/* Takes two opcodes and decides whether some superinstruction
+   represents that sequence. If there is such a superinstruction,
+   returns it. Otherwise returns -1. */
 static int
 combine_two(int op1, int op2)
 {
@@ -398,25 +403,46 @@ static void
 combine_to_superinstructions(PyInst *inststr, Py_ssize_t codelen,
 			     unsigned int *blocks)
 {
-	/* First element of inststr is always an opcode. */
+	/* We walk down the list of instructions, combining them to
+	   superinstructions when possible. The current opcode is
+	   inststr[working_on], the slot to put any next argument in
+	   is inststr[next_arg], and the next instruction (either an
+	   opcode or argument) to try to combine is inststr[i]. */
+
+	/* First element of inststr is always an opcode, so initialize
+	   working_on to 0 and next_arg to 1. */
 	int working_on = 0;
 	int next_arg = 1;
 	int i;
 
-	for (i=1; i < codelen; i++) {
+	for (i = 1; i < codelen; i++) {
 		if (inststr[i].is_arg) {
+			/* If we encounter an argument, it must belong
+			 * to an opcode that has already been combined
+			 * into inststr[working_on]. Add it to the
+			 * arguments. */
 			inststr[next_arg] = inststr[i];
 			next_arg++;
 		}
 		else {
 			int super_op = -1;
-			/* See ISBASICBLOCK() */
+			/* Don't combine across basic block boundaries
+			   since that would break jumps pointing to
+			   one of the sub-instructions.
+			   See ISBASICBLOCK() */
 			if (blocks[working_on] == blocks[i]) {
-				super_op = combine_two(GETOP(inststr[working_on]),
-						       GETOP(inststr[i]));
+				/* Try to combine the current opcode
+				   with the next one.  */
+				super_op = combine_two(
+						GETOP(inststr[working_on]),
+						GETOP(inststr[i]));
 			}
 			if (super_op == -1) {
-				/* Start new superinstruction */
+				/* Failed to combine: start a new
+				   superinstruction */
+				/* The instructions between next_arg
+				   and i have been consumed in the
+				   superinstruction, so clear them. */
 				set_nops(inststr + next_arg, i - next_arg);
 				working_on = i;
 				next_arg = i + 1;
@@ -441,18 +467,20 @@ int _PyCode_UncombineSuperInstruction(int super, int *prims, int prims_len)
 {
 	int num_prims = 0;
 	const int num_supers =
-		sizeof(peephole_table) / sizeof(peephole_table[0]);
+		sizeof(peephole_definitions) / sizeof(peephole_definitions[0]);
 	int super_found = true;
 	while (super_found) {
 		int i;
 		super_found = false;
 		for (i = 0; i < num_supers; i++) {
-			if (peephole_table[i].combination == super) {
+			IdxCombination *peephole_def =
+					&peephole_definitions[i];
+			if (peephole_def->combination == super) {
 				if (num_prims >= prims_len) {
 					return -1;
 				}
-				super = peephole_table[i].prefix;
-				prims[num_prims++] = peephole_table[i].lastprim;
+				super = peephole_def->prefix;
+				prims[num_prims++] = peephole_def->lastprim;
 				super_found = true;
 				break;
 			}

@@ -660,9 +660,9 @@ class LineAddrTable:
 
     def addCode(self, *args):
         if args:
-            self.code.append(args[0] << 1)
+            self.code.append(dis.make_opcode(args[0]))
         for arg in args[1:]:
-            self.code.append((arg << 1) | 1)
+            self.code.append(dis.make_argument(arg))
         self.codeOffset = self.codeOffset + len(args)
 
     def nextLine(self, lineno):
@@ -788,6 +788,10 @@ class StackDepthTracker:
         hi, lo = divmod(argc, 256)
         return -(lo + hi * 2)
     def CALL_FUNCTION_VAR_KW(self, argc):
+        # The low 16 bits of argc stores whether the call had *args or
+        # **kwargs. If the value is 1 or 2, only 1 is present and will
+        # be popped off by the call. If the value is 3, both are
+        # present and will be popped off.
         star_effect = -1
         if argc & 0xFFFF == 3:
             star_effect = -2

@@ -1,7 +1,7 @@
 #include "Python.h"
 #include "instructionsobject.h"
 
-static inline unsigned int pinst_to_int(PyInst inst) {
+static inline unsigned int inst_to_int(PyInst inst) {
     return inst.opcode_or_arg << 1 | inst.is_arg;
 }
 
@@ -10,8 +10,8 @@ insts_compare(PyInstructionsObject *l, PyInstructionsObject *r) {
     Py_ssize_t min_size = Py_SIZE(l) < Py_SIZE(r) ? Py_SIZE(l) : Py_SIZE(r);
     Py_ssize_t i;
     for (i = 0; i < min_size; i++) {
-        unsigned int l_inst = pinst_to_int(l->inst[i]);
-        unsigned int r_inst = pinst_to_int(r->inst[i]);
+        unsigned int l_inst = inst_to_int(l->inst[i]);
+        unsigned int r_inst = inst_to_int(r->inst[i]);
         if (l_inst < r_inst) return -1;
         if (l_inst > r_inst) return 1;
     }
@@ -26,7 +26,7 @@ insts_hash(PyInstructionsObject *vec) {
     Py_ssize_t i;
     for (i = 0; i < Py_SIZE(vec); i++) {
         result *= 1000003;
-        result ^= pinst_to_int(vec->inst[i]);
+        result ^= inst_to_int(vec->inst[i]);
     }
     return result;
 }
@@ -124,7 +124,7 @@ insts_item(PyInstructionsObject *ob, Py_ssize_t i)
         PyErr_SetString(PyExc_IndexError, "instruction index out of range");
         return NULL;
     }
-    unsigned int value = pinst_to_int(ob->inst[i]);
+    unsigned int value = inst_to_int(ob->inst[i]);
     return PyInt_FromSize_t(value);
 }
 
