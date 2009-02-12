@@ -15,3 +15,4 @@ Read, useful:
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.59.1271 Context Threading: A Flexible and Efficient Dispatch Technique for Virtual Machine Interpreters] (Berndl et al, 2005)* An enhancement to the direct threading approach advocated by Ertl.
   * *[http://www.tecgraf.puc-rio.br/~lhf/ftp/doc/jucs05.pdf The Implementation of Lua 5.0] (Ierusalimschy, Henrique de Figueiredo & Celes, 2005)* Interesting notes on moving from a stack-based VM to a register-based VM, including benchmarks comparing just the stack vs register aspect.
   * *[http://portal.acm.org/citation.cfm?id=800542 Efficient implementation of the smalltalk-80 system] (Deutsch & Schiffman, 1984)*
+  * *[http://research.sun.com/self/papers/urs-thesis.html Adaptive optimization for Self: Reconciling High Performance with Exploratory Programming] (Hölzle, 1994)*
