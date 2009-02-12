@@ -31,5 +31,6 @@ Phase One of Unladen Swallow will be based on making the current implementation 
 
 ==Considered, Rejected==
 <ol>
+<li>Import [http://svn.python.org/view?rev=67818&view=rev r67818] from mainline Python. This isn't a clear win: some benchmarks are faster, some are slower. Attempts to pinpoint the slowdowns are inconclusive.</li>
 <li>Iterative eval loop. Hypothesis: if we can reuse a single "instance" of the PyEval_EvalFrameEx C stack frame for Python-to-Python function calls, that will be faster than creating a new stack frame for each Python function call. Making this work with the current implementation would have introduced a prohibitively-high amount of new complication for what we estimate to have been a relatively minor performance improvement.</li>
 </ol>
