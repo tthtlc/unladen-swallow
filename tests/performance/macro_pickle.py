@@ -16,9 +16,6 @@ import time
 
 gc.disable()  # Minimize jitter.
 
-# How many copies of the objects below to pickle/unpickle per test run.
-NUM_COPIES = 40000
-
 DICT = {
     'ads_flags': 0L,
     'age': 18,
@@ -60,16 +57,16 @@ TUPLE = ([265867233L, 265868503L, 265252341L, 265243910L, 265879514L,
           265392591L, 265877490L, 265823665L, 265828884L, 265753032L], 60)
 
 
-def test_pickle(pickle, count):
-    many_dicts = [dict(DICT) for _ in xrange(NUM_COPIES)]
-    many_tuples = [tuple(TUPLE) for _ in xrange(NUM_COPIES)]
+def test_pickle(pickle, num_runs, num_obj_copies):
+    many_dicts = [dict(DICT) for _ in xrange(num_obj_copies)]
+    many_tuples = [tuple(TUPLE) for _ in xrange(num_obj_copies)]
 
     # Warm-up runs.
     pickle.dumps(many_dicts)
     pickle.dumps(many_tuples)
 
     times = []
-    for _ in xrange(count):
+    for _ in xrange(num_runs):
         t0 = time.time()
         pickle.dumps(many_dicts)
         pickle.dumps(many_tuples)
@@ -78,16 +75,16 @@ def test_pickle(pickle, count):
     return times
 
 
-def test_unpickle(pickle, count):
-    many_dicts = pickle.dumps([dict(DICT) for _ in xrange(NUM_COPIES)])
-    many_tuples = pickle.dumps([tuple(TUPLE) for _ in xrange(NUM_COPIES)])
+def test_unpickle(pickle, num_runs, num_obj_copies):
+    many_dicts = pickle.dumps([dict(DICT) for _ in xrange(num_obj_copies)])
+    many_tuples = pickle.dumps([tuple(TUPLE) for _ in xrange(num_obj_copies)])
 
     # Warm-up runs.
     pickle.loads(many_dicts)
     pickle.loads(many_tuples)
 
     times = []
-    for _ in xrange(count):
+    for _ in xrange(num_runs):
         t0 = time.time()
         pickle.loads(many_dicts)
         pickle.loads(many_tuples)
@@ -114,9 +111,11 @@ if __name__ == "__main__":
         raise RuntimeError("Need to specify either 'pickle' or 'unpickle'")
 
     if options.use_cpickle:
+        num_obj_copies = 40000
         import cPickle as pickle
     else:
+        num_obj_copies = 6000
         import pickle
 
-    for t in benchmark(pickle, options.num_runs):
+    for t in benchmark(pickle, options.num_runs, num_obj_copies):
         print t
