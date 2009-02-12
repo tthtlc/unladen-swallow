@@ -17,7 +17,7 @@ import time
 gc.disable()  # Minimize jitter.
 
 # How many copies of the objects below to pickle/unpickle per test run.
-NUM_COPIES = 20000
+NUM_COPIES = 40000
 
 DICT = {
     'ads_flags': 0L,
