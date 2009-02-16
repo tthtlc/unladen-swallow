@@ -1358,6 +1358,8 @@ Optional Packages:
   --with-fpectl           enable SIGFPE catching
   --with-libm=STRING      math library
   --with-libc=STRING      C library
+  --with-computed-gotos   Use computed gotos / threaded dispatch in evaluation
+                          loops (not available on all compilers)
 
 Some influential environment variables:
   CC          C compiler command
@@ -24578,6 +24580,32 @@ cat >>confdefs.h <<\_ACEOF
 _ACEOF
 
 fi
+
+
+# Check for --with-computed-gotos
+{ echo "$as_me:$LINENO: checking for --with-computed-gotos" >&5
+echo $ECHO_N "checking for --with-computed-gotos... $ECHO_C" >&6; }
+
+# Check whether --with-computed-gotos was given.
+if test "${with_computed_gotos+set}" = set; then
+  withval=$with_computed_gotos;
+if test "$withval" != no
+then
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_COMPUTED_GOTOS 1
+_ACEOF
+
+  { echo "$as_me:$LINENO: result: yes" >&5
+echo "${ECHO_T}yes" >&6; }
+else { echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6; }
+fi
+else
+  { echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6; }
+fi
+
 
 
 

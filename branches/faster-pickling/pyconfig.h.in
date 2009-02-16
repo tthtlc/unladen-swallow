@@ -360,7 +360,7 @@
 /* Define to 1 if you have the <libintl.h> header file. */
 #undef HAVE_LIBINTL_H
 
-/* Define to 1 if you have the `readline' library (-lreadline). */
+/* Define if you have the readline library (-lreadline). */
 #undef HAVE_LIBREADLINE
 
 /* Define to 1 if you have the `resolv' library (-lresolv). */
@@ -938,6 +938,9 @@
 
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
+
+/* Define if you want to use computed gotos in various eval loops. */
+#undef USE_COMPUTED_GOTOS
 
 /* Define if you want to use MacPython modules on MacOSX in unix-Python. */
 #undef USE_TOOLBOX_OBJECT_GLUE

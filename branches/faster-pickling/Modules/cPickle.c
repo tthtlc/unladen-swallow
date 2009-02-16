@@ -77,6 +77,8 @@ PyDoc_STRVAR(cPickle_module_documentation,
 #define LONG1    '\x8a' /* push long from < 256 bytes */
 #define LONG4    '\x8b' /* push really big long */
 
+#define NULLBYTE '\x00' /* end of input */
+
 /* There aren't opcodes -- they're ways to pickle bools before protocol 2,
  * so that unpicklers written before bools were introduced unpickle them
  * as ints, but unpicklers after can recognize that bools were intended.
@@ -4519,299 +4521,318 @@ load_proto(Unpicklerobject *self)
 	return -1;
 }
 
+#ifdef USE_COMPUTED_GOTOS
+#define DISPATCH() if (self->read_func(self, &s, 1) < 0) break; \
+			goto *opcode_targets[(unsigned char)s[0]];
+#define TARGET(bc) TARGET_##bc
+#define UNKNOWN_OPCODE _unknown_opcode
+#define ERROR() goto on_error
+#define NEXT() DISPATCH()
+#else
+#define DISPATCH() if (self->read_func(self, &s, 1) < 0) break; switch (s[0])
+#define TARGET(bc) case bc
+#define UNKNOWN_OPCODE default
+#define ERROR() break
+#define NEXT() continue
+#endif
+
 static PyObject *
 load(Unpicklerobject *self)
 {
 	PyObject *err = 0, *val = 0;
 	char *s;
 
+#ifdef USE_COMPUTED_GOTOS
+#include "Modules/cPickle_opcodes.h"
+#endif
+
 	self->num_marks = 0;
 	if (self->stack->length) Pdata_clear(self->stack, 0);
 
 	while (1) {
-		if (self->read_func(self, &s, 1) < 0)
-			break;
-
-		switch (s[0]) {
-		case NONE:
+		DISPATCH() {
+		TARGET(NONE):
 			if (load_none(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BININT:
+		TARGET(BININT):
 			if (load_binint(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BININT1:
+		TARGET(BININT1):
 			if (load_binint1(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BININT2:
+		TARGET(BININT2):
 			if (load_binint2(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case INT:
+		TARGET(INT):
 			if (load_int(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case LONG:
+		TARGET(LONG):
 			if (load_long(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case LONG1:
+		TARGET(LONG1):
 			if (load_counted_long(self, 1) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case LONG4:
+		TARGET(LONG4):
 			if (load_counted_long(self, 4) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case FLOAT:
+		TARGET(FLOAT):
 			if (load_float(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BINFLOAT:
+		TARGET(BINFLOAT):
 			if (load_binfloat(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BINSTRING:
+		TARGET(BINSTRING):
 			if (load_binstring(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case SHORT_BINSTRING:
+		TARGET(SHORT_BINSTRING):
 			if (load_short_binstring(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case STRING:
+		TARGET(STRING):
 			if (load_string(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
 #ifdef Py_USING_UNICODE
-		case UNICODE:
+		TARGET(UNICODE):
 			if (load_unicode(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BINUNICODE:
+		TARGET(BINUNICODE):
 			if (load_binunicode(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 #endif
 
-		case EMPTY_TUPLE:
+		TARGET(EMPTY_TUPLE):
 			if (load_counted_tuple(self, 0) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case TUPLE1:
+		TARGET(TUPLE1):
 			if (load_counted_tuple(self, 1) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case TUPLE2:
+		TARGET(TUPLE2):
 			if (load_counted_tuple(self, 2) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case TUPLE3:
+		TARGET(TUPLE3):
 			if (load_counted_tuple(self, 3) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case TUPLE:
+		TARGET(TUPLE):
 			if (load_tuple(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case EMPTY_LIST:
+		TARGET(EMPTY_LIST):
 			if (load_empty_list(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case LIST:
+		TARGET(LIST):
 			if (load_list(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case EMPTY_DICT:
+		TARGET(EMPTY_DICT):
 			if (load_empty_dict(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case DICT:
+		TARGET(DICT):
 			if (load_dict(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case OBJ:
+		TARGET(OBJ):
 			if (load_obj(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case INST:
+		TARGET(INST):
 			if (load_inst(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case NEWOBJ:
+		TARGET(NEWOBJ):
 			if (load_newobj(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case GLOBAL:
+		TARGET(GLOBAL):
 			if (load_global(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case APPEND:
+		TARGET(APPEND):
 			if (load_append(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case APPENDS:
+		TARGET(APPENDS):
 			if (load_appends(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BUILD:
+		TARGET(BUILD):
 			if (load_build(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case DUP:
+		TARGET(DUP):
 			if (load_dup(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BINGET:
+		TARGET(BINGET):
 			if (load_binget(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case LONG_BINGET:
+		TARGET(LONG_BINGET):
 			if (load_long_binget(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case GET:
+		TARGET(GET):
 			if (load_get(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case EXT1:
+		TARGET(EXT1):
 			if (load_extension(self, 1) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case EXT2:
+		TARGET(EXT2):
 			if (load_extension(self, 2) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case EXT4:
+		TARGET(EXT4):
 			if (load_extension(self, 4) < 0)
-				break;
-			continue;
-		case MARK:
+				ERROR();
+			NEXT();
+		TARGET(MARK):
 			if (load_mark(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BINPUT:
+		TARGET(BINPUT):
 			if (load_binput(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case LONG_BINPUT:
+		TARGET(LONG_BINPUT):
 			if (load_long_binput(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case PUT:
+		TARGET(PUT):
 			if (load_put(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case POP:
+		TARGET(POP):
 			if (load_pop(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case POP_MARK:
+		TARGET(POP_MARK):
 			if (load_pop_mark(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case SETITEM:
+		TARGET(SETITEM):
 			if (load_setitem(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case SETITEMS:
+		TARGET(SETITEMS):
 			if (load_setitems(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case STOP:
-			break;
+		TARGET(STOP):
+			ERROR();
 
-		case PERSID:
+		TARGET(PERSID):
 			if (load_persid(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case BINPERSID:
+		TARGET(BINPERSID):
 			if (load_binpersid(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case REDUCE:
+		TARGET(REDUCE):
 			if (load_reduce(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case PROTO:
+		TARGET(PROTO):
 			if (load_proto(self) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case NEWTRUE:
+		TARGET(NEWTRUE):
 			if (load_bool(self, Py_True) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case NEWFALSE:
+		TARGET(NEWFALSE):
 			if (load_bool(self, Py_False) < 0)
-				break;
-			continue;
+				ERROR();
+			NEXT();
 
-		case '\0':
+		TARGET(NULLBYTE):
 			/* end of file */
 			PyErr_SetNone(PyExc_EOFError);
-			break;
+			ERROR();
 
-		default:
+		UNKNOWN_OPCODE:
 			cPickle_ErrFormat(UnpicklingError,
 					  "invalid load key, '%s'.",
 					  "c", s[0]);
 			return NULL;
 		}
+		ERROR();
 
-		break;
 	}
 
+#ifdef USE_COMPUTED_GOTOS
+on_error:
+#endif
 	if ((err = PyErr_Occurred())) {
 		if (err == PyExc_EOFError) {
 			PyErr_SetNone(PyExc_EOFError);
