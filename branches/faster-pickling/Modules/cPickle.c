@@ -1577,19 +1577,19 @@ batch_list(Picklerobject *self, PyObject *iter)
 		/* Pump out MARK, items, APPENDS. */
 		if (self->write_func(self, &MARKv, 1) < 0)
 			goto BatchFailed;
-		
+
 		if (save(self, firstitem, 0) < 0)
 			goto BatchFailed;
 		Py_CLEAR(firstitem);
 		n = 1;
-		
+
 		/* Fetch and save up to BATCHSIZE items */
 		while (obj) {
 			if (save(self, obj, 0) < 0)
 				goto BatchFailed;
 			Py_CLEAR(obj);
 			n += 1;
-			
+
 			if (n == BATCHSIZE)
 				break;
 
@@ -1613,13 +1613,56 @@ BatchFailed:
 	return -1;
 }
 
+
+/* This is a variant of batch_list() above, specialized for lists (with no
+ * support for list subclasses). Like batch_list(), we batch up chunks of
+ *     MARK item item ... item APPENDS
+ * opcode sequences.  Calling code should have arranged to first create an
+ * empty list, or list-like object, for the APPENDS to operate on.
+ * Returns 0 on success, -1 on error.
+ *
+ * This version is considerably faster than batch_list(), if less general.
+ *
+ * Note that this only works for protocols > 0.
+ */
+static int
+batch_list_exact(Picklerobject *self, PyObject *obj)
+{
+	PyObject *item = NULL;
+	int i, j;
+
+	static char appends = APPENDS;
+
+	assert(obj != NULL);
+	assert(self->proto > 0);
+
+	/* Write in batches of BATCHSIZE. */
+	j = 0;
+	do {
+		i = 0;
+		if (self->write_func(self, &MARKv, 1) < 0)
+			return -1;
+		while (j < PyList_GET_SIZE(obj)) {
+			item = PyList_GET_ITEM(obj, j);
+			if (save(self, item, 0) < 0)
+				return -1;
+			j++;
+			if (++i == BATCHSIZE)
+				break;
+		}
+		if (self->write_func(self, &appends, 1) < 0)
+			return -1;
+
+	} while (i == BATCHSIZE);
+	return 0;
+}
+
 static int
 save_list(Picklerobject *self, PyObject *args)
 {
 	int res = -1;
 	char s[3];
 	int len;
-	PyObject *iter;
 
 	if (self->fast && !fast_save_enter(self, args))
 		goto finally;
@@ -1652,16 +1695,22 @@ save_list(Picklerobject *self, PyObject *args)
 		goto finally;
 
 	/* Materialize the list elements. */
-	iter = PyObject_GetIter(args);
-	if (iter == NULL)
-		goto finally;
+	if (PyList_CheckExact(args) && self->proto > 0) {
+		if (Py_EnterRecursiveCall(" while pickling an object") == 0) {
+			res = batch_list_exact(self, args);
+			Py_LeaveRecursiveCall();
+		}
+	} else {
+		PyObject *iter = PyObject_GetIter(args);
+		if (iter == NULL)
+			goto finally;
 
-	if (Py_EnterRecursiveCall(" while pickling an object") == 0)
-	{
-		res = batch_list(self, iter);
-		Py_LeaveRecursiveCall();
+		if (Py_EnterRecursiveCall(" while pickling an object") == 0) {
+			res = batch_list(self, iter);
+			Py_LeaveRecursiveCall();
+		}
+		Py_DECREF(iter);
 	}
-	Py_DECREF(iter);
 
   finally:
 	if (self->fast && !fast_save_leave(self, args))
