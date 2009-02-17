@@ -1804,13 +1804,60 @@ BatchFailed:
 	return -1;
 }
 
+/* This is a variant of batch_dict() above that specializes for dicts, with no
+ * support for dict subclasses. Like batch_dict(), we batch up chunks of
+ *     MARK key value ... key value SETITEMS
+ * opcode sequences.  Calling code should have arranged to first create an
+ * empty dict, or dict-like object, for the SETITEMS to operate on.
+ * Returns 0 on success, -1 on error.
+ *
+ * Note that this currently doesn't work for protocol 0.
+ */
+static int
+batch_dict_exact(Picklerobject *self, PyObject *obj)
+{
+	PyObject *key = NULL, *value = NULL;
+	int i;
+	Py_ssize_t dict_size, ppos = 0;
+
+	static char setitems = SETITEMS;
+
+	assert(obj != NULL);
+	assert(self->proto > 0);
+
+	dict_size = PyDict_Size(obj);
+	/* Write in batches of BATCHSIZE. */
+	do {
+		i = 0;
+		if (self->write_func(self, &MARKv, 1) < 0)
+			return -1;
+		while (PyDict_Next(obj, &ppos, &key, &value)) {
+			if (save(self, key, 0) < 0)
+				return -1;
+			if (save(self, value, 0) < 0)
+				return -1;
+			if (++i == BATCHSIZE)
+				break;
+		}
+		if (self->write_func(self, &setitems, 1) < 0)
+			return -1;
+		if (PyDict_Size(obj) != dict_size) {
+			PyErr_Format(
+				PyExc_RuntimeError,
+				"dictionary changed size during iteration");
+			return -1;
+		}
+
+	} while (i == BATCHSIZE);
+	return 0;
+}
+
 static int
 save_dict(Picklerobject *self, PyObject *args)
 {
 	int res = -1;
 	char s[3];
 	int len;
-	PyObject *iter;
 
 	if (self->fast && !fast_save_enter(self, args))
 		goto finally;
@@ -1842,15 +1889,23 @@ save_dict(Picklerobject *self, PyObject *args)
 		goto finally;
 
 	/* Materialize the dict items. */
-	iter = PyObject_CallMethod(args, "iteritems", "()");
-	if (iter == NULL)
-		goto finally;
-	if (Py_EnterRecursiveCall(" while pickling an object") == 0)
-	{
-		res = batch_dict(self, iter);
-		Py_LeaveRecursiveCall();
+	if (PyDict_CheckExact(args) && self->proto > 0) {
+		/* We can take certain shortcuts if we know this is a dict and
+		   not a dict subclass. */
+		if (Py_EnterRecursiveCall(" while pickling an object") == 0) {
+			res = batch_dict_exact(self, args);
+			Py_LeaveRecursiveCall();
+		}
+	} else {
+		PyObject *iter = PyObject_CallMethod(args, "iteritems", "()");
+		if (iter == NULL)
+			goto finally;
+		if (Py_EnterRecursiveCall(" while pickling an object") == 0) {
+			res = batch_dict(self, iter);
+			Py_LeaveRecursiveCall();
+		}
+		Py_DECREF(iter);
 	}
-	Py_DECREF(iter);
 
   finally:
 	if (self->fast && !fast_save_leave(self, args))
