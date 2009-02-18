@@ -10,6 +10,7 @@ __author__ = "jyasskin@google.com (Jeffrey Yasskin)"
 
 import contextlib
 import logging
+import math
 import optparse
 import os
 import os.path
@@ -27,6 +28,99 @@ info = logging.info
 
 def avg(seq):
     return sum(seq) / len(seq)
+
+
+# A table of 95% confidence intervals for a two-tailed t distribution, as a
+# function of the degrees of freedom. For larger degrees of freedom, we
+# approximate. While this may look less elegant than simply calculating the
+# critical value, those calculations suck. Look at
+# http://www.math.unb.ca/~knight/utility/t-table.htm if you need more values.
+T_DIST_95_CONF_LEVELS = [0, 12.706, 4.303, 3.182, 2.776,
+                         2.571, 2.447, 2.365, 2.306, 2.262,
+                         2.228, 2.201, 2.179, 2.160, 2.145,
+                         2.131, 2.120, 2.110, 2.101, 2.093,
+                         2.086, 2.080, 2.074, 2.069, 2.064,
+                         2.060, 2.056, 2.052, 2.048, 2.045,
+                         2.042]
+
+
+def TDist95ConfLevel(df):
+    """Approximate the 95% confidence interval for Student's T distribution.
+
+    Given the degrees of freedom, returns an approximation to the 95%
+    confidence interval for the Student's T distribution.
+
+    Args:
+        df: An integer, the number of degrees of freedom.
+
+    Returns:
+        A float.
+    """
+    df = int(round(df))
+    highest_table_df = len(T_DIST_95_CONF_LEVELS)
+    if df >= 200: return 1.960
+    if df >= 100: return 1.984
+    if df >= 80: return 1.990
+    if df >= 60: return 2.000
+    if df >= 50: return 2.009
+    if df >= 40: return 2.021
+    if df >= highest_table_df:
+        return T_DIST_95_CONF_LEVELS[highest_table_df - 1]
+    return T_DIST_95_CONF_LEVELS[df]
+
+
+def PooledSampleVariance(sample1, sample2):
+    """Find the pooled sample variance for two samples.
+
+    Args:
+        sample1: one sample.
+        sample2: the other sample.
+
+    Returns:
+        Pooled sample variance, as a float.
+    """
+    deg_freedom = len(sample1) + len(sample2) - 2
+    mean1 = avg(sample1)
+    squares1 = ((x - mean1) ** 2 for x in sample1)
+    mean2 = avg(sample2)
+    squares2 = ((x - mean2) ** 2 for x in sample2)
+
+    return (sum(squares1) + sum(squares2)) / float(deg_freedom)
+
+
+def TScore(sample1, sample2):
+    """Calculate a t-test score for the difference between two samples.
+
+    Args:
+        sample1: one sample.
+        sample2: the other sample.
+
+    Returns:
+        The t-test score, as a float.
+    """
+    assert len(sample1) == len(sample2)
+    error = PooledSampleVariance(sample1, sample2) / len(sample1)
+    return (avg(sample1) - avg(sample2)) / math.sqrt(error * 2)
+
+
+def IsSignificant(sample1, sample2):
+    """Determine whether two samples differ significantly.
+
+    This uses a Student's two-sample, two-tailed t-test with alpha=0.95.
+
+    Args:
+        sample1: one sample.
+        sample2: the other sample.
+
+    Returns:
+        (significant, t_score) where significant is a bool indicating whether
+        the two samples differ significantly; t_score is the score from the
+        two-sample T test.
+    """
+    deg_freedom = len(sample1) + len(sample2) - 2
+    critical_value = TDist95ConfLevel(deg_freedom)
+    t_score = TScore(sample1, sample2)
+    return (t_score >= critical_value, t_score)
 
 
 @contextlib.contextmanager
@@ -203,15 +297,16 @@ def BM_2to3(base_python, changed_python, options):
         return ("%(base_time).2f -> %(changed_time).2f: %(time_delta)s"
                 % locals())
     else:
-        return CompareMultipleRuns(base_times, changed_times)
+        return CompareMultipleRuns(base_times, changed_times, options)
 
 
-def CompareMultipleRuns(base_times, changed_times):
+def CompareMultipleRuns(base_times, changed_times, options):
     """Compare multiple control vs experiment runs of the same benchmark.
 
     Args:
         base_times: iterable of float times (control).
         changed_times: iterable of float times (experiment).
+        options: optparse.Values instance.
 
     Returns:
         A string summarizing the difference between the runs, suitable for
@@ -225,10 +320,16 @@ def CompareMultipleRuns(base_times, changed_times):
     avg_base, avg_changed = avg(base_times), avg(changed_times)
     delta_min = TimeDelta(min_base, min_changed)
     delta_avg = TimeDelta(avg_base, avg_changed)
+
+    t_msg = "Not significant"
+    significant, t_score = IsSignificant(base_times, changed_times)
+    if significant:
+        t_msg = "Significant (t=%f, a=0.95)" % t_score
+
     return (("Min: %(min_base).3f -> %(min_changed).3f:" +
              " %(delta_min)s\n" +
              "Avg: %(avg_base).3f -> %(avg_changed).3f:" +
-             " %(delta_avg)s")
+             " %(delta_avg)s\n" + t_msg)
              % locals())
 
 
@@ -281,7 +382,7 @@ def BM_Django(base_python, changed_python, options):
     except subprocess.CalledProcessError, e:
         return str(e)
 
-    return CompareMultipleRuns(base_times, changed_times)
+    return CompareMultipleRuns(base_times, changed_times, options)
 
 
 def ComesWithPsyco(python):
@@ -387,7 +488,7 @@ def BM_Spitfire(base_python, changed_python, options):
     except subprocess.CalledProcessError, e:
         return str(e)
 
-    return CompareMultipleRuns(base_times, changed_times)
+    return CompareMultipleRuns(base_times, changed_times, options)
 
 
 def BM_SlowSpitfire(base_python, changed_python, options):
@@ -401,7 +502,7 @@ def BM_SlowSpitfire(base_python, changed_python, options):
     except subprocess.CalledProcessError, e:
         return str(e)
 
-    return CompareMultipleRuns(base_times, changed_times)
+    return CompareMultipleRuns(base_times, changed_times, options)
 
 
 def MeasurePickle(python, options, extra_args):
@@ -448,7 +549,7 @@ def _PickleBenchmark(base_python, changed_python, options, extra_args):
         base_times = MeasurePickle(base_python, options, extra_args)
     except subprocess.CalledProcessError, e:
         return str(e)
-    return CompareMultipleRuns(base_times, changed_times)
+    return CompareMultipleRuns(base_times, changed_times, options)
 
 
 def BM_Pickle(base_python, changed_python, options):
