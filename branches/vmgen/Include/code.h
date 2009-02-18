@@ -127,6 +127,9 @@ PyAPI_FUNC(PyObject*) PyCode_Optimize(PyObject *code, PyObject* consts,
 PyAPI_FUNC(int) _PyCode_UncombineSuperInstruction(
 	int super, int *prims, int prims_len);
 
+/* Initializes the peephole optimizer used in PyCode_Optimize(). */
+PyAPI_FUNC(int) _PyPeephole_Init(void);
+
 #ifdef __cplusplus
 }
 #endif

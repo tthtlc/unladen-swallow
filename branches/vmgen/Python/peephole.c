@@ -12,8 +12,6 @@
 #include "symtable.h"
 #include "opcode.h"
 
-static void prepare_peeptable(void);
-
 #define GETOP(inst) PyInst_GET_OPCODE(&(inst))
 #define OP_EQ(inst, EXPECTED) (!(inst).is_arg && GETOP(inst) == EXPECTED)
 #define GETARG(arr, i) PyInst_GET_ARG(&(arr)[(i)+1])
@@ -329,8 +327,8 @@ static IdxCombination peephole_definitions[] = {
 
 static IdxCombination *peeptable[HASH_SIZE];
 
-static void
-prepare_peeptable()
+int
+_PyPeephole_Init()
 {
 	long i;
 
@@ -340,7 +338,7 @@ prepare_peeptable()
 		IdxCombination *peephole_def = &(peephole_definitions[i]);
 		IdxCombination *peephash_node = PyMem_NEW(IdxCombination, 1);
 		if (peephash_node == NULL)
-			return;
+			return 0;
 
 		peephash_node->prefix      = peephole_def->prefix;
 		peephash_node->lastprim    = peephole_def->lastprim;
@@ -350,6 +348,7 @@ prepare_peeptable()
 		peephash_node->next = peeptable[h];
 		peeptable[h] = peephash_node;
 	}
+	return 1;
 }
 
 PyObject *
@@ -523,12 +522,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 	int cumlc=0, lastlc=0;	/* Count runs of consecutive LOAD_CONSTs */
 	unsigned int *blocks = NULL;
 	char *name;
-	static int init = 1;
-
-	if (init) {
-		prepare_peeptable();
-		init = 0;
-	}
 
 	/* Bail out if an exception is set */
 	if (PyErr_Occurred())

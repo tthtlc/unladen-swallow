@@ -2634,14 +2634,16 @@ static int
 compiler_call(struct compiler *c, expr_ty e)
 {
 	int n, code = 0;
+	int n_positional_args, n_keyword_args = 0;
 
 	VISIT(c, expr, e->v.Call.func);
-	n = asdl_seq_LEN(e->v.Call.args);
+	n_positional_args = asdl_seq_LEN(e->v.Call.args);
 	VISIT_SEQ(c, expr, e->v.Call.args);
 	if (e->v.Call.keywords) {
 		VISIT_SEQ(c, keyword, e->v.Call.keywords);
-		n |= asdl_seq_LEN(e->v.Call.keywords) << 8;
+		n_keyword_args = asdl_seq_LEN(e->v.Call.keywords);
 	}
+	n = n_positional_args | (n_keyword_args << 8);
 	if (e->v.Call.starargs) {
 		VISIT(c, expr, e->v.Call.starargs);
 		code |= 1;
@@ -2657,8 +2659,10 @@ compiler_call(struct compiler *c, expr_ty e)
 	case 1:
 	case 2:
 	case 3:
-		/* XXX this doesn't work with >2^8 positional or >2^7
+		/* XXX this doesn't work with >2^8 positional or
 		   keyword arguments */
+		assert(n_positional_args < 256);
+		assert(n_keyword_args < 256);
 		ADDOP_I(c, CALL_FUNCTION_VAR_KW, (n << 16) | code);
 		break;
 	}
