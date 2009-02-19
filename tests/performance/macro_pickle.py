@@ -57,34 +57,36 @@ TUPLE = ([265867233L, 265868503L, 265252341L, 265243910L, 265879514L,
           265392591L, 265877490L, 265823665L, 265828884L, 265753032L], 60)
 
 
-def test_pickle(pickle, num_runs, num_obj_copies):
+def test_pickle(pickle, options, num_obj_copies):
     many_dicts = [dict(DICT) for _ in xrange(num_obj_copies)]
     many_tuples = [tuple(TUPLE) for _ in xrange(num_obj_copies)]
 
     # Warm-up runs.
-    pickle.dumps(many_dicts)
-    pickle.dumps(many_tuples)
+    pickle.dumps(many_dicts, options.protocol)
+    pickle.dumps(many_tuples, options.protocol)
 
     times = []
-    for _ in xrange(num_runs):
+    for _ in xrange(options.num_runs):
         t0 = time.time()
-        pickle.dumps(many_dicts)
-        pickle.dumps(many_tuples)
+        pickle.dumps(many_dicts, options.protocol)
+        pickle.dumps(many_tuples, options.protocol)
         t1 = time.time()
         times.append(t1 - t0)
     return times
 
 
-def test_unpickle(pickle, num_runs, num_obj_copies):
-    many_dicts = pickle.dumps([dict(DICT) for _ in xrange(num_obj_copies)])
-    many_tuples = pickle.dumps([tuple(TUPLE) for _ in xrange(num_obj_copies)])
+def test_unpickle(pickle, options, num_obj_copies):
+    many_dicts = pickle.dumps([dict(DICT) for _ in xrange(num_obj_copies)],
+                              options.protocol)
+    many_tuples = pickle.dumps([tuple(TUPLE) for _ in xrange(num_obj_copies)],
+                               options.protocol)
 
     # Warm-up runs.
     pickle.loads(many_dicts)
     pickle.loads(many_tuples)
 
     times = []
-    for _ in xrange(num_runs):
+    for _ in xrange(options.num_runs):
         t0 = time.time()
         pickle.loads(many_dicts)
         pickle.loads(many_tuples)
@@ -101,6 +103,8 @@ if __name__ == "__main__":
                       dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--use_cpickle", action="store_true",
                       help="Use the C version of pickle.")
+    parser.add_option("--protocol", action="store", default=2, type="int",
+                      help="Which protocol to use (0, 1, 2).")
     options, args = parser.parse_args()
 
     if "pickle" in args:
@@ -117,5 +121,8 @@ if __name__ == "__main__":
         num_obj_copies = 6000
         import pickle
 
-    for t in benchmark(pickle, options.num_runs, num_obj_copies):
+    if options.protocol > 0:
+        num_obj_copies *= 2  # Compensate for faster protocols.
+
+    for t in benchmark(pickle, options, num_obj_copies):
         print t
