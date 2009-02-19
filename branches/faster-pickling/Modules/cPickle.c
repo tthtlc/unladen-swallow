@@ -996,6 +996,7 @@ fast_save_enter(Picklerobject *self, PyObject *obj)
 		PyObject *key = NULL;
 		if (self->fast_memo == NULL) {
 			self->fast_memo = PyDict_New();
+			((PyDictObject *)self->fast_memo)->ma_lookup = lookdict_int;
 			if (self->fast_memo == NULL) {
 				self->fast_container = -1;
 				return 0;
