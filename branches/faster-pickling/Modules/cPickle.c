@@ -5478,6 +5478,9 @@ newUnpicklerobject(PyObject *f)
 
 	if (!( self->memo = PyDict_New()))
 		goto err;
+	if (orig_memo_lookup == NULL)
+		orig_memo_lookup = ((PyDictObject *)self->memo)->ma_lookup;
+	((PyDictObject *)self->memo)->ma_lookup = lookdict_int;
 
 	if (!self->stack)
 		goto err;
