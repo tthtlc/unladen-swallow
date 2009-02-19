@@ -22,12 +22,25 @@ class TestStatsFunctions(unittest.TestCase):
         result = perf.PooledSampleVariance(DATA1, DATA2)
         self.assertAlmostEqual(result, 31.782, places=3)
 
+        # Should be the same result, regardless of the input order.
+        result = perf.PooledSampleVariance(DATA2, DATA1)
+        self.assertAlmostEqual(result, 31.782, places=3)
+
     def testTScore(self):
         self.assertAlmostEqual(perf.TScore(DATA1, DATA2), 1.0947, places=4)
+        self.assertAlmostEqual(perf.TScore(DATA2, DATA1), -1.0947, places=4)
 
     def testIsSignificant(self):
         (significant, _) = perf.IsSignificant(DATA1, DATA2)
         self.assertFalse(significant)
+        (significant, _) = perf.IsSignificant(DATA2, DATA1)
+        self.assertFalse(significant)
+
+        inflated = [x * 10 for x in DATA1]
+        (significant, _) = perf.IsSignificant(inflated, DATA1)
+        self.assertTrue(significant)
+        (significant, _) = perf.IsSignificant(DATA1, inflated)
+        self.assertTrue(significant)
 
 
 if __name__ == "__main__":

@@ -120,7 +120,7 @@ def IsSignificant(sample1, sample2):
     deg_freedom = len(sample1) + len(sample2) - 2
     critical_value = TDist95ConfLevel(deg_freedom)
     t_score = TScore(sample1, sample2)
-    return (t_score >= critical_value, t_score)
+    return (abs(t_score) >= critical_value, t_score)
 
 
 @contextlib.contextmanager
