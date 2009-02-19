@@ -56,6 +56,8 @@ PyAPI_FUNC(PyObject *) PyLong_FromString(char *, char **, int);
 PyAPI_FUNC(PyObject *) PyLong_FromUnicode(Py_UNICODE*, Py_ssize_t, int);
 #endif
 
+PyAPI_FUNC(int) _PyLong_Eq(PyObject *, PyObject *);
+
 /* _PyLong_Sign.  Return 0 if v is 0, -1 if v < 0, +1 if v > 0.
    v must not be NULL, and must be a normalized long.
    There are no error cases.

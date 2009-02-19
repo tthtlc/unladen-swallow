@@ -62,6 +62,8 @@ PyAPI_FUNC(long) PyOS_strtol(char *, char **, int);
 /* free list api */
 PyAPI_FUNC(int) PyInt_ClearFreeList(void);
 
+PyAPI_FUNC(int) _PyInt_Eq(PyObject *, PyObject *);
+
 /* Convert an integer to the given base.  Returns a string.
    If base is 2, 8 or 16, add the proper prefix '0b', '0o' or '0x'.
    If newstyle is zero, then use the pre-2.6 behavior of octal having

@@ -1962,6 +1962,12 @@ long_compare(PyLongObject *a, PyLongObject *b)
 	return sign < 0 ? -1 : sign > 0 ? 1 : 0;
 }
 
+int
+_PyLong_Eq(PyObject *a, PyObject *b)
+{
+	return long_compare((PyLongObject *)a, (PyLongObject *)b) == 0;
+}
+
 static long
 long_hash(PyLongObject *v)
 {
