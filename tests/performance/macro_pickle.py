@@ -2,8 +2,15 @@
 
 """Script for testing the performance of pickling/unpickling.
 
-This will pickle/unpickle long lists (several tens of thousands) of several
-real-world representative objects.
+This will pickle/unpickle several real world-representative objects a few
+thousand times. The methodology below was chosen for was chosen to be similar
+to real-world scenarios which operate on single objects at a time. Note that if
+we did something like
+
+    pickle.dumps([dict(some_dict) for _ in xrange(10000)])
+    
+this isn't equivalent to dumping the dict 10000 times: pickle uses a
+highly-efficient encoding for the n-1 following copies.
 """
 
 __author__ = "collinwinter@google.com (Collin Winter)"
@@ -58,38 +65,113 @@ TUPLE = ([265867233L, 265868503L, 265252341L, 265243910L, 265879514L,
 
 
 def test_pickle(pickle, options, num_obj_copies):
-    many_dicts = [dict(DICT) for _ in xrange(num_obj_copies)]
-    many_tuples = [tuple(TUPLE) for _ in xrange(num_obj_copies)]
-
     # Warm-up runs.
-    pickle.dumps(many_dicts, options.protocol)
-    pickle.dumps(many_tuples, options.protocol)
+    pickle.dumps(DICT, options.protocol)
+    pickle.dumps(TUPLE, options.protocol)
 
+    loops = num_obj_copies / 20  # We do 20 runs per loop.
     times = []
     for _ in xrange(options.num_runs):
         t0 = time.time()
-        pickle.dumps(many_dicts, options.protocol)
-        pickle.dumps(many_tuples, options.protocol)
+        for _ in xrange(loops):
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(DICT, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(TUPLE, options.protocol)
         t1 = time.time()
         times.append(t1 - t0)
     return times
 
 
 def test_unpickle(pickle, options, num_obj_copies):
-    many_dicts = pickle.dumps([dict(DICT) for _ in xrange(num_obj_copies)],
-                              options.protocol)
-    many_tuples = pickle.dumps([tuple(TUPLE) for _ in xrange(num_obj_copies)],
-                               options.protocol)
+    pickled_dict = pickle.dumps(DICT, options.protocol)
+    pickled_tuple = pickle.dumps(TUPLE, options.protocol)
 
     # Warm-up runs.
-    pickle.loads(many_dicts)
-    pickle.loads(many_tuples)
+    pickle.loads(pickled_dict)
+    pickle.loads(pickled_tuple)
 
+    loops = num_obj_copies / 20  # We do 20 runs per loop.
     times = []
     for _ in xrange(options.num_runs):
         t0 = time.time()
-        pickle.loads(many_dicts)
-        pickle.loads(many_tuples)
+        for _ in xrange(loops):
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_dict)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
+            pickle.loads(pickled_tuple)
         t1 = time.time()
         times.append(t1 - t0)
     return times
@@ -115,10 +197,10 @@ if __name__ == "__main__":
         raise RuntimeError("Need to specify either 'pickle' or 'unpickle'")
 
     if options.use_cpickle:
-        num_obj_copies = 40000
+        num_obj_copies = 20000
         import cPickle as pickle
     else:
-        num_obj_copies = 6000
+        num_obj_copies = 1000
         import pickle
 
     if options.protocol > 0:
