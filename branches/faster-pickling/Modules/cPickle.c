@@ -689,15 +689,15 @@ static PyDictEntry *(*orig_memo_lookup)(PyDictObject *mp, PyObject *key,
                                         long hash) = NULL;
 
 /*
- * Hacked up version of lookdict which can assume keys are always ints or longs;
+ * Hacked up version of lookdict which can assume keys are always ints;
  * this assumption lets us skip testing for errors during
- * PyObject_RichCompareBool(): int-int/long-long comparisons never raise
+ * PyObject_RichCompareBool(): int-int comparisons never raise
  * exceptions.  This also means we don't need to go through
- * PyObject_RichCompareBool() at all; we can always use _Py{Int,Long}_Eq()
+ * PyObject_RichCompareBool() at all; we can always use _PyInt_Eq()
  * directly.
  *
  * This is valuable because the memo dicts used in this module use only
- * numeric keys.
+ * int keys.
  */
 static PyDictEntry *
 lookdict_int(PyDictObject *mp, PyObject *key, register long hash)
@@ -712,7 +712,7 @@ lookdict_int(PyDictObject *mp, PyObject *key, register long hash)
 	/* Make sure this function doesn't have to handle non-int/long keys,
 	   including subclasses thereof; e.g., one reason to subclass
 	   is to override __eq__, and for speed we don't cater to that here. */
-	if (!PyInt_CheckExact(key) && !PyLong_CheckExact(key)) {
+	if (!PyInt_CheckExact(key)) {
 		mp->ma_lookup = orig_memo_lookup;
 		return orig_memo_lookup(mp, key, hash);
 	}
@@ -722,49 +722,27 @@ lookdict_int(PyDictObject *mp, PyObject *key, register long hash)
 		return ep;
 	if (ep->me_key == _PyDict_DummyKey)
 		freeslot = ep;
-	else if (PyInt_CheckExact(key)) {
+	else {
 		if (ep->me_hash == hash && _PyInt_Eq(ep->me_key, key))
-			return ep;
-		freeslot = NULL;
-	} else {
-		if (ep->me_hash == hash && _PyLong_Eq(ep->me_key, key))
 			return ep;
 		freeslot = NULL;
 	}
 
 #define PERTURB_SHIFT 5
-	if (PyInt_CheckExact(key)) {
-		/* In the loop, me_key == dummy is by far (factor of 100s) the
-		   least likely outcome, so test for that last. */
-		for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
-			i = (i << 2) + i + perturb + 1;
-			ep = &ep0[i & mask];
-			if (ep->me_key == NULL)
-				return freeslot == NULL ? ep : freeslot;
-			if (ep->me_key == key
-			    || (ep->me_hash == hash
-			        && ep->me_key != _PyDict_DummyKey
-				&& _PyInt_Eq(ep->me_key, key)))
-				return ep;
-			if (ep->me_key == _PyDict_DummyKey && freeslot == NULL)
-				freeslot = ep;
-		}
-	} else {
-		/* In the loop, me_key == dummy is by far (factor of 100s) the
-		   least likely outcome, so test for that last. */
-		for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
-			i = (i << 2) + i + perturb + 1;
-			ep = &ep0[i & mask];
-			if (ep->me_key == NULL)
-				return freeslot == NULL ? ep : freeslot;
-			if (ep->me_key == key
-			    || (ep->me_hash == hash
-			        && ep->me_key != _PyDict_DummyKey
-				&& _PyLong_Eq(ep->me_key, key)))
-				return ep;
-			if (ep->me_key == _PyDict_DummyKey && freeslot == NULL)
-				freeslot = ep;
-		}
+	/* In the loop, me_key == dummy is by far (factor of 100s) the
+	   least likely outcome, so test for that last. */
+	for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
+		i = (i << 2) + i + perturb + 1;
+		ep = &ep0[i & mask];
+		if (ep->me_key == NULL)
+			return freeslot == NULL ? ep : freeslot;
+		if (ep->me_key == key
+		    || (ep->me_hash == hash
+		        && ep->me_key != _PyDict_DummyKey
+			&& _PyInt_Eq(ep->me_key, key)))
+			return ep;
+		if (ep->me_key == _PyDict_DummyKey && freeslot == NULL)
+			freeslot = ep;
 	}
 #undef PERTURB_SHIFT
 	assert(0);	/* NOT REACHED */
