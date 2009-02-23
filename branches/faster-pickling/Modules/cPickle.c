@@ -125,7 +125,7 @@ static PyObject *__class___str, *__getinitargs___str, *__dict___str,
   *__getstate___str, *__setstate___str, *__name___str, *__reduce___str,
   *__reduce_ex___str,
   *write_str, *append_str,
-  *read_str, *readline_str, *__main___str, 
+  *read_str, *readline_str, *__main___str,
   *copyreg_str, *dispatch_table_str;
 
 /*************************************************************************
@@ -359,10 +359,6 @@ static PyTypeObject Picklertype;
 
 typedef struct Unpicklerobject {
 	PyObject_HEAD
-	FILE *fp;
-	PyObject *file;
-	PyObject *readline;
-	PyObject *read;
 	PyObject *memo;
 	PyObject *arg;
 	Pdata *stack;
@@ -372,10 +368,15 @@ typedef struct Unpicklerobject {
 	int *marks;
 	int num_marks;
 	int marks_size;
-	Py_ssize_t (*read_func)(struct Unpicklerobject *, char **, Py_ssize_t);
-	Py_ssize_t (*readline_func)(struct Unpicklerobject *, char **);
-	int buf_size;
-	char *buf;
+
+	/* We have to hold on to the Python object, since freeing it will free
+	   input_buffer. */
+	PyObject *py_input;
+	char *input_buffer;
+	Py_ssize_t input_len;
+	Py_ssize_t next_read_idx;
+	PyObject *file;
+
 	PyObject *find_class;
 } Unpicklerobject;
 
@@ -462,167 +463,76 @@ _Pickler_FlushToFile(Picklerobject *self)
 }
 
 static Py_ssize_t
-read_file(Unpicklerobject *self, char **s, Py_ssize_t n)
+_Unpickler_SetStringInput(Unpicklerobject *self, PyObject *input)
 {
-	size_t nbytesread;
+	assert(self->input_buffer == NULL);
 
-	if (self->buf_size == 0) {
-		int size;
+	Py_INCREF(input);
+	self->py_input = input;
+	self->input_buffer = PyString_AsString(input);
+	self->input_len = PyString_Size(input);
+	self->next_read_idx = 0;
+	return self->input_len;
+}
 
-		size = ((n < 32) ? 32 : n);
-		if (!( self->buf = (char *)malloc(size))) {
-			PyErr_NoMemory();
-			return -1;
-		}
+static Py_ssize_t
+_Unpickler_ReadFromFile(Unpicklerobject *self)
+{
+	PyObject *data;
 
-		self->buf_size = size;
-	}
-	else if (n > self->buf_size) {
-		char *newbuf = (char *)realloc(self->buf, n);
-		if (!newbuf)  {
-			PyErr_NoMemory();
-			return -1;
-		}
-		self->buf = newbuf;
-		self->buf_size = n;
-	}
+	assert(self->file != NULL);
+	assert(self->input_buffer == NULL);
 
-	PyFile_IncUseCount((PyFileObject *)self->file);
-	Py_BEGIN_ALLOW_THREADS
-	nbytesread = fread(self->buf, sizeof(char), n, self->fp);
-	Py_END_ALLOW_THREADS
-	PyFile_DecUseCount((PyFileObject *)self->file);
-	if (nbytesread != (size_t)n) {
-		if (feof(self->fp)) {
-			PyErr_SetNone(PyExc_EOFError);
-			return -1;
-		}
+	/* N.B. The blow-up factor from unpickling the objects is fairly large
+	   (~10x), so reading the whole file at once is fine; not great, but
+	   fine. The common case for pickling/unpickling in the wild is
+	   operating on strings that are already in memory, and we
+	   optimize for that here. Slurping the whole file at once makes this
+	   code far, far simpler. */
+	data = PyObject_CallMethod(self->file, "read", NULL);
+	if (data == NULL)
+		return -1;
 
-		PyErr_SetFromErrno(PyExc_IOError);
+	self->py_input = data;
+	self->input_buffer = PyString_AsString(data);
+	self->input_len = PyString_Size(data);
+	self->next_read_idx = 0;
+	return self->input_len;
+}
+
+static Py_ssize_t
+_Unpickler_Read(Unpicklerobject *self, char **s, Py_ssize_t n)
+{
+	if (self->next_read_idx + n > self->input_len) {
+		PyErr_Format(PyExc_RuntimeError, "Ran out of input");
 		return -1;
 	}
-
-	*s = self->buf;
-
+	*s = &self->input_buffer[self->next_read_idx];
+	self->next_read_idx += n;
 	return n;
 }
 
-
 static Py_ssize_t
-readline_file(Unpicklerobject *self, char **s)
+_Unpickler_Readline(Unpicklerobject *self, char **s)
 {
-	int i;
+	Py_ssize_t i, num_read;
 
-	if (self->buf_size == 0) {
-		if (!( self->buf = (char *)malloc(40))) {
-			PyErr_NoMemory();
-			return -1;
+	for (i = self->next_read_idx; i < self->input_len; i++) {
+		if (self->input_buffer[i] == '\n') {
+			*s = &self->input_buffer[self->next_read_idx];
+			num_read = i - self->next_read_idx + 1;
+			self->next_read_idx = i + 1;
+			return num_read;
 		}
-		self->buf_size = 40;
 	}
 
-	i = 0;
-	while (1) {
-		int bigger;
-		char *newbuf;
-		for (; i < (self->buf_size - 1); i++) {
-			if (feof(self->fp) ||
-			    (self->buf[i] = getc(self->fp)) == '\n') {
-				self->buf[i + 1] = '\0';
-				*s = self->buf;
-				return i + 1;
-			}
-		}
-		bigger = self->buf_size << 1;
-		if (bigger <= 0) {	/* overflow */
-			PyErr_NoMemory();
-			return -1;
-		}
-		newbuf = (char *)realloc(self->buf, bigger);
-		if (!newbuf)  {
-			PyErr_NoMemory();
-			return -1;
-		}
-		self->buf = newbuf;
-		self->buf_size = bigger;
-	}
-}
-
-
-static Py_ssize_t
-read_cStringIO(Unpicklerobject *self, char **s, Py_ssize_t  n)
-{
-	char *ptr;
-
-	if (PycStringIO->cread((PyObject *)self->file, &ptr, n) != n) {
-		PyErr_SetNone(PyExc_EOFError);
-		return -1;
-	}
-
-	*s = ptr;
-
-	return n;
-}
-
-
-static Py_ssize_t
-readline_cStringIO(Unpicklerobject *self, char **s)
-{
-	Py_ssize_t n;
-	char *ptr;
-
-	if ((n = PycStringIO->creadline((PyObject *)self->file, &ptr)) < 0) {
-		return -1;
-	}
-
-	*s = ptr;
-
-	return n;
-}
-
-
-static Py_ssize_t
-read_other(Unpicklerobject *self, char **s, Py_ssize_t  n)
-{
-	PyObject *bytes, *str=0;
-
-	if (!( bytes = PyInt_FromSsize_t(n)))  return -1;
-
-	ARG_TUP(self, bytes);
-	if (self->arg) {
-		str = PyObject_Call(self->read, self->arg, NULL);
-		FREE_ARG_TUP(self);
-	}
-	if (! str) return -1;
-
-	Py_XDECREF(self->last_string);
-	self->last_string = str;
-
-	if (! (*s = PyString_AsString(str))) return -1;
-	return n;
-}
-
-
-static Py_ssize_t
-readline_other(Unpicklerobject *self, char **s)
-{
-	PyObject *str;
-	Py_ssize_t str_size;
-
-	if (!( str = PyObject_CallObject(self->readline, empty_tuple)))  {
-		return -1;
-	}
-
-	if ((str_size = PyString_Size(str)) < 0)
-		return -1;
-
-	Py_XDECREF(self->last_string);
-	self->last_string = str;
-
-	if (! (*s = PyString_AsString(str)))
-		return -1;
-
-	return str_size;
+	/* If we get here, we've run out of input. Return the remaining string
+	   and let the caller figure it out. (Since we've already slurped in
+	   the whole input, there's no way to go back for more.) */
+	*s = &self->input_buffer[self->next_read_idx];
+	num_read = i - self->next_read_idx;
+	self->next_read_idx = i;
+	return num_read;
 }
 
 /* Hold on to the original memo lookup function, just in case a memo
@@ -640,6 +550,9 @@ static PyDictEntry *(*orig_memo_lookup)(PyDictObject *mp, PyObject *key,
  *
  * This is valuable because the memo dicts used in this module use only
  * int keys.
+ *
+ * If additional speed is required, it would be fairly easy to write a custom
+ * hashtable that skips the intermediary PyLong_FromVoidPtr object creation.
  */
 static PyDictEntry *
 lookdict_int(PyDictObject *mp, PyObject *key, register long hash)
@@ -3152,7 +3065,7 @@ load_int(Unpicklerobject *self)
 	int len, res = -1;
 	long l;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 	if (!( s=pystrndup(s,len)))  return -1;
 
@@ -3246,7 +3159,7 @@ load_binint(Unpicklerobject *self)
 {
 	char *s;
 
-	if (self->read_func(self, &s, 4) < 0)
+	if (_Unpickler_Read(self, &s, 4) < 0)
 		return -1;
 
 	return load_binintx(self, s, 4);
@@ -3258,7 +3171,7 @@ load_binint1(Unpicklerobject *self)
 {
 	char *s;
 
-	if (self->read_func(self, &s, 1) < 0)
+	if (_Unpickler_Read(self, &s, 1) < 0)
 		return -1;
 
 	return load_binintx(self, s, 1);
@@ -3270,7 +3183,7 @@ load_binint2(Unpicklerobject *self)
 {
 	char *s;
 
-	if (self->read_func(self, &s, 2) < 0)
+	if (_Unpickler_Read(self, &s, 2) < 0)
 		return -1;
 
 	return load_binintx(self, s, 2);
@@ -3283,7 +3196,7 @@ load_long(Unpicklerobject *self)
 	char *end, *s;
 	int len, res = -1;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 	if (!( s=pystrndup(s,len)))  return -1;
 
@@ -3312,7 +3225,7 @@ load_counted_long(Unpicklerobject *self, int size)
 	PyObject *along;
 
 	assert(size == 1 || size == 4);
-	i = self->read_func(self, &nbytes, size);
+	i = _Unpickler_Read(self, &nbytes, size);
 	if (i < 0) return -1;
 
 	size = calc_binint(nbytes, size);
@@ -3329,7 +3242,7 @@ load_counted_long(Unpicklerobject *self, int size)
 		along = PyLong_FromLong(0L);
 	else {
 		/* Read the raw little-endian bytes & convert. */
-		i = self->read_func(self, (char **)&pdata, size);
+		i = _Unpickler_Read(self, (char **)&pdata, size);
 		if (i < 0) return -1;
 		along = _PyLong_FromByteArray(pdata, (size_t)size,
 				1 /* little endian */, 1 /* signed */);
@@ -3348,7 +3261,7 @@ load_float(Unpicklerobject *self)
 	int len, res = -1;
 	double d;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 	if (!( s=pystrndup(s,len)))  return -1;
 
@@ -3381,7 +3294,7 @@ load_binfloat(Unpicklerobject *self)
 	double x;
 	char *p;
 
-	if (self->read_func(self, &p, 8) < 0)
+	if (_Unpickler_Read(self, &p, 8) < 0)
 		return -1;
 
 	x = _PyFloat_Unpack8((unsigned char *)p, 0);
@@ -3403,7 +3316,7 @@ load_string(Unpicklerobject *self)
 	int len, res = -1;
 	char *s, *p;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 	if (!( s=pystrndup(s,len)))  return -1;
 
@@ -3445,7 +3358,7 @@ load_binstring(Unpicklerobject *self)
 	long l;
 	char *s;
 
-	if (self->read_func(self, &s, 4) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 4) < 0) return -1;
 
 	l = calc_binint(s, 4);
 	if (l < 0) {
@@ -3457,7 +3370,7 @@ load_binstring(Unpicklerobject *self)
 		return -1;
 	}
 
-	if (self->read_func(self, &s, l) < 0)
+	if (_Unpickler_Read(self, &s, l) < 0)
 		return -1;
 
 	if (!( py_string = PyString_FromStringAndSize(s, l)))
@@ -3475,12 +3388,12 @@ load_short_binstring(Unpicklerobject *self)
 	unsigned char l;
 	char *s;
 
-	if (self->read_func(self, &s, 1) < 0)
+	if (_Unpickler_Read(self, &s, 1) < 0)
 		return -1;
 
 	l = (unsigned char)s[0];
 
-	if (self->read_func(self, &s, l) < 0) return -1;
+	if (_Unpickler_Read(self, &s, l) < 0) return -1;
 
 	if (!( py_string = PyString_FromStringAndSize(s, l)))  return -1;
 
@@ -3497,7 +3410,7 @@ load_unicode(Unpicklerobject *self)
 	int len, res = -1;
 	char *s;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 1) return bad_readline();
 
 	if (!( str = PyUnicode_DecodeRawUnicodeEscape(s, len - 1, NULL)))
@@ -3520,7 +3433,7 @@ load_binunicode(Unpicklerobject *self)
 	long l;
 	char *s;
 
-	if (self->read_func(self, &s, 4) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 4) < 0) return -1;
 
 	l = calc_binint(s, 4);
 	if (l < 0) {
@@ -3532,7 +3445,7 @@ load_binunicode(Unpicklerobject *self)
 		return -1;
 	}
 
-	if (self->read_func(self, &s, l) < 0)
+	if (_Unpickler_Read(self, &s, l) < 0)
 		return -1;
 
 	if (!( unicode = PyUnicode_DecodeUTF8(s, l, NULL)))
@@ -3715,12 +3628,12 @@ load_inst(Unpicklerobject *self)
 
 	if ((i = marker(self)) < 0) return -1;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 	module_name = PyString_FromStringAndSize(s, len - 1);
 	if (!module_name)  return -1;
 
-	if ((len = self->readline_func(self, &s)) >= 0) {
+	if ((len = _Unpickler_Readline(self, &s)) >= 0) {
 		if (len < 2) return bad_readline();
 		if ((class_name = PyString_FromStringAndSize(s, len - 1))) {
 			class = find_class(module_name, class_name,
@@ -3799,12 +3712,12 @@ load_global(Unpicklerobject *self)
 	int len;
 	char *s;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 	module_name = PyString_FromStringAndSize(s, len - 1);
 	if (!module_name)  return -1;
 
-	if ((len = self->readline_func(self, &s)) >= 0) {
+	if ((len = _Unpickler_Readline(self, &s)) >= 0) {
 		if (len < 2) {
 			Py_DECREF(module_name);
 			return bad_readline();
@@ -3831,7 +3744,7 @@ load_persid(Unpicklerobject *self)
 	char *s;
 
 	if (self->pers_func) {
-		if ((len = self->readline_func(self, &s)) < 0) return -1;
+		if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 		if (len < 2) return bad_readline();
 
 		pid = PyString_FromStringAndSize(s, len - 1);
@@ -3964,7 +3877,7 @@ load_get(Unpicklerobject *self)
 	char *s;
 	int rc;
 
-	if ((len = self->readline_func(self, &s)) < 0) return -1;
+	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 
 	if (!( py_str = PyString_FromStringAndSize(s, len - 1)))  return -1;
@@ -3992,7 +3905,7 @@ load_binget(Unpicklerobject *self)
 	char *s;
 	int rc;
 
-	if (self->read_func(self, &s, 1) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 1) < 0) return -1;
 
 	key = (unsigned char)s[0];
 	if (!( py_key = PyInt_FromLong((long)key)))  return -1;
@@ -4021,7 +3934,7 @@ load_long_binget(Unpicklerobject *self)
 	long key;
 	int rc;
 
-	if (self->read_func(self, &s, 4) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 4) < 0) return -1;
 
 	c = (unsigned char)s[0];
 	key = (long)c;
@@ -4062,7 +3975,7 @@ load_extension(Unpicklerobject *self, int nbytes)
 	PyObject *module_name, *class_name;
 
 	assert(nbytes == 1 || nbytes == 2 || nbytes == 4);
-	if (self->read_func(self, &codebytes, nbytes) < 0) return -1;
+	if (_Unpickler_Read(self, &codebytes, nbytes) < 0) return -1;
 	code = calc_binint(codebytes,  nbytes);
 	if (code <= 0) {		/* note that 0 is forbidden */
 		/* Corrupt or hostile pickle. */
@@ -4124,7 +4037,7 @@ load_put(Unpicklerobject *self)
 	int len, l;
 	char *s;
 
-	if ((l = self->readline_func(self, &s)) < 0) return -1;
+	if ((l = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (l < 2) return bad_readline();
 	if (!( len=self->stack->length ))  return stackUnderflow();
 	if (!( py_str = PyString_FromStringAndSize(s, l - 1)))  return -1;
@@ -4143,7 +4056,7 @@ load_binput(Unpicklerobject *self)
 	char *s;
 	int len;
 
-	if (self->read_func(self, &s, 1) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 1) < 0) return -1;
 	if (!( (len=self->stack->length) > 0 ))  return stackUnderflow();
 
 	key = (unsigned char)s[0];
@@ -4165,7 +4078,7 @@ load_long_binput(Unpicklerobject *self)
 	char *s;
 	int len;
 
-	if (self->read_func(self, &s, 4) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 4) < 0) return -1;
 	if (!( len=self->stack->length ))  return stackUnderflow();
 
 	c = (unsigned char)s[0];
@@ -4450,7 +4363,7 @@ load_proto(Unpicklerobject *self)
 	int i;
 	char *protobyte;
 
-	i = self->read_func(self, &protobyte, 1);
+	i = _Unpickler_Read(self, &protobyte, 1);
 	if (i < 0)
 		return -1;
 
@@ -4467,14 +4380,14 @@ load_proto(Unpicklerobject *self)
 }
 
 #ifdef USE_COMPUTED_GOTOS
-#define DISPATCH() if (self->read_func(self, &s, 1) < 0) break; \
+#define DISPATCH() if (_Unpickler_Read(self, &s, 1) < 0) break; \
 			goto *opcode_targets[(unsigned char)s[0]];
 #define TARGET(bc) TARGET_##bc
 #define UNKNOWN_OPCODE _unknown_opcode
 #define ERROR() goto on_error
 #define NEXT() DISPATCH()
 #else
-#define DISPATCH() if (self->read_func(self, &s, 1) < 0) break; switch (s[0])
+#define DISPATCH() if (_Unpickler_Read(self, &s, 1) < 0) break; switch (s[0])
 #define TARGET(bc) case bc
 #define UNKNOWN_OPCODE default
 #define ERROR() break
@@ -4811,8 +4724,8 @@ noload_inst(Unpicklerobject *self)
 
 	if ((i = marker(self)) < 0) return -1;
 	Pdata_clear(self->stack, i);
-	if (self->readline_func(self, &s) < 0) return -1;
-	if (self->readline_func(self, &s) < 0) return -1;
+	if (_Unpickler_Readline(self, &s) < 0) return -1;
+	if (_Unpickler_Readline(self, &s) < 0) return -1;
 	PDATA_APPEND(self->stack, Py_None, -1);
 	return 0;
 }
@@ -4831,7 +4744,7 @@ noload_newobj(Unpicklerobject *self)
 	Py_DECREF(obj);
 
 	PDATA_APPEND(self->stack, Py_None, -1);
- 	return 0;
+	return 0;
 }
 
 static int
@@ -4839,9 +4752,9 @@ noload_global(Unpicklerobject *self)
 {
 	char *s;
 
-	if (self->readline_func(self, &s) < 0) return -1;
-	if (self->readline_func(self, &s) < 0) return -1;
-	PDATA_APPEND(self->stack, Py_None,-1);
+	if (_Unpickler_Readline(self, &s) < 0) return -1;
+	if (_Unpickler_Readline(self, &s) < 0) return -1;
+	PDATA_APPEND(self->stack, Py_None, -1);
 	return 0;
 }
 
@@ -4869,7 +4782,7 @@ noload_extension(Unpicklerobject *self, int nbytes)
 	char *codebytes;
 
 	assert(nbytes == 1 || nbytes == 2 || nbytes == 4);
-	if (self->read_func(self, &codebytes, nbytes) < 0) return -1;
+	if (_Unpickler_Read(self, &codebytes, nbytes) < 0) return -1;
 	PDATA_APPEND(self->stack, Py_None, -1);
 	return 0;
 }
@@ -4885,7 +4798,7 @@ noload(Unpicklerobject *self)
 	Pdata_clear(self->stack, 0);
 
 	while (1) {
-		if (self->read_func(self, &s, 1) < 0)
+		if (_Unpickler_Read(self, &s, 1) < 0)
 			break;
 
 		switch (s[0]) {
@@ -5178,12 +5091,16 @@ noload(Unpicklerobject *self)
 static PyObject *
 Unpickler_load(Unpicklerobject *self, PyObject *unused)
 {
+	if (_Unpickler_ReadFromFile(self) < 0)
+		return NULL;
 	return load(self);
 }
 
 static PyObject *
 Unpickler_noload(Unpicklerobject *self, PyObject *unused)
 {
+	if (_Unpickler_ReadFromFile(self) < 0)
+		return NULL;
 	return noload(self);
 }
 
@@ -5206,7 +5123,7 @@ static struct PyMethodDef Unpickler_methods[] = {
 
 
 static Unpicklerobject *
-newUnpicklerobject(PyObject *f)
+newUnpicklerobject(PyObject *file)
 {
 	Unpicklerobject *self;
 
@@ -5221,10 +5138,11 @@ newUnpicklerobject(PyObject *f)
 	self->marks = NULL;
 	self->num_marks = 0;
 	self->marks_size = 0;
-	self->buf_size = 0;
-	self->read = NULL;
-	self->readline = NULL;
 	self->find_class = NULL;
+	self->py_input = NULL;
+	self->input_buffer = NULL;
+	self->input_len = 0;
+	self->next_read_idx = 0;
 
 	if (!( self->memo = PyDict_New()))
 		goto err;
@@ -5235,40 +5153,19 @@ newUnpicklerobject(PyObject *f)
 	if (!self->stack)
 		goto err;
 
-	Py_INCREF(f);
-	self->file = f;
-
-	/* Set read, readline based on type of f */
-	if (PyFile_Check(f)) {
-		self->fp = PyFile_AsFile(f);
-		if (self->fp == NULL) {
-			PyErr_SetString(PyExc_ValueError,
-					"I/O operation on closed file");
-			goto err;
-		}
-		self->read_func = read_file;
-		self->readline_func = readline_file;
-	}
-	else if (PycStringIO_InputCheck(f)) {
-		self->fp = NULL;
-		self->read_func = read_cStringIO;
-		self->readline_func = readline_cStringIO;
-	}
-	else {
-
-		self->fp = NULL;
-		self->read_func = read_other;
-		self->readline_func = readline_other;
-
-		if (!( (self->readline = PyObject_GetAttr(f, readline_str)) &&
-		       (self->read = PyObject_GetAttr(f, read_str))))  {
+	Py_XINCREF(file);
+	self->file = file;
+	if (file != NULL) {
+		if (!(PyObject_GetAttrString(file, "readline") &&
+		      PyObject_GetAttrString(file, "read"))) {
 			PyErr_Clear();
-			PyErr_SetString( PyExc_TypeError,
-					 "argument must have 'read' and "
-					 "'readline' attributes" );
+			PyErr_SetString(PyExc_TypeError,
+					"argument must have 'read' and "
+					"'readline' attributes");
 			goto err;
 		}
 	}
+
 	PyObject_GC_Track(self);
 
 	return self;
@@ -5290,8 +5187,6 @@ static void
 Unpickler_dealloc(Unpicklerobject *self)
 {
 	PyObject_GC_UnTrack((PyObject *)self);
-	Py_XDECREF(self->readline);
-	Py_XDECREF(self->read);
 	Py_XDECREF(self->file);
 	Py_XDECREF(self->memo);
 	Py_XDECREF(self->stack);
@@ -5304,9 +5199,8 @@ Unpickler_dealloc(Unpicklerobject *self)
 		free(self->marks);
 	}
 
-	if (self->buf_size) {
-		free(self->buf);
-	}
+	/* Takes care of freeing input_buffer. */
+	Py_XDECREF(self->py_input);
 
 	Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -5314,8 +5208,6 @@ Unpickler_dealloc(Unpicklerobject *self)
 static int
 Unpickler_traverse(Unpicklerobject *self, visitproc visit, void *arg)
 {
-	Py_VISIT(self->readline);
-	Py_VISIT(self->read);
 	Py_VISIT(self->file);
 	Py_VISIT(self->memo);
 	Py_VISIT(self->stack);
@@ -5329,8 +5221,6 @@ Unpickler_traverse(Unpicklerobject *self, visitproc visit, void *arg)
 static int
 Unpickler_clear(Unpicklerobject *self)
 {
-	Py_CLEAR(self->readline);
-	Py_CLEAR(self->read);
 	Py_CLEAR(self->file);
 	Py_CLEAR(self->memo);
 	Py_CLEAR(self->stack);
@@ -5509,22 +5399,21 @@ cpm_load(PyObject *self, PyObject *ob)
 static PyObject *
 cpm_loads(PyObject *self, PyObject *args)
 {
-	PyObject *ob, *file = 0, *res = NULL;
-	Unpicklerobject *unpickler = 0;
+	PyObject *input, *res = NULL;
+	Unpicklerobject *unpickler = NULL;
 
-	if (!( PyArg_ParseTuple(args, "S:loads", &ob)))
+	if (!( PyArg_ParseTuple(args, "S:loads", &input)))
 		goto finally;
 
-	if (!( file = PycStringIO->NewInput(ob)))
+	if (!( unpickler = newUnpicklerobject(NULL)))
 		goto finally;
 
-	if (!( unpickler = newUnpicklerobject(file)))
+	if (_Unpickler_SetStringInput(unpickler, input) < 0)
 		goto finally;
 
 	res = load(unpickler);
 
-  finally:
-	Py_XDECREF(file);
+finally:
 	Py_XDECREF(unpickler);
 
 	return res;
