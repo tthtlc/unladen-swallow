@@ -5315,8 +5315,8 @@ newUnpicklerobject(PyObject *file)
 	Py_XINCREF(file);
 	self->file = file;
 	if (file != NULL) {
-		if (!(PyObject_GetAttrString(file, "readline") &&
-		      PyObject_GetAttrString(file, "read"))) {
+		if (!(PyObject_HasAttrString(file, "readline") &&
+		      PyObject_HasAttrString(file, "read"))) {
 			PyErr_Clear();
 			PyErr_SetString(PyExc_TypeError,
 					"argument must have 'read' and "
@@ -5387,6 +5387,7 @@ Unpickler_clear(Unpicklerobject *self)
 	Py_CLEAR(self->arg);
 	Py_CLEAR(self->last_string);
 	Py_CLEAR(self->find_class);
+	Py_CLEAR(self->py_input);
 	return 0;
 }
 
