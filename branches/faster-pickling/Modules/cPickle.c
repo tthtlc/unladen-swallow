@@ -64,7 +64,7 @@ PyDoc_STRVAR(cPickle_module_documentation,
 #define SETITEMS    'u'
 
 /* Protocol 2. */
-#define PROTO	 '\x80' /* identify pickle protocol */
+#define PROTO    '\x80' /* identify pickle protocol */
 #define NEWOBJ   '\x81' /* build object by applying cls.__new__ to argtuple */
 #define EXT1     '\x82' /* push object from extension registry; 1-byte index */
 #define EXT2     '\x83' /* ditto, but 2-byte index */
@@ -778,18 +778,15 @@ pystrndup(const char *s, int n)
 static int
 get(Picklerobject *self, PyObject *id)
 {
-	PyObject *value, *mv;
+	PyObject *value;
 	long c_value;
 	char s[30];
 	size_t len;
 
-	if (!( mv = PyDict_GetItem(self->memo, id)))  {
+	if ((value = PyDict_GetItem(self->memo, id)) == NULL)  {
 		PyErr_SetObject(PyExc_KeyError, id);
 		return -1;
 	}
-
-	if (!( value = PyTuple_GetItem(mv, 0)))
-		return -1;
 
 	if (!( PyInt_Check(value)))  {
 		PyErr_SetString(PicklingError, "no int where int expected in memo");
@@ -843,7 +840,7 @@ put2(Picklerobject *self, PyObject *ob)
 	int p;
 	size_t len;
 	int res = -1;
-	PyObject *py_ob_id = 0, *memo_len = 0, *t = 0;
+	PyObject *py_ob_id = NULL, *memo_len = NULL;
 
 	if (self->fast)
 		return 0;
@@ -859,21 +856,13 @@ put2(Picklerobject *self, PyObject *ob)
 	 */
 	p++;
 
-	if (!( py_ob_id = PyLong_FromVoidPtr(ob)))
+	if ((py_ob_id = PyLong_FromVoidPtr(ob)) == NULL)
 		goto finally;
 
-	if (!( memo_len = PyInt_FromLong(p)))
+	if ((memo_len = PyInt_FromLong(p)) == NULL)
 		goto finally;
 
-	if (!( t = PyTuple_New(2)))
-		goto finally;
-
-	PyTuple_SET_ITEM(t, 0, memo_len);
-	Py_INCREF(memo_len);
-	PyTuple_SET_ITEM(t, 1, ob);
-	Py_INCREF(ob);
-
-	if (PyDict_SetItem(self->memo, py_ob_id, t) < 0)
+	if (PyDict_SetItem(self->memo, py_ob_id, memo_len) < 0)
 		goto finally;
 
 	if (!self->bin) {
@@ -905,7 +894,6 @@ put2(Picklerobject *self, PyObject *ob)
   finally:
 	Py_XDECREF(py_ob_id);
 	Py_XDECREF(memo_len);
-	Py_XDECREF(t);
 
 	return res;
 }
