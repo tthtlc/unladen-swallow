@@ -104,6 +104,8 @@ static PyObject *UnpickleableError;
 static PyObject *UnpicklingError;
 static PyObject *BadPickleGet;
 
+static long calc_binint(char *s, int x);
+
 /* As the name says, an empty tuple. */
 static PyObject *empty_tuple;
 
@@ -338,6 +340,9 @@ typedef struct Picklerobject {
 	/* bool, true if proto > 0 */
 	int bin;
 
+	/* Does the pickle contain any of GET, BINGET or LONG_BINGET? */
+	int uses_gets;
+
 	/* Write into a local buffer before flushing out to file. output_len
 	   tracks the current size; when output_len >= max_output_len, we
 	   realloc. */
@@ -460,6 +465,156 @@ _Pickler_FlushToFile(Picklerobject *self)
 	Py_DECREF(output);
 	Py_XDECREF(ret);
 	return (ret == NULL) ? -1 : 0;
+}
+
+/* A primitive pickle optimizer: if the pickle doesn't use any of GET,
+   BINGET or LONG_BINGET, we can remove all PUT instructions (PUT, BINPUT,
+   LONG_BINPUT). This is a huge win for simple objects, as it can eliminate
+   up to 30% of the instructions.
+*/
+static int
+_Pickler_Optimize(Picklerobject *self)
+{
+	Py_ssize_t start_read_pos, read_pos, write_pos, orig_len;
+	long count;  /* Used for a few opcode "implementations". */
+
+	assert(self->output_buffer != NULL);
+	if (self->uses_gets == 1)
+		return 0;
+
+	orig_len = self->output_len;
+	read_pos = write_pos = 0;
+	while (read_pos < orig_len) {
+		start_read_pos = read_pos;
+
+		switch (self->output_buffer[read_pos++]) {
+		/* The opcodes we want to remove. */
+		case PUT:
+			self->output_len--;
+			while (self->output_buffer[read_pos++] != '\n')
+				self->output_len--;
+			continue;
+
+		case BINPUT:
+			self->output_len -= 2;
+			read_pos++;
+			continue;
+
+		case LONG_BINPUT:
+			self->output_len -= 5;
+			read_pos += 4;
+			continue;
+
+		/* No-argument opcodes. */
+		case APPEND:
+		case APPENDS:
+		case SETITEM:
+		case SETITEMS:
+		case NEWOBJ:
+		case OBJ:
+		case REDUCE:
+		case NONE:
+		case STOP:
+		case NEWTRUE:
+		case NEWFALSE:
+		case LIST:
+		case DICT:
+		case EMPTY_TUPLE:
+		case EMPTY_LIST:
+		case EMPTY_DICT:
+		case TUPLE1:
+		case TUPLE2:
+		case TUPLE3:
+		case TUPLE:
+		case BUILD:
+		case DUP:
+		case MARK:
+		case POP:
+		case POP_MARK:
+		case BINPERSID:
+			break;
+
+		/* Opcodes with variable-length arguments. */
+		case BINSTRING:  /* 4-byte len */
+#ifdef Py_USING_UNICODE
+		case BINUNICODE: /* 4-byte len */
+#endif
+		case LONG4:
+			count = calc_binint(&self->output_buffer[read_pos], 4);
+			read_pos += 4 + count;
+			break;
+
+		case SHORT_BINSTRING: /* 1-byte len */
+		case LONG1:
+			count = calc_binint(&self->output_buffer[read_pos], 1);
+			read_pos += 1 + count;
+			break;
+
+		/* Opcodes with readline arguments. */
+		case INT:
+		case LONG:
+		case FLOAT:
+		case STRING:
+#ifdef Py_USING_UNICODE
+		case UNICODE:
+#endif
+		case PERSID:
+			while (self->output_buffer[read_pos++] != '\n') {}
+			break;
+
+		/* Two readlines. */
+		case INST:
+		case GLOBAL:
+			while (self->output_buffer[read_pos++] != '\n') {}
+			while (self->output_buffer[read_pos++] != '\n') {}
+			break;
+
+		/* Opcodes with fixed-length arguments. */
+		case PROTO:
+		case BININT1:
+		case EXT1:
+			read_pos++;
+			break;
+
+		case BININT2:
+		case EXT2:
+			read_pos += 2;
+			break;
+
+		case BININT:
+		case EXT4:
+			read_pos += 4;
+			break;
+
+		case BINFLOAT:
+			read_pos += 8;
+			break;
+
+		/* We were promised we wouldn't see these! */
+		case GET:
+		case BINGET:
+		case LONG_BINGET:
+			PyErr_Format(
+				PyExc_RuntimeError,
+				"Unexpected opcode: '%c'",
+				self->output_buffer[read_pos-1]);
+			return -1;
+
+		default:
+			PyErr_Format(
+				PyExc_RuntimeError,
+				"Unknown opcode: '%c'",
+				self->output_buffer[read_pos-1]);
+			return -1;
+		}
+
+		/* Copy the data we skipped over. */
+		while (start_read_pos < read_pos) {
+			self->output_buffer[write_pos++] =
+				self->output_buffer[start_read_pos++];
+		}
+	}
+	return 0;
 }
 
 static Py_ssize_t
@@ -642,6 +797,7 @@ get(Picklerobject *self, PyObject *id)
 	}
 	c_value = PyInt_AS_LONG((PyIntObject*)value);
 
+	self->uses_gets = 1;
 	if (!self->bin) {
 		s[0] = GET;
 		PyOS_snprintf(s + 1, sizeof(s) - 1, "%ld\n", c_value);
@@ -2710,6 +2866,8 @@ Pickler_dump(Picklerobject *self, PyObject *args)
 
 	if (dump(self, ob) < 0)
 		return NULL;
+	if (_Pickler_Optimize(self) < 0)
+		return NULL;
 
 	if (self->file && _Pickler_FlushToFile(self) < 0)
 		return NULL;
@@ -2763,6 +2921,7 @@ newPicklerobject(PyObject *file, int proto)
 	self->fast_container = 0;
 	self->fast_memo = NULL;
 	self->dispatch_table = NULL;
+	self->uses_gets = 0;
 
 	/* Use this buffer internally, flushing to file only when
 	   necessary. */
@@ -5366,6 +5525,8 @@ cpm_dumps(PyObject *self, PyObject *args, PyObject *kwds)
 		goto finally;
 
 	if (dump(pickler, ob) < 0)
+		goto finally;
+	if (_Pickler_Optimize(pickler) < 0)
 		goto finally;
 
 	res = _Pickler_GetString(pickler);
