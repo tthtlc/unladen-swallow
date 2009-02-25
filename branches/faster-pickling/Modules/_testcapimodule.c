@@ -8,6 +8,7 @@
 #include "Python.h"
 #include <float.h>
 #include "structmember.h"
+#include "cPickle.h"
 
 #ifdef WITH_THREAD
 #include "pythread.h"
@@ -772,8 +773,58 @@ traceback_print(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+/* Tests for the MemoTable object in cPickle.c */
+
+static PyObject *
+test_memotable(PyObject *self)
+{
+	MemoTable *memo;
+	long i;
+
+#define EXPECT_EQ(a, b, msg) assert((a) == (b) && msg)
+
+	memo = MemoTable_New();
+	EXPECT_EQ(MemoTable_Size(memo), 0, "Non-zero empty size");
+	EXPECT_EQ(MemoTable_Get(memo, (void *)5), NULL, "Got invalid entry");
+
+	MemoTable_Set(memo, (void *)5, 7);
+	EXPECT_EQ(MemoTable_Size(memo), 1, "Bad memo size");
+	EXPECT_EQ(*MemoTable_Get(memo, (void *)5), 7, "Failed to get entry");
+
+	/* Update an existing entry */
+	MemoTable_Set(memo, (void *)5, 9);
+	EXPECT_EQ(MemoTable_Size(memo), 1, "Bad memo size");
+	EXPECT_EQ(*MemoTable_Get(memo, (void *)5), 9, "Failed to get entry");
+
+	/* Force a hash collision */
+	MemoTable_Set(memo, (void *)21, 11);
+	EXPECT_EQ(MemoTable_Size(memo), 2, "Bad memo size");
+	EXPECT_EQ(*MemoTable_Get(memo, (void *)5), 9, "Failed to get entry");
+	EXPECT_EQ(*MemoTable_Get(memo, (void *)21), 11, "Failed to get entry");
+
+	/* Clear the memo */
+	MemoTable_Clear(memo);
+	EXPECT_EQ(MemoTable_Size(memo), 0, "Non-zero empty size");
+	EXPECT_EQ(MemoTable_Get(memo, (void *)5), NULL, "Got invalid entry");
+	EXPECT_EQ(MemoTable_Get(memo, (void *)21), NULL, "Got invalid entry");
+
+	/* Insert enough entries to trigger a resize. */
+	for (i = 1; i < 12; i++)
+		MemoTable_Set(memo, (void *)i, i);
+	EXPECT_EQ(MemoTable_Size(memo), 11, "Bad memo size");
+	EXPECT_EQ(memo->mt_allocated, 32, "Allocated less/more than expected");
+	for (i = 1; i < 12; i++)
+		EXPECT_EQ(*MemoTable_Get(memo, (void *)i), i, "Wrong value");
+
+	MemoTable_Del(memo);
+	Py_RETURN_NONE;
+}
+
+/* End of tests for the MemoTable object in cPickle.c */
+
 static PyMethodDef TestMethods[] = {
 	{"raise_exception",	raise_exception,		 METH_VARARGS},
+	{"test_memotable",      (PyCFunction)test_memotable,     METH_NOARGS},
 	{"test_config",		(PyCFunction)test_config,	 METH_NOARGS},
 	{"test_list_api",	(PyCFunction)test_list_api,	 METH_NOARGS},
 	{"test_dict_iteration",	(PyCFunction)test_dict_iteration,METH_NOARGS},
