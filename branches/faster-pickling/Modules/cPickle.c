@@ -490,7 +490,8 @@ _Pickler_Optimize(Picklerobject *self)
 		switch (self->output_buffer[read_pos++]) {
 		/* The opcodes we want to remove. */
 		case PUT:
-			self->output_len--;
+			/* One for the opcode, one for the newline. */
+			self->output_len -= 2;
 			while (self->output_buffer[read_pos++] != '\n')
 				self->output_len--;
 			continue;
