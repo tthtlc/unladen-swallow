@@ -852,75 +852,6 @@ _Unpickler_Readline(Unpicklerobject *self, char **s)
 	return num_read;
 }
 
-/* Hold on to the original memo lookup function, just in case a memo
-   key is ever something other than an int or long. */
-static PyDictEntry *(*orig_memo_lookup)(PyDictObject *mp, PyObject *key,
-                                        long hash) = NULL;
-
-/*
- * Hacked up version of lookdict which can assume keys are always ints;
- * this assumption lets us skip testing for errors during
- * PyObject_RichCompareBool(): int-int comparisons never raise
- * exceptions.  This also means we don't need to go through
- * PyObject_RichCompareBool() at all; we can always use _PyInt_Eq()
- * directly.
- *
- * This is valuable because the memo dicts used in this module use only
- * int keys.
- *
- * If additional speed is required, it would be fairly easy to write a custom
- * hashtable that skips the intermediary PyLong_FromVoidPtr object creation.
- */
-static PyDictEntry *
-lookdict_int(PyDictObject *mp, PyObject *key, register long hash)
-{
-	register size_t i;
-	register size_t perturb;
-	register PyDictEntry *freeslot;
-	register size_t mask = (size_t)mp->ma_mask;
-	PyDictEntry *ep0 = mp->ma_table;
-	register PyDictEntry *ep;
-
-	/* Make sure this function doesn't have to handle non-int/long keys,
-	   including subclasses thereof; e.g., one reason to subclass
-	   is to override __eq__, and for speed we don't cater to that here. */
-	if (!PyInt_CheckExact(key)) {
-		mp->ma_lookup = orig_memo_lookup;
-		return orig_memo_lookup(mp, key, hash);
-	}
-	i = hash & mask;
-	ep = &ep0[i];
-	if (ep->me_key == NULL || ep->me_key == key)
-		return ep;
-	if (ep->me_key == _PyDict_DummyKey)
-		freeslot = ep;
-	else {
-		if (ep->me_hash == hash && _PyInt_Eq(ep->me_key, key))
-			return ep;
-		freeslot = NULL;
-	}
-
-#define PERTURB_SHIFT 5
-	/* In the loop, me_key == dummy is by far (factor of 100s) the
-	   least likely outcome, so test for that last. */
-	for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
-		i = (i << 2) + i + perturb + 1;
-		ep = &ep0[i & mask];
-		if (ep->me_key == NULL)
-			return freeslot == NULL ? ep : freeslot;
-		if (ep->me_key == key
-		    || (ep->me_hash == hash
-		        && ep->me_key != _PyDict_DummyKey
-			&& _PyInt_Eq(ep->me_key, key)))
-			return ep;
-		if (ep->me_key == _PyDict_DummyKey && freeslot == NULL)
-			freeslot = ep;
-	}
-#undef PERTURB_SHIFT
-	assert(0);	/* NOT REACHED */
-	return 0;
-}
-
 /* Copy the first n bytes from s into newly malloc'ed memory, plus a
  * trailing 0 byte.  Return a pointer to that, or NULL if out of memory.
  * The caller is responsible for free()'ing the return value.
@@ -1094,7 +1025,6 @@ fast_save_enter(Picklerobject *self, PyObject *obj)
 		PyObject *key = NULL;
 		if (self->fast_memo == NULL) {
 			self->fast_memo = PyDict_New();
-			((PyDictObject *)self->fast_memo)->ma_lookup = lookdict_int;
 			if (self->fast_memo == NULL) {
 				self->fast_container = -1;
 				return 0;
@@ -5383,9 +5313,6 @@ newUnpicklerobject(PyObject *file)
 
 	if (!( self->memo = PyDict_New()))
 		goto err;
-	if (orig_memo_lookup == NULL)
-		orig_memo_lookup = ((PyDictObject *)self->memo)->ma_lookup;
-	((PyDictObject *)self->memo)->ma_lookup = lookdict_int;
 
 	if (!self->stack)
 		goto err;

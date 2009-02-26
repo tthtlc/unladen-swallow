@@ -135,13 +135,13 @@ which point everyone will have terabytes of RAM on 64-bit boxes).
 */
 
 /* Object used as dummy key to fill deleted entries */
-PyObject *_PyDict_DummyKey = NULL; /* Initialized by first call to newPyDictObject() */
+static PyObject *dummy = NULL; /* Initialized by first call to newPyDictObject() */
 
 #ifdef Py_REF_DEBUG
 PyObject *
 _PyDict_Dummy(void)
 {
-	return _PyDict_DummyKey;
+	return dummy;
 }
 #endif
 
@@ -223,9 +223,9 @@ PyObject *
 PyDict_New(void)
 {
 	register PyDictObject *mp;
-	if (_PyDict_DummyKey == NULL) { /* Auto-initialize dummy key */
-		_PyDict_DummyKey = PyString_FromString("<dummy key>");
-		if (_PyDict_DummyKey == NULL)
+	if (dummy == NULL) { /* Auto-initialize dummy */
+		dummy = PyString_FromString("<dummy key>");
+		if (dummy == NULL)
 			return NULL;
 #ifdef SHOW_CONVERSION_COUNTS
 		Py_AtExit(show_counts);
@@ -310,7 +310,7 @@ lookdict(PyDictObject *mp, PyObject *key, register long hash)
 	if (ep->me_key == NULL || ep->me_key == key)
 		return ep;
 
-	if (ep->me_key == _PyDict_DummyKey)
+	if (ep->me_key == dummy)
 		freeslot = ep;
 	else {
 		if (ep->me_hash == hash) {
@@ -336,7 +336,7 @@ lookdict(PyDictObject *mp, PyObject *key, register long hash)
 		freeslot = NULL;
 	}
 
-	/* In the loop, me_key == _PyDict_DummyKey is by far (factor of 100s) the
+	/* In the loop, me_key == dummy is by far (factor of 100s) the
 	   least likely outcome, so test for that last. */
 	for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
 		i = (i << 2) + i + perturb + 1;
@@ -345,7 +345,7 @@ lookdict(PyDictObject *mp, PyObject *key, register long hash)
 			return freeslot == NULL ? ep : freeslot;
 		if (ep->me_key == key)
 			return ep;
-		if (ep->me_hash == hash && ep->me_key != _PyDict_DummyKey) {
+		if (ep->me_hash == hash && ep->me_key != dummy) {
 			startkey = ep->me_key;
 			Py_INCREF(startkey);
 			cmp = PyObject_RichCompareBool(startkey, key, Py_EQ);
@@ -365,7 +365,7 @@ lookdict(PyDictObject *mp, PyObject *key, register long hash)
  				return lookdict(mp, key, hash);
  			}
 		}
-		else if (ep->me_key == _PyDict_DummyKey && freeslot == NULL)
+		else if (ep->me_key == dummy && freeslot == NULL)
 			freeslot = ep;
 	}
 	assert(0);	/* NOT REACHED */
@@ -406,7 +406,7 @@ lookdict_string(PyDictObject *mp, PyObject *key, register long hash)
 	ep = &ep0[i];
 	if (ep->me_key == NULL || ep->me_key == key)
 		return ep;
-	if (ep->me_key == _PyDict_DummyKey)
+	if (ep->me_key == dummy)
 		freeslot = ep;
 	else {
 		if (ep->me_hash == hash && _PyString_Eq(ep->me_key, key))
@@ -414,7 +414,7 @@ lookdict_string(PyDictObject *mp, PyObject *key, register long hash)
 		freeslot = NULL;
 	}
 
-	/* In the loop, me_key == _PyDict_DummyKey is by far (factor of 100s) the
+	/* In the loop, me_key == dummy is by far (factor of 100s) the
 	   least likely outcome, so test for that last. */
 	for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
 		i = (i << 2) + i + perturb + 1;
@@ -423,10 +423,10 @@ lookdict_string(PyDictObject *mp, PyObject *key, register long hash)
 			return freeslot == NULL ? ep : freeslot;
 		if (ep->me_key == key
 		    || (ep->me_hash == hash
-		        && ep->me_key != _PyDict_DummyKey
+		        && ep->me_key != dummy
 			&& _PyString_Eq(ep->me_key, key)))
 			return ep;
-		if (ep->me_key == _PyDict_DummyKey && freeslot == NULL)
+		if (ep->me_key == dummy && freeslot == NULL)
 			freeslot = ep;
 	}
 	assert(0);	/* NOT REACHED */
@@ -463,8 +463,8 @@ insertdict(register PyDictObject *mp, PyObject *key, long hash, PyObject *value)
 		if (ep->me_key == NULL)
 			mp->ma_fill++;
 		else {
-			assert(ep->me_key == _PyDict_DummyKey);
-			Py_DECREF(_PyDict_DummyKey);
+			assert(ep->me_key == dummy);
+			Py_DECREF(dummy);
 		}
 		ep->me_key = key;
 		ep->me_hash = (Py_ssize_t)hash;
@@ -583,7 +583,7 @@ dictresize(PyDictObject *mp, Py_ssize_t minused)
 		}
 		else if (ep->me_key != NULL) {	/* dummy entry */
 			--i;
-			assert(ep->me_key == _PyDict_DummyKey);
+			assert(ep->me_key == dummy);
 			Py_DECREF(ep->me_key);
 		}
 		/* else key == value == NULL:  nothing to do */
@@ -747,8 +747,8 @@ PyDict_DelItem(PyObject *op, PyObject *key)
 		return -1;
 	}
 	old_key = ep->me_key;
-	Py_INCREF(_PyDict_DummyKey);
-	ep->me_key = _PyDict_DummyKey;
+	Py_INCREF(dummy);
+	ep->me_key = dummy;
 	old_value = ep->me_value;
 	ep->me_value = NULL;
 	mp->ma_used--;
@@ -1924,8 +1924,8 @@ dict_pop(PyDictObject *mp, PyObject *args)
 		return NULL;
 	}
 	old_key = ep->me_key;
-	Py_INCREF(_PyDict_DummyKey);
-	ep->me_key = _PyDict_DummyKey;
+	Py_INCREF(dummy);
+	ep->me_key = dummy;
 	old_value = ep->me_value;
 	ep->me_value = NULL;
 	mp->ma_used--;
@@ -1982,8 +1982,8 @@ dict_popitem(PyDictObject *mp)
 	}
 	PyTuple_SET_ITEM(res, 0, ep->me_key);
 	PyTuple_SET_ITEM(res, 1, ep->me_value);
-	Py_INCREF(_PyDict_DummyKey);
-	ep->me_key = _PyDict_DummyKey;
+	Py_INCREF(dummy);
+	ep->me_key = dummy;
 	ep->me_value = NULL;
 	mp->ma_used--;
 	assert(mp->ma_table[0].me_value == NULL);

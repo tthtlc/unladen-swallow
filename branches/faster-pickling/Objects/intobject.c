@@ -448,12 +448,6 @@ int_compare(PyIntObject *v, PyIntObject *w)
 	return (i < j) ? -1 : (i > j) ? 1 : 0;
 }
 
-int
-_PyInt_Eq(PyObject *v, PyObject *w)
-{
-	return ((PyIntObject *)v)->ob_ival == ((PyIntObject *)w)->ob_ival;
-}
-
 static long
 int_hash(PyIntObject *v)
 {
