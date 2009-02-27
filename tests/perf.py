@@ -220,9 +220,11 @@ def BM_PyBench(base_python, changed_python, options):
                                            env=PYBENCH_ENV)
             comparer = subprocess.Popen([base_python, "-E",
                                          PYBENCH_PATH,
+                                         "--debug",
                                          "-s", base_pybench,
                                          "-c", changed_pybench,
                                          ], stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE,
                                          env=PYBENCH_ENV)
             result, err = comparer.communicate()
             if comparer.returncode != 0:
