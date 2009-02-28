@@ -872,6 +872,19 @@ class AbstractPickleTests(unittest.TestCase):
             except (AttributeError, pickle.PickleError, cPickle.PickleError):
                 pass
 
+    def test_many_puts_and_gets(self):
+        # Test that internal data structures correctly deal with lots of
+        # puts/gets. There were once bugs in cPickle related to this.
+        keys = ("aaa" + str(i) for i in xrange(100))
+        large_dict = dict((k, [4, 5, 6]) for k in keys)
+        obj = [dict(large_dict), dict(large_dict), dict(large_dict)]
+
+        for proto in [0, 1, 2]:
+            dumped = self.dumps(obj, proto)
+            loaded = self.loads(dumped)
+            self.assertEqual(loaded, obj, "Failed protocol %d" % proto)
+
+
 # Test classes for reduce_ex
 
 class REX_one(object):
