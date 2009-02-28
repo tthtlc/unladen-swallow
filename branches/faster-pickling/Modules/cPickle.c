@@ -1,5 +1,4 @@
 #include "Python.h"
-#include "cStringIO.h"
 #include "structmember.h"
 #include "cPickle.h"
 
@@ -12,8 +11,6 @@ PyDoc_STRVAR(cPickle_module_documentation,
 #endif /* Py_eval_input */
 
 #define DEL_LIST_SLICE(list, from, to) (PyList_SetSlice(list, from, to, NULL))
-
-#define WRITE_BUF_SIZE 256
 
 /* Bump this when new opcodes are added to the pickle protocol. */
 #define HIGHEST_PROTOCOL 2
@@ -322,11 +319,20 @@ STATIC_MEMOTABLE MemoTable *
 MemoTable_New(void)
 {
 	MemoTable *memo = (MemoTable *)malloc(sizeof(MemoTable));
+	if (memo == NULL) {
+		PyErr_NoMemory();
+		return NULL;
+	}
 
 	memo->mt_used = 0;
 	memo->mt_allocated = MT_MINSIZE;
 	memo->mt_mask = MT_MINSIZE - 1;
 	memo->mt_table = (MemoEntry *)malloc(MT_MINSIZE * sizeof(MemoEntry));
+	if (memo->mt_table == NULL) {
+		free(memo);
+		PyErr_NoMemory();
+		return NULL;
+	}
 	memset(memo->mt_table, 0, MT_MINSIZE * sizeof(MemoEntry));
 
 	return memo;
@@ -402,6 +408,10 @@ _MemoTable_Resize(MemoTable *self, Py_ssize_t min_size)
 	/* Allocate new table. */
 	oldtable = self->mt_table;
 	self->mt_table = (MemoEntry *)malloc(new_size * sizeof(MemoEntry));
+	if (self->mt_table == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	}
 	self->mt_allocated = new_size;
 	self->mt_mask = new_size - 1;
 	memset(self->mt_table, 0, sizeof(MemoEntry) * new_size);
@@ -596,6 +606,10 @@ _Pickler_Write(Picklerobject *self, const char *s, Py_ssize_t n)
 		self->max_output_len = (self->output_len + n) * 2;
 		self->output_buffer = realloc(self->output_buffer,
 					      self->max_output_len);
+		if (self->output_buffer == NULL) {
+			PyErr_NoMemory();
+			return -1;
+		}
 	}
 	for (i = 0; i < n; i++) {
 		self->output_buffer[self->output_len + i] = s[i];
@@ -1726,7 +1740,7 @@ static int
 batch_list_exact(Picklerobject *self, PyObject *obj)
 {
 	PyObject *item = NULL;
-	int i, j;
+	int this_batch, total;
 
 	static char appends = APPENDS;
 
@@ -1734,23 +1748,23 @@ batch_list_exact(Picklerobject *self, PyObject *obj)
 	assert(self->proto > 0);
 
 	/* Write in batches of BATCHSIZE. */
-	j = 0;
+	total = 0;
 	do {
-		i = 0;
+		this_batch = 0;
 		if (_Pickler_Write(self, &MARKv, 1) < 0)
 			return -1;
-		while (j < PyList_GET_SIZE(obj)) {
-			item = PyList_GET_ITEM(obj, j);
+		while (total < PyList_GET_SIZE(obj)) {
+			item = PyList_GET_ITEM(obj, total);
 			if (save(self, item, 0) < 0)
 				return -1;
-			j++;
-			if (++i == BATCHSIZE)
+			total++;
+			if (++this_batch == BATCHSIZE)
 				break;
 		}
 		if (_Pickler_Write(self, &appends, 1) < 0)
 			return -1;
 
-	} while (i == BATCHSIZE);
+	} while (this_batch == BATCHSIZE);
 	return 0;
 }
 
@@ -2967,6 +2981,10 @@ newPicklerobject(PyObject *file, int proto)
 	   necessary. */
 	self->max_output_len = 4096;
 	self->output_buffer = (char *)malloc(4096 * sizeof(char));
+	if (self->output_buffer == NULL) {
+		PyErr_NoMemory();
+		goto err;
+	}
 	self->output_len = 0;
 	self->file = file;
 	Py_XINCREF(self->file);
@@ -3125,7 +3143,7 @@ static PyMemberDef Pickler_members[] = {
 static PyGetSetDef Pickler_getsets[] = {
     {"persistent_id", (getter)Pickler_get_pers_func,
                      (setter)Pickler_set_pers_func},
-    {"inst_persistent_id", NULL, (setter)Pickler_set_inst_pers_func},\
+    {"inst_persistent_id", NULL, (setter)Pickler_set_inst_pers_func},
     {"PicklingError", (getter)Pickler_get_error, NULL},
     {NULL}
 };
@@ -5797,8 +5815,6 @@ init_stuff(PyObject *module_dict)
 	if (PyDict_SetItemString(module_dict, "BadPickleGet",
 				 BadPickleGet) < 0)
 		return -1;
-
-	PycString_IMPORT;
 
 	return 0;
 }
