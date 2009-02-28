@@ -535,7 +535,6 @@ static PyTypeObject Picklertype;
 
 typedef struct Unpicklerobject {
 	PyObject_HEAD
-	PyObject *memo;
 	PyObject *arg;
 	Pdata *stack;
 	PyObject *mark;
@@ -544,6 +543,11 @@ typedef struct Unpicklerobject {
 	int *marks;
 	int num_marks;
 	int marks_size;
+
+	/* The unpickler memo is just an array of PyObject *s. Using a dict
+	   is unnecessary, since the keys are contiguous ints. */
+	PyObject **memo;
+	Py_ssize_t memo_size;
 
 	/* We have to hold on to the Python object, since freeing it will free
 	   input_buffer. */
@@ -864,6 +868,69 @@ _Unpickler_Readline(Unpicklerobject *self, char **s)
 	num_read = i - self->next_read_idx;
 	self->next_read_idx = i;
 	return num_read;
+}
+
+static int
+_Unpickler_ResizeMemo(Unpicklerobject *self, Py_ssize_t new_size)
+{
+	Py_ssize_t i;
+
+	assert(new_size > self->memo_size);
+
+	self->memo = realloc(self->memo, sizeof(PyObject *) * new_size);
+	if (self->memo == NULL)
+		return -1;
+	for (i = self->memo_size; i < new_size; i++)
+		self->memo[i] = NULL;
+	self->memo_size = new_size;
+	return 0;
+}
+
+static PyObject *
+_Unpickler_MemoGet(Unpicklerobject *self, Py_ssize_t idx)
+{
+	if (idx < 0 || idx >= self->memo_size)
+		return NULL;
+
+	return self->memo[idx];
+}
+
+static int
+_Unpickler_MemoPut(Unpicklerobject *self, Py_ssize_t idx, PyObject *value)
+{
+	PyObject *old_item;
+
+	if (idx >= self->memo_size) {
+		if (_Unpickler_ResizeMemo(self, idx * 2) < 0)
+			return -1;
+		assert(idx < self->memo_size);
+	}
+
+	old_item = self->memo[idx];
+	self->memo[idx] = value;
+	Py_XDECREF(old_item);
+	return 0;
+}
+
+static PyObject **
+_Unpickler_NewMemo(Py_ssize_t new_size)
+{
+	PyObject **memo = (PyObject **)malloc(sizeof(PyObject *) * new_size);
+	if (memo == NULL)
+		return NULL;
+	memset(memo, 0, sizeof(PyObject *) * new_size);
+	return memo;
+}
+
+static void
+_Unpickler_MemoCleanup(Unpicklerobject *self)
+{
+	Py_ssize_t i;
+
+	for (i = 0; i < self->memo_size; i++)
+		Py_XDECREF(self->memo[i]);
+	free(self->memo);
+	self->memo = NULL;
 }
 
 /* Copy the first n bytes from s into newly malloc'ed memory, plus a
@@ -4057,19 +4124,30 @@ load_dup(Unpicklerobject *self)
 static int
 load_get(Unpicklerobject *self)
 {
-	PyObject *py_str = 0, *value = 0;
-	int len;
+	PyObject *value;
+	int len, rc = -1;
+	long idx;
 	char *s;
-	int rc;
 
 	if ((len = _Unpickler_Readline(self, &s)) < 0) return -1;
 	if (len < 2) return bad_readline();
 
-	if (!( py_str = PyString_FromStringAndSize(s, len - 1)))  return -1;
+	/* Convert to a long */
+	if ((s = pystrndup(s, len)) == NULL)
+		return -1;
+	errno = 0;
+	if ((idx = strtol(s, NULL, 0)) == 0) {
+		if (errno) {
+			PyErr_SetObject(BadPickleGet,
+					PyString_FromStringAndSize(s, len - 1));
+			goto finally;
+		}
+	}
 
-	value = PyDict_GetItem(self->memo, py_str);
-	if (! value) {
-		PyErr_SetObject(BadPickleGet, py_str);
+	value = _Unpickler_MemoGet(self, idx);
+	if (value == NULL) {
+		PyErr_SetObject(BadPickleGet,
+				PyString_FromStringAndSize(s, len - 1));
 		rc = -1;
 	}
 	else {
@@ -4077,7 +4155,8 @@ load_get(Unpicklerobject *self)
 		rc = 0;
 	}
 
-	Py_DECREF(py_str);
+finally:
+	free(s);
 	return rc;
 }
 
@@ -4085,41 +4164,34 @@ load_get(Unpicklerobject *self)
 static int
 load_binget(Unpicklerobject *self)
 {
-	PyObject *py_key = 0, *value = 0;
-	unsigned char key;
+	PyObject *value = NULL;
+	long key;
 	char *s;
-	int rc;
 
-	if (_Unpickler_Read(self, &s, 1) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 1) < 0)
+		return -1;
 
-	key = (unsigned char)s[0];
-	if (!( py_key = PyInt_FromLong((long)key)))  return -1;
-
-	value = PyDict_GetItem(self->memo, py_key);
-	if (! value) {
-		PyErr_SetObject(BadPickleGet, py_key);
-		rc = -1;
+	key = (long)(unsigned char)s[0];
+	value = _Unpickler_MemoGet(self, key);
+	if (value == NULL) {
+		PyErr_SetObject(BadPickleGet, PyInt_FromLong(key));
+		return -1;
 	}
-	else {
-		PDATA_APPEND(self->stack, value, -1);
-		rc = 0;
-	}
-
-	Py_DECREF(py_key);
-	return rc;
+	PDATA_APPEND(self->stack, value, -1);
+	return 0;
 }
 
 
 static int
 load_long_binget(Unpicklerobject *self)
 {
-	PyObject *py_key = 0, *value = 0;
+	PyObject *value = NULL;
 	unsigned char c;
 	char *s;
 	long key;
-	int rc;
 
-	if (_Unpickler_Read(self, &s, 4) < 0) return -1;
+	if (_Unpickler_Read(self, &s, 4) < 0)
+		return -1;
 
 	c = (unsigned char)s[0];
 	key = (long)c;
@@ -4130,20 +4202,13 @@ load_long_binget(Unpicklerobject *self)
 	c = (unsigned char)s[3];
 	key |= (long)c << 24;
 
-	if (!( py_key = PyInt_FromLong((long)key)))  return -1;
-
-	value = PyDict_GetItem(self->memo, py_key);
-	if (! value) {
-		PyErr_SetObject(BadPickleGet, py_key);
-		rc = -1;
+	value = _Unpickler_MemoGet(self, key);
+	if (value == NULL) {
+		PyErr_SetObject(BadPickleGet, PyInt_FromLong(key));
+		return -1;
 	}
-	else {
-		PDATA_APPEND(self->stack, value, -1);
-		rc = 0;
-	}
-
-	Py_DECREF(py_key);
-	return rc;
+	PDATA_APPEND(self->stack, value, -1);
+	return 0;
 }
 
 /* Push an object from the extension registry (EXT[124]).  nbytes is
@@ -4218,53 +4283,70 @@ load_extension(Unpicklerobject *self, int nbytes)
 static int
 load_put(Unpicklerobject *self)
 {
-	PyObject *py_str = 0, *value = 0;
-	int len, l;
+	PyObject *value = NULL;
+	int len, size, ret = -1;
+	long idx;
 	char *s;
 
-	if ((l = _Unpickler_Readline(self, &s)) < 0) return -1;
-	if (l < 2) return bad_readline();
-	if (!( len=self->stack->length ))  return stackUnderflow();
-	if (!( py_str = PyString_FromStringAndSize(s, l - 1)))  return -1;
-	value=self->stack->data[len-1];
-	l=PyDict_SetItem(self->memo, py_str, value);
-	Py_DECREF(py_str);
-	return l;
+	/* Obtain input data. */
+	if ((size = _Unpickler_Readline(self, &s)) < 0)
+		return -1;
+	if (size < 2)
+		return bad_readline();
+	if ((len = self->stack->length) <= 0)
+		return stackUnderflow();
+	value = self->stack->data[len - 1];
+
+	/* Convert to a long */
+	if ((s = pystrndup(s, size)) == NULL)
+		return -1;
+	errno = 0;
+	if ((idx = strtol(s, NULL, 0)) == 0) {
+		if (errno)
+			goto finally;
+	}
+	Py_INCREF(value);
+	ret = _Unpickler_MemoPut(self, idx, value);
+
+finally:
+	free(s);  /* The buffer from pystrndup(). */
+	return ret;
 }
 
 
 static int
 load_binput(Unpicklerobject *self)
 {
-	PyObject *py_key = 0, *value = 0;
-	unsigned char key;
+	PyObject *value;
+	long key;
 	char *s;
-	int len;
+	Py_ssize_t len;
 
-	if (_Unpickler_Read(self, &s, 1) < 0) return -1;
-	if (!( (len=self->stack->length) > 0 ))  return stackUnderflow();
+	if (_Unpickler_Read(self, &s, 1) < 0)
+		return -1;
+	if ((len = self->stack->length) <= 0)
+		return stackUnderflow();
 
-	key = (unsigned char)s[0];
-
-	if (!( py_key = PyInt_FromLong((long)key)))  return -1;
-	value=self->stack->data[len-1];
-	len=PyDict_SetItem(self->memo, py_key, value);
-	Py_DECREF(py_key);
-	return len;
+	key = (long)(unsigned char)s[0];
+	value = self->stack->data[len - 1];
+	Py_INCREF(value);
+	return _Unpickler_MemoPut(self, key, value);
 }
 
 
 static int
 load_long_binput(Unpicklerobject *self)
 {
-	PyObject *py_key = 0, *value = 0;
+	PyObject *value;
 	long key;
 	unsigned char c;
 	char *s;
 	int len;
 
-	if (_Unpickler_Read(self, &s, 4) < 0) return -1;
-	if (!( len=self->stack->length ))  return stackUnderflow();
+	if (_Unpickler_Read(self, &s, 4) < 0)
+		return -1;
+	if ((len = self->stack->length) <= 0)
+		return stackUnderflow();
 
 	c = (unsigned char)s[0];
 	key = (long)c;
@@ -4275,11 +4357,9 @@ load_long_binput(Unpicklerobject *self)
 	c = (unsigned char)s[3];
 	key |= (long)c << 24;
 
-	if (!( py_key = PyInt_FromLong(key)))  return -1;
-	value=self->stack->data[len-1];
-	len=PyDict_SetItem(self->memo, py_key, value);
-	Py_DECREF(py_key);
-	return len;
+	value = self->stack->data[len - 1];
+	Py_INCREF(value);
+	return _Unpickler_MemoPut(self, key, value);
 }
 
 
@@ -5329,7 +5409,9 @@ newUnpicklerobject(PyObject *file)
 	self->input_len = 0;
 	self->next_read_idx = 0;
 
-	if (!( self->memo = PyDict_New()))
+	self->memo_size = 32;
+	self->memo = _Unpickler_NewMemo(self->memo_size);
+	if (self->memo == NULL)
 		goto err;
 
 	if (!self->stack)
@@ -5370,16 +5452,17 @@ Unpickler_dealloc(Unpicklerobject *self)
 {
 	PyObject_GC_UnTrack((PyObject *)self);
 	Py_XDECREF(self->file);
-	Py_XDECREF(self->memo);
 	Py_XDECREF(self->stack);
 	Py_XDECREF(self->pers_func);
 	Py_XDECREF(self->arg);
 	Py_XDECREF(self->last_string);
 	Py_XDECREF(self->find_class);
 
-	if (self->marks) {
+	if (self->marks)
 		free(self->marks);
-	}
+
+	if (self->memo)
+		_Unpickler_MemoCleanup(self);
 
 	/* Takes care of freeing input_buffer. */
 	Py_XDECREF(self->py_input);
@@ -5391,7 +5474,6 @@ static int
 Unpickler_traverse(Unpicklerobject *self, visitproc visit, void *arg)
 {
 	Py_VISIT(self->file);
-	Py_VISIT(self->memo);
 	Py_VISIT(self->stack);
 	Py_VISIT(self->pers_func);
 	Py_VISIT(self->arg);
@@ -5404,13 +5486,14 @@ static int
 Unpickler_clear(Unpicklerobject *self)
 {
 	Py_CLEAR(self->file);
-	Py_CLEAR(self->memo);
 	Py_CLEAR(self->stack);
 	Py_CLEAR(self->pers_func);
 	Py_CLEAR(self->arg);
 	Py_CLEAR(self->last_string);
 	Py_CLEAR(self->find_class);
 	Py_CLEAR(self->py_input);
+	if (self->memo)
+		_Unpickler_MemoCleanup(self);
 	return 0;
 }
 
@@ -5435,16 +5518,6 @@ Unpickler_getattr(Unpicklerobject *self, char *name)
 
 		Py_INCREF(self->find_class);
 		return self->find_class;
-	}
-
-	if (!strcmp(name, "memo")) {
-		if (!self->memo) {
-			PyErr_SetString(PyExc_AttributeError, name);
-			return NULL;
-		}
-
-		Py_INCREF(self->memo);
-		return self->memo;
 	}
 
 	if (!strcmp(name, "UnpicklingError")) {
@@ -5478,18 +5551,6 @@ Unpickler_setattr(Unpicklerobject *self, char *name, PyObject *value)
 		PyErr_SetString(PyExc_TypeError,
 				"attribute deletion is not supported");
 		return -1;
-	}
-
-	if (strcmp(name, "memo") == 0) {
-		if (!PyDict_Check(value)) {
-			PyErr_SetString(PyExc_TypeError,
-					"memo must be a dictionary");
-			return -1;
-		}
-		Py_XDECREF(self->memo);
-		self->memo = value;
-		Py_INCREF(value);
-		return 0;
 	}
 
 	PyErr_SetString(PyExc_AttributeError, name);
