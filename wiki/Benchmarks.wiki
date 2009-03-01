@@ -1,0 +1,27 @@
+#summary Description of the benchmarks used for Unladen Swallow.
+
+= Unladen Swallow Benchmarks =
+
+The Unladen Swallow benchmark suite is kept in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/tests tests/] directory. `tests/perf.py` is the main interface to the tests, with the individual benchmarks stored under the `tests/performance/` directory.
+
+
+Example `perf.py` command:
+
+{{{
+python2.5 tests/perf.py --rigorous --benchmarks=2to3,django control/python experiment/python
+}}}
+
+This will run the 2to3 and Django benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with.
+
+
+==Benchmarks==
+
+  * *2to3* - have [http://svn.python.org/view/sandbox/trunk/2to3/ the 2to3 tool] translate itself.
+  * *Django* - use the [http://www.djangoproject.com/ Django template system] to build a 150x150-cell HTML table.
+  * *Pickle* - use the `cPickle` module to pickle a variety of datasets.
+  * *PyBench* - run the standard Python [http://svn.python.org/projects/python/trunk/Tools/pybench/README PyBench] benchmark suite. This is considered an unreliable, unrepresentative benchmark; do not base decisions off it. It is included only for completeness.
+  * *SlowPickle* - use the pure-Python `pickle` module to pickle a variety of datasets.
+  * *SlowSpitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table. Unlike the *Spitfire* benchmark listed below, *SlowSpitfire* does not use Pysco.
+  * *SlowUnpickle* - use the pure-Python `pickle` module to unpickle a variety of datasets.
+  * *Spitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table, taking advantage of Psyco for acceleration.
+  * *Unpickle* - use the `cPickle` module to unpickle a variety of datasets.
