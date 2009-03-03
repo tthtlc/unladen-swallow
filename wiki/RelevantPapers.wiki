@@ -16,4 +16,4 @@ Read, useful:
   * *[http://www.tecgraf.puc-rio.br/~lhf/ftp/doc/jucs05.pdf The Implementation of Lua 5.0] (Ierusalimschy, Henrique de Figueiredo & Celes, 2005)* Interesting notes on moving from a stack-based VM to a register-based VM, including benchmarks comparing just the stack vs register aspect.
   * *[http://portal.acm.org/citation.cfm?id=800542 Efficient implementation of the smalltalk-80 system] (Deutsch & Schiffman, 1984)*
   * *[http://research.sun.com/self/papers/urs-thesis.html Adaptive optimization for Self: Reconciling High Performance with Exploratory Programming] (Hölzle, 1994)*
-  * *[http://cs.anu.edu.au/~Robin.Garner/mmtk-guide.pdf MMTk: The Memory Management Toolkit] (Blackburn et al 2006) The garbage collector used by JikesRVM.
+  * *[http://cs.anu.edu.au/~Robin.Garner/mmtk-guide.pdf MMTk: The Memory Management Toolkit] (Blackburn et al 2006)* The garbage collector used by JikesRVM.
