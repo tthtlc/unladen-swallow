@@ -8,7 +8,7 @@ to real-world scenarios which operate on single objects at a time. Note that if
 we did something like
 
     pickle.dumps([dict(some_dict) for _ in xrange(10000)])
-    
+
 this isn't equivalent to dumping the dict 10000 times: pickle uses a
 highly-efficient encoding for the n-1 following copies.
 """
@@ -19,6 +19,8 @@ __author__ = "collinwinter@google.com (Collin Winter)"
 import datetime
 import gc
 import optparse
+import random
+import sys
 import time
 
 gc.disable()  # Minimize jitter.
@@ -64,10 +66,28 @@ TUPLE = ([265867233L, 265868503L, 265252341L, 265243910L, 265879514L,
           265392591L, 265877490L, 265823665L, 265828884L, 265753032L], 60)
 
 
+def mutate_dict(orig_dict, random_source):
+    new_dict = dict(orig_dict)
+    for key, value in new_dict.items():
+        rand_val = random_source.random() * sys.maxint
+        if isinstance(key, (int, long)):
+            new_dict[key] = long(rand_val)
+        elif isinstance(value, str):
+            new_dict[key] = str(rand_val)
+        elif isinstance(key, unicode):
+            new_dict[key] = unicode(rand_val)
+    return new_dict
+
+
+random_source = random.Random(5)  # Fixed seed.
+DICT_GROUP = [mutate_dict(DICT, random_source) for _ in range(3)]
+
+
 def test_pickle(pickle, options, num_obj_copies):
     # Warm-up runs.
     pickle.dumps(DICT, options.protocol)
     pickle.dumps(TUPLE, options.protocol)
+    pickle.dumps(DICT_GROUP, options.protocol)
 
     loops = num_obj_copies / 20  # We do 20 runs per loop.
     times = []
@@ -114,6 +134,26 @@ def test_pickle(pickle, options, num_obj_copies):
             pickle.dumps(TUPLE, options.protocol)
             pickle.dumps(TUPLE, options.protocol)
             pickle.dumps(TUPLE, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
+            pickle.dumps(DICT_GROUP, options.protocol)
         t1 = time.time()
         times.append(t1 - t0)
     return times
@@ -122,10 +162,12 @@ def test_pickle(pickle, options, num_obj_copies):
 def test_unpickle(pickle, options, num_obj_copies):
     pickled_dict = pickle.dumps(DICT, options.protocol)
     pickled_tuple = pickle.dumps(TUPLE, options.protocol)
+    pickled_dict_group = pickle.dumps(DICT_GROUP, options.protocol)
 
     # Warm-up runs.
     pickle.loads(pickled_dict)
     pickle.loads(pickled_tuple)
+    pickle.loads(pickled_dict_group)
 
     loops = num_obj_copies / 20  # We do 20 runs per loop.
     times = []
@@ -172,6 +214,26 @@ def test_unpickle(pickle, options, num_obj_copies):
             pickle.loads(pickled_tuple)
             pickle.loads(pickled_tuple)
             pickle.loads(pickled_tuple)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
+            pickle.loads(pickled_dict_group)
         t1 = time.time()
         times.append(t1 - t0)
     return times
@@ -197,10 +259,10 @@ if __name__ == "__main__":
         raise RuntimeError("Need to specify either 'pickle' or 'unpickle'")
 
     if options.use_cpickle:
-        num_obj_copies = 20000
+        num_obj_copies = 8000
         import cPickle as pickle
     else:
-        num_obj_copies = 1000
+        num_obj_copies = 200
         import pickle
 
     if options.protocol > 0:
