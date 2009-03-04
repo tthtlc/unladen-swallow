@@ -18,3 +18,4 @@ Read, useful:
   * *[http://research.sun.com/self/papers/urs-thesis.html Adaptive optimization for Self: Reconciling High Performance with Exploratory Programming] (Hölzle, 1994)*
   * *[http://cs.anu.edu.au/~Robin.Garner/mmtk-guide.pdf MMTk: The Memory Management Toolkit] (Blackburn et al, 2006)* The garbage collector used by JikesRVM.
   * *[http://portal.acm.org/citation.cfm?id=1028984&coll=GUIDE&dl=GUIDE&CFID=13233945&CFTOKEN=85731901 MC2: high-performance garbage collection for memory-constrained environments] (Sachindran et al, 2004)* Describes "Memory-Constrained Copying" technique.
+  * *[http://portal.acm.org/citation.cfm?id=1134023&coll=GUIDE&dl=GUIDE&CFID=13233945&CFTOKEN=85731901 The Compressor: concurrent, incremental, and parallel compaction] (Kermany & Petrank, 2006)* Another algorithm implemented on JikesRVM, claims to be "the most efficient compactor known today".
