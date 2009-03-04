@@ -94,6 +94,19 @@ PyDoc_STRVAR(cPickle_module_documentation,
  */
 #define BATCHSIZE 1000
 
+/* Define this if you want to see stats on hash collisions in
+ * _PyMemoTable_Lookup at interpreter-shutdown. */
+#undef SHOW_MEMOTABLE_COLLISIONS
+#ifdef SHOW_MEMOTABLE_COLLISIONS
+static unsigned long collisions = 0L;
+
+static void
+show_collisions(void)
+{
+	fprintf(stderr, "cPickle MemoTable collisions: %ld\n", collisions);
+}
+#endif
+
 static char MARKv = MARK;
 
 static PyObject *PickleError;
@@ -375,6 +388,9 @@ _PyMemoTable_Lookup(PyMemoTable *self, void *key)
 
 	for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
 		i = (i << 2) + i + perturb + 1;
+#ifdef SHOW_MEMOTABLE_COLLISIONS
+		collisions++;
+#endif
 		entry = &table[i & mask];
 		if (entry->me_key == NULL || entry->me_key == key)
 			return entry;
@@ -5942,6 +5958,10 @@ initcPickle(void)
 	if (PyErr_WarnPy3k("the cPickle module has been removed in "
 			   "Python 3.0", 2) < 0)
 		return;
+
+#ifdef SHOW_MEMOTABLE_COLLISIONS
+	Py_AtExit(show_collisions);
+#endif
 
 	Py_TYPE(&Picklertype) = &PyType_Type;
 	Py_TYPE(&Unpicklertype) = &PyType_Type;
