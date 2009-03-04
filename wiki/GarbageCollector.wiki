@@ -6,13 +6,24 @@
 
 The primary goal is to produce a workable concurrent garbage collector that can be used for an optimized Python. A secondary goal is to make the collector independent enough from Python to be usable for other languages.
 
- * Built on top of LLVM using the LLVM GC primitives (where appropriate).
+ * Built on top of LLVM using the LLVM GC intrinsics (where appropriate).
  * Fully open-source.
  * Written in C++.
- * "Java-like" object model and semantics.
+ * "Java-like" object model and semantics, meaning that the feature set is compatible with the requirements of Java, C#, Python, Ruby and similar languages. Although this does not preclude the GC from being used with languages such as Haskell, Prolog or Scheme, we won't be focusing any effort on supporting those languages.
  * Able to operate in multithreaded environments.
  * A flexible architecture that promotes innovation and incremental improvements from external contributors.
+ * Support for weak references and finalization.
 
 Note: The [http://chaoticjava.com/posts/parallel-and-concurrent-garbage-collectors/ terminology] used in the garbage collector literature is somewhat inconsistent with respect to concurrency. In this document, we will refer to a "concurrent" GC as one that runs at the same time as the mutator threads, whereas a "parallel" GC is one in which there are multiple collector threads.
 
 == Overall Architecture ==
+
+It is not our intent to come up with a novel algorithm for a GC, but rather to leverage the work that has already been done. Unfortunately, it is infeasible to evaluate the merits of all of the various collectors out there, since very few GCs are open source or even available in binary form (for some reason, academics who do research on GCs like to publish papers but not code.)
+
+However, what we can do is notice that over the last few years there has been a gradual convergences of GC architectures into a small number of designs which have gained widespread popularity. From this set, we are currently considering two contenders:
+
+ # Some form of advanced, asynchronous reference-counting, such as used in Recycler.
+ # A multi-generation, hybrid copying and mark-and-sweep collector.
+
+(Insert discussion of pros and cons of each.)
+
