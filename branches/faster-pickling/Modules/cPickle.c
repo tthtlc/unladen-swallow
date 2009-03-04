@@ -148,7 +148,7 @@ Pdata_dealloc(Pdata *self)
 		Py_DECREF(*p);
 	}
 	if (self->data)
-		free(self->data);
+		PyMem_FREE(self->data);
 	PyObject_Del(self);
 }
 
@@ -169,7 +169,7 @@ Pdata_New(void)
 		return NULL;
 	self->size = 8;
 	self->length = 0;
-	self->data = malloc(self->size * sizeof(PyObject*));
+	self->data = PyMem_NEW(PyObject *, self->size);
 	if (self->data)
 		return (PyObject*)self;
 	Py_DECREF(self);
@@ -209,7 +209,6 @@ static int
 Pdata_grow(Pdata *self)
 {
 	int bigger;
-	size_t nbytes;
 	PyObject **tmp;
 
 	bigger = self->size << 1;
@@ -217,10 +216,8 @@ Pdata_grow(Pdata *self)
 		goto nomemory;
 	if ((int)(size_t)bigger != bigger)
 		goto nomemory;
-	nbytes = (size_t)bigger * sizeof(PyObject *);
-	if (nbytes / sizeof(PyObject *) != (size_t)bigger)
-		goto nomemory;
-	tmp = realloc(self->data, nbytes);
+	tmp = self->data;
+	PyMem_RESIZE(tmp, PyObject *, bigger);
 	if (tmp == NULL)
 		goto nomemory;
 	self->data = tmp;
@@ -315,10 +312,10 @@ Pdata_popList(Pdata *self, int start)
 #define PERTURB_SHIFT 5
 
 
-STATIC_MEMOTABLE MemoTable *
-MemoTable_New(void)
+STATIC_MEMOTABLE PyMemoTable *
+PyMemoTable_New(void)
 {
-	MemoTable *memo = (MemoTable *)malloc(sizeof(MemoTable));
+	PyMemoTable *memo = PyMem_NEW(PyMemoTable, 1);
 	if (memo == NULL) {
 		PyErr_NoMemory();
 		return NULL;
@@ -327,60 +324,60 @@ MemoTable_New(void)
 	memo->mt_used = 0;
 	memo->mt_allocated = MT_MINSIZE;
 	memo->mt_mask = MT_MINSIZE - 1;
-	memo->mt_table = (MemoEntry *)malloc(MT_MINSIZE * sizeof(MemoEntry));
+	memo->mt_table = PyMem_NEW(PyMemoEntry, MT_MINSIZE);
 	if (memo->mt_table == NULL) {
-		free(memo);
+		PyMem_FREE(memo);
 		PyErr_NoMemory();
 		return NULL;
 	}
-	memset(memo->mt_table, 0, MT_MINSIZE * sizeof(MemoEntry));
+	memset(memo->mt_table, 0, MT_MINSIZE * sizeof(PyMemoEntry));
 
 	return memo;
 }
 
 STATIC_MEMOTABLE void
-MemoTable_Del(MemoTable *self)
+PyMemoTable_Del(PyMemoTable *self)
 {
-	free(self->mt_table);
-	free(self);
+	PyMem_FREE(self->mt_table);
+	PyMem_FREE(self);
 }
 
 STATIC_MEMOTABLE Py_ssize_t
-MemoTable_Size(MemoTable *self)
+PyMemoTable_Size(PyMemoTable *self)
 {
 	return self->mt_used;
 }
 
 STATIC_MEMOTABLE int
-MemoTable_Clear(MemoTable *self)
+PyMemoTable_Clear(PyMemoTable *self)
 {
 	self->mt_used = 0;
-	memset(self->mt_table, 0, self->mt_allocated * sizeof(MemoEntry));
+	memset(self->mt_table, 0, self->mt_allocated * sizeof(PyMemoEntry));
 	return 0;
 }
 
-/* Since entries cannot be deleted from this hashtable, _MemoTable_Lookup()
+/* Since entries cannot be deleted from this hashtable, _PyMemoTable_Lookup()
    can be considerably simpler than dictobject.c's lookdict(). */
-static MemoEntry *
-_MemoTable_Lookup(MemoTable *self, void *key)
+static PyMemoEntry *
+_PyMemoTable_Lookup(PyMemoTable *self, void *key)
 {
 	size_t i;
 	size_t perturb;
 	size_t mask = (size_t)self->mt_mask;
-	MemoEntry *ep0 = self->mt_table;
-	MemoEntry *ep;
+	PyMemoEntry *table = self->mt_table;
+	PyMemoEntry *entry;
 	long hash = (long)key;
 
 	i = hash & mask;
-	ep = &ep0[i];
-	if (ep->mte_key == NULL || ep->mte_key == key)
-		return ep;
+	entry = &table[i];
+	if (entry->me_key == NULL || entry->me_key == key)
+		return entry;
 
 	for (perturb = hash; ; perturb >>= PERTURB_SHIFT) {
 		i = (i << 2) + i + perturb + 1;
-		ep = &ep0[i & mask];
-		if (ep->mte_key == NULL || ep->mte_key == key)
-			return ep;
+		entry = &table[i & mask];
+		if (entry->me_key == NULL || entry->me_key == key)
+			return entry;
 	}
 	assert(0);  /* Never reached */
 	return NULL;
@@ -388,75 +385,80 @@ _MemoTable_Lookup(MemoTable *self, void *key)
 
 /* Returns -1 on failure, 0 on success. */
 static int
-_MemoTable_Resize(MemoTable *self, Py_ssize_t min_size)
+_PyMemoTable_ResizeTable(PyMemoTable *self, Py_ssize_t min_size)
 {
-	MemoEntry *oldtable = NULL;
-	MemoEntry *oldentry, *newentry;
+	PyMemoEntry *oldtable = NULL;
+	PyMemoEntry *oldentry, *newentry;
 	Py_ssize_t new_size = MT_MINSIZE;
 	Py_ssize_t to_process;
 
 	assert(min_size > 0);
 
-	/* Find the smallest valid table size > min_size. */
-	while (new_size <= min_size && new_size > 0)
+	/* Find the smallest valid table size >= min_size. */
+	while (new_size < min_size && new_size > 0)
 		new_size <<= 1;
 	if (new_size <= 0) {
 		PyErr_NoMemory();
 		return -1;
 	}
+	/* new_size needs to be a power of two. */
+	assert((new_size & self->mt_allocated) == 0);
 
 	/* Allocate new table. */
 	oldtable = self->mt_table;
-	self->mt_table = (MemoEntry *)malloc(new_size * sizeof(MemoEntry));
+	self->mt_table = PyMem_NEW(PyMemoEntry, new_size);
 	if (self->mt_table == NULL) {
 		PyErr_NoMemory();
 		return -1;
 	}
 	self->mt_allocated = new_size;
 	self->mt_mask = new_size - 1;
-	memset(self->mt_table, 0, sizeof(MemoEntry) * new_size);
+	memset(self->mt_table, 0, sizeof(PyMemoEntry) * new_size);
 
 	/* Copy entries from the old table. */
 	to_process = self->mt_used;
 	for (oldentry = oldtable; to_process > 0; oldentry++) {
-		if (oldentry->mte_key != NULL) {
+		if (oldentry->me_key != NULL) {
 			to_process--;
-			newentry = _MemoTable_Lookup(self, oldentry->mte_key);
-			newentry->mte_key = oldentry->mte_key;
-			newentry->mte_value = oldentry->mte_value;
+			/* newentry is a pointer to a chunk of the new
+			   mt_table, so we're setting the key:value pair
+			   in-place. */
+			newentry = _PyMemoTable_Lookup(self, oldentry->me_key);
+			newentry->me_key = oldentry->me_key;
+			newentry->me_value = oldentry->me_value;
 		}
 	}
 
 	/* Deallocate the old table. */
-	free(oldtable);
+	PyMem_FREE(oldtable);
 	return 0;
 }
 
 /* Returns NULL on failure, a pointer to the value otherwise. */
 STATIC_MEMOTABLE long *
-MemoTable_Get(MemoTable *self, void *key)
+PyMemoTable_Get(PyMemoTable *self, void *key)
 {
-	MemoEntry *entry = _MemoTable_Lookup(self, key);
-	if (entry->mte_key == NULL)
+	PyMemoEntry *entry = _PyMemoTable_Lookup(self, key);
+	if (entry->me_key == NULL)
 		return NULL;
-	return &entry->mte_value;
+	return &entry->me_value;
 }
 
 /* Returns -1 on failure, 0 on success. */
 STATIC_MEMOTABLE int
-MemoTable_Set(MemoTable *self, void *key, long value)
+PyMemoTable_Set(PyMemoTable *self, void *key, long value)
 {
-	MemoEntry *entry;
+	PyMemoEntry *entry;
 
 	assert(key != NULL);
 
-	entry = _MemoTable_Lookup(self, key);
-	if (entry->mte_key != NULL) {
-		entry->mte_value = value;
+	entry = _PyMemoTable_Lookup(self, key);
+	if (entry->me_key != NULL) {
+		entry->me_value = value;
 		return 0;
 	}
-	entry->mte_key = key;
-	entry->mte_value = value;
+	entry->me_key = key;
+	entry->me_value = value;
 	self->mt_used++;
 
 	/* If we added a key, we can safely resize. Otherwise just return!
@@ -471,7 +473,7 @@ MemoTable_Set(MemoTable *self, void *key, long value)
 	 */
 	if (!(self->mt_used * 3 >= (self->mt_mask + 1) * 2))
 		return 0;
-	return _MemoTable_Resize(self,
+	return _PyMemoTable_ResizeTable(self,
 		(self->mt_used > 50000 ? 2 : 4) * self->mt_used);
 }
 
@@ -500,7 +502,7 @@ MemoTable_Set(MemoTable *self, void *key, long value)
 typedef struct Picklerobject {
 	PyObject_HEAD
 	PyObject *file;
-	MemoTable *memo;
+	PyMemoTable *memo;
 	PyObject *arg;
 	PyObject *pers_func;
 	PyObject *inst_pers_func;
@@ -516,7 +518,7 @@ typedef struct Picklerobject {
 
 	/* Write into a local buffer before flushing out to file. output_len
 	   tracks the current size; when output_len >= max_output_len, we
-	   realloc. */
+	   PyMem_RESIZE. */
 	Py_ssize_t max_output_len;
 	Py_ssize_t output_len;
 	char *output_buffer;
@@ -605,16 +607,19 @@ static int
 _Pickler_Write(Picklerobject *self, const char *s, Py_ssize_t n)
 {
 	Py_ssize_t i;
+	char *buffer;
 
 	if (self->output_len + n > self->max_output_len) {
 		self->max_output_len = (self->output_len + n) * 2;
-		self->output_buffer = realloc(self->output_buffer,
-					      self->max_output_len);
-		if (self->output_buffer == NULL) {
+		buffer = self->output_buffer;
+		PyMem_RESIZE(buffer, char, self->max_output_len);
+		if (buffer == NULL) {
 			PyErr_NoMemory();
 			return -1;
 		}
+		self->output_buffer = buffer;
 	}
+	/* This is faster than memcpy for the char *s we're copying. */
 	for (i = 0; i < n; i++) {
 		self->output_buffer[self->output_len + i] = s[i];
 	}
@@ -667,7 +672,9 @@ _Pickler_Optimize(Picklerobject *self)
 		start_read_pos = read_pos;
 
 		switch (self->output_buffer[read_pos++]) {
-		/* The opcodes we want to remove. */
+		/* The opcodes we want to remove. Note that we continue, rather
+		   than break, to avoid copying the data after the switch
+		   statement. */
 		case PUT:
 			/* One for the opcode, one for the newline. */
 			self->output_len -= 2;
@@ -797,6 +804,8 @@ _Pickler_Optimize(Picklerobject *self)
 	return 0;
 }
 
+/* Returns the size of the input on success, -1 on failure. This takes its
+   own reference to `input`. */
 static Py_ssize_t
 _Unpickler_SetStringInput(Unpicklerobject *self, PyObject *input)
 {
@@ -810,10 +819,12 @@ _Unpickler_SetStringInput(Unpicklerobject *self, PyObject *input)
 	return self->input_len;
 }
 
+/* Returns -1 (with an exception set) on failure. */
 static Py_ssize_t
 _Unpickler_ReadFromFile(Unpicklerobject *self)
 {
 	PyObject *data;
+	Py_ssize_t read_size;
 
 	assert(self->file != NULL);
 	assert(self->input_buffer == NULL);
@@ -828,13 +839,13 @@ _Unpickler_ReadFromFile(Unpicklerobject *self)
 	if (data == NULL)
 		return -1;
 
-	self->py_input = data;
-	self->input_buffer = PyString_AsString(data);
-	self->input_len = PyString_Size(data);
-	self->next_read_idx = 0;
-	return self->input_len;
+	read_size = _Unpickler_SetStringInput(self, data);
+	Py_DECREF(data);
+	return read_size;
 }
 
+/* Returns -1 (with an exception set) on failure. On success, return the
+   number of chars read. */
 static Py_ssize_t
 _Unpickler_Read(Unpicklerobject *self, char **s, Py_ssize_t n)
 {
@@ -847,6 +858,7 @@ _Unpickler_Read(Unpicklerobject *self, char **s, Py_ssize_t n)
 	return n;
 }
 
+/* Returns the number of chars read. */
 static Py_ssize_t
 _Unpickler_Readline(Unpicklerobject *self, char **s)
 {
@@ -870,22 +882,30 @@ _Unpickler_Readline(Unpicklerobject *self, char **s)
 	return num_read;
 }
 
+/* Returns -1 (with an exception set) on failure, 0 on success. The memo array
+   will be modified in place. */
 static int
-_Unpickler_ResizeMemo(Unpicklerobject *self, Py_ssize_t new_size)
+_Unpickler_ResizeMemoList(Unpicklerobject *self, Py_ssize_t new_size)
 {
 	Py_ssize_t i;
+	PyObject **memo;
 
 	assert(new_size > self->memo_size);
 
-	self->memo = realloc(self->memo, sizeof(PyObject *) * new_size);
-	if (self->memo == NULL)
+	memo = self->memo;
+	PyMem_RESIZE(memo, PyObject *, new_size);
+	if (memo == NULL) {
+		PyErr_NoMemory();
 		return -1;
+	}
+	self->memo = memo;
 	for (i = self->memo_size; i < new_size; i++)
 		self->memo[i] = NULL;
 	self->memo_size = new_size;
 	return 0;
 }
 
+/* Returns NULL if idx is out of bounds. */
 static PyObject *
 _Unpickler_MemoGet(Unpicklerobject *self, Py_ssize_t idx)
 {
@@ -895,13 +915,14 @@ _Unpickler_MemoGet(Unpicklerobject *self, Py_ssize_t idx)
 	return self->memo[idx];
 }
 
+/* Returns -1 (with an exception set) on failure, 0 on success. */
 static int
 _Unpickler_MemoPut(Unpicklerobject *self, Py_ssize_t idx, PyObject *value)
 {
 	PyObject *old_item;
 
 	if (idx >= self->memo_size) {
-		if (_Unpickler_ResizeMemo(self, idx * 2) < 0)
+		if (_Unpickler_ResizeMemoList(self, idx * 2) < 0)
 			return -1;
 		assert(idx < self->memo_size);
 	}
@@ -915,13 +936,14 @@ _Unpickler_MemoPut(Unpicklerobject *self, Py_ssize_t idx, PyObject *value)
 static PyObject **
 _Unpickler_NewMemo(Py_ssize_t new_size)
 {
-	PyObject **memo = (PyObject **)malloc(sizeof(PyObject *) * new_size);
+	PyObject **memo = PyMem_NEW(PyObject *, new_size);
 	if (memo == NULL)
 		return NULL;
 	memset(memo, 0, sizeof(PyObject *) * new_size);
 	return memo;
 }
 
+/* Free the unpickler's memo, taking care to decref any items left in it. */
 static void
 _Unpickler_MemoCleanup(Unpicklerobject *self)
 {
@@ -929,7 +951,7 @@ _Unpickler_MemoCleanup(Unpicklerobject *self)
 
 	for (i = 0; i < self->memo_size; i++)
 		Py_XDECREF(self->memo[i]);
-	free(self->memo);
+	PyMem_FREE(self->memo);
 	self->memo = NULL;
 }
 
@@ -940,7 +962,7 @@ _Unpickler_MemoCleanup(Unpicklerobject *self)
 static char *
 pystrndup(const char *s, int n)
 {
-	char *r = (char *)malloc(n+1);
+	char *r = PyMem_NEW(char, n+1);
 	if (r == NULL)
 		return (char*)PyErr_NoMemory();
 	memcpy(r, s, n);
@@ -956,7 +978,8 @@ get(Picklerobject *self, void *id)
 	char s[30];
 	size_t len;
 
-	if ((value = MemoTable_Get(self->memo, id)) == NULL)  {
+	value = PyMemoTable_Get(self->memo, id);
+	if (value == NULL)  {
 		PyErr_SetObject(PyExc_KeyError, PyLong_FromVoidPtr(id));
 		return -1;
 	}
@@ -1010,9 +1033,9 @@ put2(Picklerobject *self, PyObject *ob)
 	if (self->fast)
 		return 0;
 
-	/* MemoTable_{Get,Set} doesn't accept null pointers as keys. */
-	p = MemoTable_Size(self->memo) + 1;
-	if (MemoTable_Set(self->memo, (void *)ob, p) < 0)
+	/* PyMemoTable_{Get,Set} doesn't accept null pointers as keys. */
+	p = PyMemoTable_Size(self->memo) + 1;
+	if (PyMemoTable_Set(self->memo, (void *)ob, p) < 0)
 		return -1;
 
 	if (!self->bin) {
@@ -1628,7 +1651,7 @@ save_tuple(Picklerobject *self, PyObject *args)
 		/* Use TUPLE{1,2,3} opcodes. */
 		if (store_tuple_elements(self, args, len) < 0)
 			goto finally;
-		if (MemoTable_Get(self->memo, args)) {
+		if (PyMemoTable_Get(self->memo, args)) {
 			/* pop the len elements */
 			for (i = 0; i < len; ++i)
 				if (_Pickler_Write(self, &pop, 1) < 0)
@@ -1654,7 +1677,7 @@ save_tuple(Picklerobject *self, PyObject *args)
 	if (store_tuple_elements(self, args, len) < 0)
 		goto finally;
 
-	if (MemoTable_Get(self->memo, args)) {
+	if (PyMemoTable_Get(self->memo, args)) {
 		/* pop the stack stuff we pushed */
 		if (self->bin) {
 			if (_Pickler_Write(self, &pop_mark, 1) < 0)
@@ -1809,10 +1832,11 @@ batch_list_exact(Picklerobject *self, PyObject *obj)
 	PyObject *item = NULL;
 	int this_batch, total;
 
-	static char appends = APPENDS;
+	static const char appends = APPENDS;
 
 	assert(obj != NULL);
 	assert(self->proto > 0);
+	assert(PyList_CheckExact(obj));
 
 	/* Write in batches of BATCHSIZE. */
 	total = 0;
@@ -1831,7 +1855,7 @@ batch_list_exact(Picklerobject *self, PyObject *obj)
 		if (_Pickler_Write(self, &appends, 1) < 0)
 			return -1;
 
-	} while (this_batch == BATCHSIZE);
+	} while (total < PyList_GET_SIZE(obj));
 	return 0;
 }
 
@@ -2047,10 +2071,11 @@ batch_dict_exact(Picklerobject *self, PyObject *obj)
 	int i;
 	Py_ssize_t dict_size, ppos = 0;
 
-	static char setitems = SETITEMS;
+	static const char setitems = SETITEMS;
 
 	assert(obj != NULL);
 	assert(self->proto > 0);
+	assert(PyDict_CheckExact(obj));
 
 	dict_size = PyDict_Size(obj);
 	/* Write in batches of BATCHSIZE. */
@@ -2744,7 +2769,7 @@ save(Picklerobject *self, PyObject *args, int pers_save)
 	}
 
 	if (Py_REFCNT(args) > 1) {
-		if (MemoTable_Get(self->memo, args)) {
+		if (PyMemoTable_Get(self->memo, args)) {
 			if (get(self, args) < 0)
 				goto finally;
 
@@ -2944,7 +2969,7 @@ static PyObject *
 Pickler_clear_memo(Picklerobject *self, PyObject *args)
 {
 	if (self->memo)
-		MemoTable_Clear(self->memo);
+		PyMemoTable_Clear(self->memo);
 	Py_INCREF(Py_None);
 	return Py_None;
 }
@@ -2959,11 +2984,10 @@ Pickler_getvalue(Picklerobject *self, PyObject *args)
 	if (args && !PyArg_ParseTuple(args, "|i:getvalue", &clear))
 		return NULL;
 
-	/* Check to make sure we are based on a list */
 	if (self->file != NULL) {
 		PyErr_SetString(
 			PicklingError,
-			"Attempt to getvalue() a non-list-based pickler");
+			"Attempt to getvalue() a stream-based pickler");
 		return NULL;
 	}
 
@@ -3047,7 +3071,7 @@ newPicklerobject(PyObject *file, int proto)
 	/* Use this buffer internally, flushing to file only when
 	   necessary. */
 	self->max_output_len = 4096;
-	self->output_buffer = (char *)malloc(4096 * sizeof(char));
+	self->output_buffer = PyMem_NEW(char, 4096);
 	if (self->output_buffer == NULL) {
 		PyErr_NoMemory();
 		goto err;
@@ -3056,7 +3080,8 @@ newPicklerobject(PyObject *file, int proto)
 	self->file = file;
 	Py_XINCREF(self->file);
 
-	if ((self->memo = MemoTable_New()) == NULL)
+	self->memo = PyMemoTable_New();
+	if (self->memo == NULL)
 		goto err;
 
 	if (PyEval_GetRestricted()) {
@@ -3113,7 +3138,7 @@ static void
 Pickler_dealloc(Picklerobject *self)
 {
 	PyObject_GC_UnTrack(self);
-	MemoTable_Del(self->memo);
+	PyMemoTable_Del(self->memo);
 	Py_XDECREF(self->fast_memo);
 	Py_XDECREF(self->arg);
 	Py_XDECREF(self->file);
@@ -3121,7 +3146,7 @@ Pickler_dealloc(Picklerobject *self)
 	Py_XDECREF(self->inst_pers_func);
 	Py_XDECREF(self->dispatch_table);
 	if (self->output_buffer != NULL)
-		free(self->output_buffer);
+		PyMem_FREE(self->output_buffer);
 	self->output_buffer = NULL;
 	Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -3141,7 +3166,7 @@ Pickler_traverse(Picklerobject *self, visitproc visit, void *arg)
 static int
 Pickler_clear(Picklerobject *self)
 {
-	MemoTable_Del(self->memo);
+	PyMemoTable_Del(self->memo);
 	self->memo = NULL;
 	Py_CLEAR(self->fast_memo);
 	Py_CLEAR(self->arg);
@@ -3150,7 +3175,7 @@ Pickler_clear(Picklerobject *self)
 	Py_CLEAR(self->inst_pers_func);
 	Py_CLEAR(self->dispatch_table);
 	if (self->output_buffer != NULL)
-		free(self->output_buffer);
+		PyMem_FREE(self->output_buffer);
 	self->output_buffer = NULL;
 	return 0;
 }
@@ -3322,7 +3347,7 @@ load_int(Unpicklerobject *self)
 	if (!( s=pystrndup(s,len)))  return -1;
 
 	errno = 0;
-	l = strtol(s, &endptr, 0);
+	l = PyOS_strtol(s, &endptr, 0);
 
 	if (errno || (*endptr != '\n') || (endptr[1] != '\0')) {
 		/* Hm, maybe we've got something long.  Let's try reading
@@ -3344,12 +3369,12 @@ load_int(Unpicklerobject *self)
 		}
 	}
 
-	free(s);
+	PyMem_FREE(s);
 	PDATA_PUSH(self->stack, py_int, -1);
 	return 0;
 
   finally:
-	free(s);
+	PyMem_FREE(s);
 
 	return res;
 }
@@ -3455,12 +3480,12 @@ load_long(Unpicklerobject *self)
 	if (!( l = PyLong_FromString(s, &end, 0)))
 		goto finally;
 
-	free(s);
+	PyMem_FREE(s);
 	PDATA_PUSH(self->stack, l, -1);
 	return 0;
 
   finally:
-	free(s);
+	PyMem_FREE(s);
 
 	return res;
 }
@@ -3529,12 +3554,12 @@ load_float(Unpicklerobject *self)
 	if (!( py_float = PyFloat_FromDouble(d)))
 		goto finally;
 
-	free(s);
+	PyMem_FREE(s);
 	PDATA_PUSH(self->stack, py_float, -1);
 	return 0;
 
   finally:
-	free(s);
+	PyMem_FREE(s);
 
 	return res;
 }
@@ -3589,7 +3614,7 @@ load_string(Unpicklerobject *self)
 	/********************************************/
 
 	str = PyString_DecodeEscape(p, len, NULL, 0, NULL);
-	free(s);
+	PyMem_FREE(s);
 	if (str) {
 		PDATA_PUSH(self->stack, str, -1);
 		res = 0;
@@ -3597,7 +3622,7 @@ load_string(Unpicklerobject *self)
 	return res;
 
   insecure:
-	free(s);
+	PyMem_FREE(s);
 	PyErr_SetString(PyExc_ValueError,"insecure string pickle");
 	return -1;
 }
@@ -4136,18 +4161,25 @@ load_get(Unpicklerobject *self)
 	if ((s = pystrndup(s, len)) == NULL)
 		return -1;
 	errno = 0;
-	if ((idx = strtol(s, NULL, 0)) == 0) {
+	idx = PyOS_strtol(s, NULL, 0);
+	if (idx == 0) {
 		if (errno) {
-			PyErr_SetObject(BadPickleGet,
-					PyString_FromStringAndSize(s, len - 1));
+			PyObject *err_str = PyString_FromStringAndSize(s, len - 1);
+			if (err_str == NULL)
+				goto finally;
+			PyErr_SetObject(BadPickleGet, err_str);
+			Py_DECREF(err_str);
 			goto finally;
 		}
 	}
 
 	value = _Unpickler_MemoGet(self, idx);
 	if (value == NULL) {
-		PyErr_SetObject(BadPickleGet,
-				PyString_FromStringAndSize(s, len - 1));
+		PyObject *err_str = PyString_FromStringAndSize(s, len - 1);
+		if (err_str == NULL)
+			goto finally;
+		PyErr_SetObject(BadPickleGet, err_str);
+		Py_DECREF(err_str);
 		rc = -1;
 	}
 	else {
@@ -4156,7 +4188,7 @@ load_get(Unpicklerobject *self)
 	}
 
 finally:
-	free(s);
+	PyMem_FREE(s);
 	return rc;
 }
 
@@ -4171,10 +4203,14 @@ load_binget(Unpicklerobject *self)
 	if (_Unpickler_Read(self, &s, 1) < 0)
 		return -1;
 
-	key = (long)(unsigned char)s[0];
+	key = (unsigned char)s[0];
 	value = _Unpickler_MemoGet(self, key);
 	if (value == NULL) {
-		PyErr_SetObject(BadPickleGet, PyInt_FromLong(key));
+		PyObject *err_int = PyInt_FromLong(key);
+		if (err_int == NULL)
+			return -1;
+		PyErr_SetObject(BadPickleGet, err_int);
+		Py_DECREF(err_int);
 		return -1;
 	}
 	PDATA_APPEND(self->stack, value, -1);
@@ -4204,7 +4240,11 @@ load_long_binget(Unpicklerobject *self)
 
 	value = _Unpickler_MemoGet(self, key);
 	if (value == NULL) {
-		PyErr_SetObject(BadPickleGet, PyInt_FromLong(key));
+		PyObject *err_int = PyInt_FromLong(key);
+		if (err_int == NULL)
+			return -1;
+		PyErr_SetObject(BadPickleGet, err_int);
+		Py_DECREF(err_int);
 		return -1;
 	}
 	PDATA_APPEND(self->stack, value, -1);
@@ -4301,7 +4341,8 @@ load_put(Unpicklerobject *self)
 	if ((s = pystrndup(s, size)) == NULL)
 		return -1;
 	errno = 0;
-	if ((idx = strtol(s, NULL, 0)) == 0) {
+	idx = PyOS_strtol(s, NULL, 0);
+	if (idx == 0) {
 		if (errno)
 			goto finally;
 	}
@@ -4309,7 +4350,7 @@ load_put(Unpicklerobject *self)
 	ret = _Unpickler_MemoPut(self, idx, value);
 
 finally:
-	free(s);  /* The buffer from pystrndup(). */
+	PyMem_FREE(s);  /* The buffer from pystrndup(). */
 	return ret;
 }
 
@@ -4327,7 +4368,7 @@ load_binput(Unpicklerobject *self)
 	if ((len = self->stack->length) <= 0)
 		return stackUnderflow();
 
-	key = (long)(unsigned char)s[0];
+	key = (unsigned char)s[0];
 	value = self->stack->data[len - 1];
 	Py_INCREF(value);
 	return _Unpickler_MemoPut(self, key, value);
@@ -4579,14 +4620,16 @@ load_mark(Unpicklerobject *self)
 
 	if ((self->num_marks + 1) >= self->marks_size) {
 		int *marks;
-		s=self->marks_size+20;
-		if (s <= self->num_marks) s=self->num_marks + 1;
+		s = self->marks_size+20;
+		if (s <= self->num_marks)
+			s = self->num_marks + 1;
 		if (self->marks == NULL)
-			marks=(int *)malloc(s * sizeof(int));
-		else
-			marks=(int *)realloc(self->marks,
-						   s * sizeof(int));
-		if (!marks) {
+			marks = PyMem_NEW(int, s);
+		else {
+			marks = self->marks;
+			PyMem_RESIZE(marks, int, s);
+		}
+		if (marks == NULL) {
 			PyErr_NoMemory();
 			return -1;
 		}
@@ -5459,7 +5502,7 @@ Unpickler_dealloc(Unpicklerobject *self)
 	Py_XDECREF(self->find_class);
 
 	if (self->marks)
-		free(self->marks);
+		PyMem_FREE(self->marks);
 
 	if (self->memo)
 		_Unpickler_MemoCleanup(self);
@@ -5578,6 +5621,8 @@ cpm_dump(PyObject *self, PyObject *args, PyObject *kwds)
 		goto finally;
 
 	if (dump(pickler, ob) < 0)
+		goto finally;
+	if (_Pickler_Optimize(pickler) < 0)
 		goto finally;
 
 	if (_Pickler_FlushToFile(pickler) < 0)

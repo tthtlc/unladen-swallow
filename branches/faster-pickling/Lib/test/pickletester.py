@@ -882,7 +882,9 @@ class AbstractPickleTests(unittest.TestCase):
         for proto in [0, 1, 2]:
             dumped = self.dumps(obj, proto)
             loaded = self.loads(dumped)
-            self.assertEqual(loaded, obj, "Failed protocol %d" % proto)
+            self.assertEqual(loaded, obj,
+                             "Failed protocol %d: %r != %r"
+                             % (proto, obj, loaded))
 
 
 # Test classes for reduce_ex
