@@ -27,3 +27,34 @@ However, what we can do is notice that over the last few years there has been a 
 
 (Insert discussion of pros and cons of each.)
 
+The remainder of this document will outline the design of the generational collector.
+
+== Heap Management ==
+
+== Tracing ==
+
+=== Object Tracing ===
+=== Stack Roots ===
+=== Global Roots ===
+
+
+== Synchronization ==
+
+The initial implementation of the collector will utilize a "stop the world" strategy with explicit synchronization points that will be inserted into the generated code by LLVM.
+
+The initial implementation of sync points will be done using reader/writer locks (such as provided by pthreads). The collector library initializes a global rwlock called "enable_mutate". All mutator threads hold a read lock on this lock while they are running. A sync point consists of releasing and then immediately re-acquiring this lock.
+
+The collector attempts to acquire a write lock before beginning a collection. This will block until all mutators have reached a sync point, at which time the collector can acquire the lock, thereby blocking all mutators until it is finished.
+
+During a sync point, objects may move around in memory. A mutator must be prepared to handle the fact that pointer values will have changed during the sync point, so pointer values cached in registers will no longer be valid.
+
+Long blocking operations such as i/o should release the lock while the operation is in progress (of course, any memory buffers involved in the i/o itself must be pinned before dropping the lock.)
+
+== Barriers ==
+
+== Pinning Support ==
+
+== Weak Pointer Support ==
+
+== Finalization Support ==
+
