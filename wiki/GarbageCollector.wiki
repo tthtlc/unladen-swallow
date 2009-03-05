@@ -83,10 +83,15 @@ LLVM doesn't do anything with these markers other than preserve them through the
 
 The format of the stack layout map will likely be identical to the offset map for heap allocated objects - we can simply treat each stack frame exactly like we would treat a raw block.
 
-
+Although LLVM currently provides a method for locating pointers in a given stack frame (assuming that you know which function you are currently in), it does not provide any method for determining which stack map to use for an arbitrary stack frame. This means that we will need to develop our own methods for walking the stack and identifying which stack maps correspond to the various stack frames. Libunwind may be of some help in this area.
 
 === Global Roots ===
 
+For Python and similar languages, it is likely that there will be two basic kinds of global roots: Statically allocated data structures (such as built-in classes and extension classes), and objects which are created at the time the interpreter starts up.
+
+It's possible that the root could consist of just a single pointer to a global namespace, which points to other namespaces, and so on. However, that may not be the most efficient solution, because it means that the collector will repeatedly try (and fail) to reclaim objects that are never going away, and thus wasting effort.
+
+One strategy is to define an "immortal" memory region (similar to what MMTk does). Objects which are allocated within this region are scanned for pointers, but are never reclaimed.
 
 == Synchronization ==
 
