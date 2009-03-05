@@ -69,9 +69,22 @@ The result is that instead of a table of data that must be interpreted, the trac
 
 The primary cost of this approach is that it means that the choice of collector algorithm must be known at compile time. (In JIT environments it might be possible to generate the tracing functions at the time that the class is loaded, using the class reflection information.)
 
+Also note that the issues with raw blocks requiring additional metadata to be passed around are not obviated by this technique - for a raw block, there is still the problem of identifying which tracer function to use, and determining the number of repeating elements for a variable-length raw block with no header.
+
 Also, there are cache and locality considerations to consider when comparing the relative performance of the native code vs. data table approach.
 
 === Stack Roots ===
+
+LLVM provides a way to mark local variables as 'roots':
+
+   {{{void @llvm.gcroot(i8** %ptrloc, i8* %metadata)}}}
+
+LLVM doesn't do anything with these markers other than preserve them through the various optimization transforms. We will need to write a plugin class which gathers these markers and uses them to generate a map of pointer locations.
+
+The format of the stack layout map will likely be identical to the offset map for heap allocated objects - we can simply treat each stack frame exactly like we would treat a raw block.
+
+
+
 === Global Roots ===
 
 
