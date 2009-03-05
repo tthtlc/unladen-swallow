@@ -825,8 +825,8 @@ _Pickler_Optimize(Picklerobject *self)
 static Py_ssize_t
 _Unpickler_SetStringInput(Unpicklerobject *self, PyObject *input)
 {
-	assert(self->input_buffer == NULL);
-
+	/* Decrefing py_input will free input_buffer. */
+	Py_XDECREF(self->py_input);
 	Py_INCREF(input);
 	self->py_input = input;
 	self->input_buffer = PyString_AsString(input);
@@ -843,7 +843,6 @@ _Unpickler_ReadFromFile(Unpicklerobject *self)
 	Py_ssize_t read_size;
 
 	assert(self->file != NULL);
-	assert(self->input_buffer == NULL);
 
 	/* N.B. The blow-up factor from unpickling the objects is fairly large
 	   (~10x), so reading the whole file at once is fine; not great, but
