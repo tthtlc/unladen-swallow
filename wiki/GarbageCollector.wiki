@@ -33,7 +33,20 @@ The remainder of this document will outline the design of the generational colle
 
 == Tracing ==
 
-=== Object Tracing ===
+=== Heap Object Tracing ===
+
+From the point of view of the collector, the heap consists of a sequence of allocated blocks (each representing the storage of a single object, plus any administrative overhead needed by the heap manager), of which there are two types: _tagged_ blocks, which start with a standardized object header, and _raw_ blocks, which do not.
+
+Tagged blocks are presumed to contain a pointer to the type information for the object contained in the block. The collector does not need to know the offset of the type pointer, nor does it need to know the format of data that it points to. Instead, the host environment must supply an inline function that can examine the object header and return a reference to a _pointer offset map_ for that object. This offset map specifies the offset of every pointer within the block, relative to the start of the block.
+
+For raw blocks, the pointer location map is not derived from an examination of the block header, but instead must be passed in as a parameter to the tracer. This implies that the code that initiates the trace of a raw block must have knowledge of what type of object it is. In most cases a raw block will be referenced by a tagged block. The offset map for the tagged object includes an entry that indicates the offset of the reference to the raw block. This entry also includes a pointer to the raw block's offset map.
+
+The offset map will have support for variable-length data structures. Most variable-length data structures consist of a fixed length header, followed a sequence of repeating elements, each identical in size and structure. The header part contains a field that indicates the number of repetitions, either as an integer count, or as a pair of pointers indicating the start and end of the array. In some cases, the fixed part and the variable-length part may be two separate allocations, in which case the variable length part is a raw block. The offset map for the fixed-length part will contain the offset of the count field, and the offset and stride of the elements in the variable-length part.
+
+In some cases, the structure of the object may be too complex or variable to describe via offset maps, in which case the environment can specify a function pointer that can enumerate all of the pointers in an object. This function accepts as a parameter a visitor function pointer which should be called for each pointer field to be traced.
+
+
+
 === Stack Roots ===
 === Global Roots ===
 
@@ -57,4 +70,3 @@ Long blocking operations such as i/o should release the lock while the operation
 == Weak Pointer Support ==
 
 == Finalization Support ==
-
