@@ -2981,6 +2981,14 @@ dump(Picklerobject *self, PyObject *args)
 	return 0;
 }
 
+static int
+_Pickler_ClearBuffer(Picklerobject *self)
+{
+	memset(self->output_buffer, 0, sizeof(char) * self->output_len);
+	self->output_len = 0;
+	return 0;
+}
+
 static PyObject *
 Pickler_clear_memo(Picklerobject *self, PyObject *args)
 {
@@ -3025,6 +3033,8 @@ Pickler_dump(Picklerobject *self, PyObject *args)
 	if (!( PyArg_ParseTuple(args, "O|i:dump", &ob, &get)))
 		return NULL;
 
+	if (_Pickler_ClearBuffer(self) < 0)
+		return NULL;
 	if (dump(self, ob) < 0)
 		return NULL;
 	if (_Pickler_Optimize(self) < 0)
