@@ -69,6 +69,8 @@ The result is that instead of a table of data that must be interpreted, the trac
 
 The primary cost of this approach is that it means that the choice of collector algorithm must be known at compile time. (In JIT environments it might be possible to generate the tracing functions at the time that the class is loaded, using the class reflection information.)
 
+Also, there are cache and locality considerations to consider when comparing the relative performance of the native code vs. data table approach.
+
 === Stack Roots ===
 === Global Roots ===
 
