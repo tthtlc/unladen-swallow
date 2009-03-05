@@ -379,7 +379,7 @@ _PyMemoTable_Lookup(PyMemoTable *self, void *key)
 	size_t mask = (size_t)self->mt_mask;
 	PyMemoEntry *table = self->mt_table;
 	PyMemoEntry *entry;
-	long hash = (long)key;
+	long hash = (long)key >> 3;
 
 	i = hash & mask;
 	entry = &table[i];
