@@ -418,12 +418,13 @@ _PyMemoTable_ResizeTable(PyMemoTable *self, Py_ssize_t min_size)
 		return -1;
 	}
 	/* new_size needs to be a power of two. */
-	assert((new_size & self->mt_allocated) == 0);
+	assert((new_size & (new_size - 1)) == 0);
 
 	/* Allocate new table. */
 	oldtable = self->mt_table;
 	self->mt_table = PyMem_NEW(PyMemoEntry, new_size);
 	if (self->mt_table == NULL) {
+		PyMem_FREE(oldtable);
 		PyErr_NoMemory();
 		return -1;
 	}
@@ -811,7 +812,8 @@ _Pickler_Optimize(Picklerobject *self)
 			return -1;
 		}
 
-		/* Copy the data we skipped over. */
+		/* Copy the data we skipped over. Using memmove() instead of
+		   this loop slows things down by 5%. */
 		while (start_read_pos < read_pos) {
 			self->output_buffer[write_pos++] =
 				self->output_buffer[start_read_pos++];

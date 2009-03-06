@@ -1045,7 +1045,7 @@ class AbstractPicklerObjectTests(unittest.TestCase):
         assert self.pickler_class
 
     def test_clear_memo(self):
-        # To test whether clear_mem() has any effect, we pickle an object,
+        # To test whether clear_memo() has any effect, we pickle an object,
         # then pickle it again without clearing the memo; the two serialized
         # forms should be different. If we clear_memo() and then pickle the
         # object again, the third serialized form should be identical to the
