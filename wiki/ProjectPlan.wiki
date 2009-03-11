@@ -36,7 +36,7 @@ Several Python constructs may give us trouble here:
 
 <li>Figure out the simplest possible version of [PersistentIr .pyc persistence]. I'm hoping the obvious thing -- dump the python module as an LLVM Module in bitcode to disk -- just works. We can add the fancy profiling data and pre-optimized code later (step 12).</li>
 
-<li>Teach Python how to decide whether to JIT or interpret a particular function. I imagine that interpretation will be faster for things that run once, and JITting will be faster for hot functions, and we'll have to tune a bit to find the right balance. We'll, of course, have to get both the JIT and interpreter working at this point. At this point I expect the interpreter to get faster than our original release.</li>
+<li>Teach Python how to decide whether to fast-JIT or slow-JIT a particular function (pass fast==true to [http://llvm.org/doxygen/classllvm_1_1JIT.html#fd0a3b0d55489b96760121e3e25b7de6 JIT::create]). nlewycky says, "The codegen is roughly 3x faster in fast mode (note: measured in debug mode not release mode, so who knows).". I imagine that we'll have to tune a bit to find the right balance. At this point I expect Python to get faster than our original release.</li>
 
 <li>Start adding [LlvmOptimizations optimizations].
 
