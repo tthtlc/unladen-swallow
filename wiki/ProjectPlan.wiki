@@ -34,7 +34,7 @@ Several Python constructs may give us trouble here:
 
 <li>Replace the Python-bytecode compiler with the new LLVM compiler, possibly under a flag. Talin suggests having both run and select the one to execute based on a flag in the code/function object. The flag will let us run regrtest over all the tests in both modes.</li>
 
-<li>Figure out .pyc persistence. I'm hoping the obvious thing -- dump the python module as an LLVM Module in bitcode to disk -- just works. We can add the fancy profiling data and pre-optimized code later.</li>
+<li>Figure out the simplest possible version of [PersistentIr .pyc persistence]. I'm hoping the obvious thing -- dump the python module as an LLVM Module in bitcode to disk -- just works. We can add the fancy profiling data and pre-optimized code later (step 12).</li>
 
 <li>Teach Python how to decide whether to JIT or interpret a particular function. I imagine that interpretation will be faster for things that run once, and JITting will be faster for hot functions, and we'll have to tune a bit to find the right balance. We'll, of course, have to get both the JIT and interpreter working at this point. At this point I expect the interpreter to get faster than our original release.</li>
 
@@ -56,7 +56,7 @@ Talin points out that it'll be hard to apply most of the pre-defined optimizatio
 
 <li>If the optimizations become expensive enough that the JIT hurts our startup time, we can profile for expensive functions and [GradualOptimization only optimize them]. This resembles how HotSpot works.</li>
 
-<li>4b and 5 require us to be able to keep multiple versions of code around for any given function and backpatch existing callers. We'll probably want to [GarbageCollectingCode GC the multiple versions], which should be interesting.</li>
+<li>9b and 10 require us to be able to keep multiple versions of code around for any given function and backpatch existing callers. We'll probably want to [GarbageCollectingCode GC the multiple versions], which should be interesting.</li>
 
 <li>[PersistentIr Persist the generated and optimized IR to disk] in place of .pyc
 files, perhaps along with any gathered profile data. This allows subsequent runs to take advantage of the optimization work previous runs have already done. Matches LLVM's promise to be "A Compilation Framework for Lifelong Program Analysis & Transformation". :)</li>
