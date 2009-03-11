@@ -8,7 +8,7 @@ From Talin's email:
 
 An LLVM module is the basic compilation unit. If we weren't planning on exporting compiled code to disk, I'd say put everything into a single module. Otherwise, I think a 1:1 correspondence from Python module to LLVM module would work.
 
-  In addition to per-module optimized bitcode, we'll also want to allow cross-module optimizations. This could go in __init__.pyc files for package-level optimized code, or in the main module's .pyc file.
+In addition to per-module optimized bitcode, we'll also want to allow cross-module optimizations. This could go in __init__.pyc files for package-level optimized code, or in the main module's .pyc file.
 
 == Non-executable metadata ==
 Another issue is how to store the non-executable metadata along with the generated IR. There are 3 options:
