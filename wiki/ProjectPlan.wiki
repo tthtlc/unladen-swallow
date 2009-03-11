@@ -17,16 +17,20 @@ people to adopt our Python, we'll start switching to LLVM, probably
 initially in a separate branch. This can go in lots of stages:
 
 <ol>
-<li>Change the compiler to generate LLVM IR instead of Python bytecode. Or convert bytecode to LLVM IR in `EvalFrameEx` like the vmgen patch does. The code that's currently inside the switch cases would move to separate functions (known as "opcode interpretation functions" from now on), and then the IR would just be a list of %call instructions pointing at those functions. We don't need to set up any optimizations at all, and we don't even need to cache the JITted function pointer that `ExecutionEngine::getPointerToFunction()` returns. This will be slow, but should be pretty easy to get working. Talin suggests to keep the original `EvalFrameEx` function around, generate _both_ bytecodes, and dynamically decide which to execute based on a flag in the code object.</li>
-
-<li>Start adding [LlvmOptimizations optimizations] and push `EvalFrameEx` into the LLVM IR. At this point we'll need to get the opcode interpretation functions into LLVM IR, but I'm not sure whether it'll be easier to use `IRBuilder` directly or compile them to bitcode with llvm-gcc and load that. Either way, we'll want to let LLVM inline their definitions into the JITted output for each code object. At this point I expect the llvm version to get faster than the vmgen version.
+<li>Add `llvmmodule` and `llvmfunction` types in Python, which interface to the LLVM [http://llvm.org/docs/ProgrammersManual.html#Module Module] and [http://llvm.org/docs/ProgrammersManual.html#Function Function] types. Teach `llvmmodule` to [http://llvm.org/doxygen/ReaderWriter_8h.html read bitcode files] and [http://llvm.org/doxygen/PrintModulePass_8h.html pretty-print them]. (Reading the bitcode files isn't really necessary for the next step, but it'll help with testing this one.)</li>
+<li>Add a `compile_llvm` builtin that uses most of the same code as the `compile` builtin but generates LLVM IR (as the `llvmmodule` or `llvmfunction` type) instead. We can get this working incrementally and keep a working Python interpreter the whole time. Along the way, we'll probably take each opcode and translate its ceval implementation into an IRBuilder implementation, but for difficult opcodes we could just emit calls to an interpretation function.</li>
+<li>Add a way to call `llvmfunction`s. They should run through the plain LLVM interpreter at first, assuming that JITting is more complicated. Write lots of tests.</li>
+<li>Replace the Python-bytecode compiler with the new LLVM compiler, possibly under a flag. Talin suggests having both run and select the one to execute based on a flag in the code/function object.</li>
+<li>Figure out .pyc persistence</li>
+<li>Get the JIT compiler working and very lightly tuned. At this point I expect the interpreter to get faster than our original release.</li>
+<li>Start adding [LlvmOptimizations optimizations].
 
 Talin points out that it'll be hard to apply most of the pre-defined optimizations at first because Python calls are indirect. This motivates type inference so we can make the calls direct.</li>
 </ol>
 
-3+ can be tried in parallel.
+8+ can be tried in parallel, probably starting toward the end of 2009Q2.
 
-<ol start="3">
+<ol start="8">
 <li>[DirectLlvmIrGeneration Generate better LLVM IR] than a direct translation from CPython bytecode would imply.</li>
 
 <li>Figure out how to specialize functions for particular types, which allows better inlining. We should be able to do as well as psyco pretty easily since we can steal their algorithms.
