@@ -27,6 +27,7 @@ Several Python constructs may give us trouble here:
 <li>Generators: I don't have a plan for generators yet. We'd have to save the PC, registers, and locals, except that LLVM doesn't expose a PC, just labels, so we'd probably give each yield an index and switch on the current index to get back to it. And we could require that all registers have been spilled at that point, maybe. But I don't know the details of doing most of that. I'm hoping to figure it out when I get there.</li>
 <li>Closures: A closure is just a function with a pre-bound parameter representing the environment.</li>
 <li>ExceptionHandling</li>
+<li>The FunctionCallingConvention</li>
 </ul>
 </li>
 
