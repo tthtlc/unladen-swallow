@@ -3,6 +3,8 @@
 """Wrapper script for running all of Unladen Swallow's third-party tests.
 
 This is equivalent to manually invoking the tests for each third-party app/lib.
+Note that this script is intended to be invoked after setup.py install (certain)
+tests depend on it.
 """
 
 __author__ = "collinwinter@google.com (Collin Winter)"
@@ -32,7 +34,10 @@ def Test2to3():
     return subprocess.call([sys.executable] + ["test.py"])
 
 def TestCheetah():
-    pass
+    path = ":".join([os.environ["PATH"], os.path.dirname(sys.executable)])
+    with ChangeDir(os.path.join("src", "Tests")):
+        return subprocess.call([sys.executable] + ["Test.py"],
+                               env={"PATH": path})
 
 def TestDjango():
     pass
