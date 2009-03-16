@@ -13,6 +13,9 @@ import os.path
 import subprocess
 import sys
 
+# We skip psyco because Unladen Swallow's stdlib includes it (for now).
+SKIP_LIBS = set(["psyco", ".svn"])
+
 
 def SetupSubdir(subdir):
     """Run the setup.py command in the given subdir.
@@ -44,7 +47,7 @@ def FindThirdPartyLibs(basedir):
     """
     for filename in os.listdir(basedir):
         entry = os.path.join(basedir, filename)
-        if os.path.isdir(entry) and filename != ".svn":
+        if os.path.isdir(entry) and filename not in SKIP_LIBS:
             yield entry
 
 
