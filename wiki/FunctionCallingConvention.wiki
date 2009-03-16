@@ -1,0 +1,8 @@
+#summary A function calling convention for LLVM functions
+
+LLVM functions need to know what parameters to expect from their environment. This is similar to the various C calling conventions defined in [http://docs.python.org/c-api/structures.html#PyMethodDef PyMethodDef]. Initially, I think I'll arrange for LLVM functions to resemble METH_KEYWORDS C functions, except they'll need a few extra arguments. The whole list of arguments is:
+
+   # The PyFrameObject being called. The PyCodeObject is accessible through this.
+   # self
+   # args tuple
+   # kwargs dict
