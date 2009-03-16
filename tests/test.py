@@ -8,10 +8,22 @@ This is equivalent to manually invoking the tests for each third-party app/lib.
 __author__ = "collinwinter@google.com (Collin Winter)"
 
 # Python imports
+import contextlib
 import os
 import os.path
 import subprocess
 import sys
+
+# We skip psyco because Unladen Swallow's stdlib includes it (for now).
+SKIP_LIBS = set(["psyco", ".svn"])
+
+
+@contextlib.contextmanager
+def ChangeDir(new_cwd):
+    former_cwd = os.getcwd()
+    os.chdir(new_cwd)
+    yield
+    os.chdir(former_cwd)
 
 
 ### Wrappers for the third-party modules we don't want to break go here. ###
@@ -19,8 +31,17 @@ import sys
 def Test2to3():
     return subprocess.call([sys.executable] + ["test.py"])
 
+def TestCheetah():
+    pass
 
-def TestPsyco():
+def TestDjango():
+    pass
+
+def TestPyxml():
+    with ChangeDir("test"):
+        return subprocess.call([sys.executable] + ["regrtest.py"])
+
+def TestSpitfire():
     pass
 
 
@@ -41,7 +62,7 @@ def FindThirdPartyLibs(basedir):
     """
     for filename in os.listdir(basedir):
         entry = os.path.join(basedir, filename)
-        if os.path.isdir(entry) and filename != ".svn":
+        if os.path.isdir(entry) and filename not in SKIP_LIBS:
             yield (filename, entry)
 
 
