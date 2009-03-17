@@ -21,8 +21,14 @@ PyAPI_DATA(PyTypeObject) PyLlvmModule_Type;
 
 #define PyLlvmModule_Check(op) (Py_TYPE(op) == &PyLlvmModule_Type)
 
-/* Expects a string object full of LLVM bitcode. */
-PyAPI_FUNC(PyObject *) PyLlvmModule_FromBitcode(PyObject *);
+/* Creates a new llvm::Module with the name contained in module_name
+   and wraps it in a PyLlvmModuleObject. */
+PyAPI_FUNC(PyObject *)PyLlvmModule_New(const char *module_name);
+
+/* Loads an llvm::Module object from a bitcode string. Expects two
+   string objects. */
+PyAPI_FUNC(PyObject *) PyLlvmModule_FromBitcode(PyObject *name,
+                                                PyObject *bitcode);
 
 /* Initializes all LLVM wrapper types, not just the module wrapper. */
 PyAPI_FUNC(int) _PyLlvm_Init(void);
