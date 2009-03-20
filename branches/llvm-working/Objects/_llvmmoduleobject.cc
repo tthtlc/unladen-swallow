@@ -10,12 +10,14 @@
 #include "llvm/Support/raw_ostream.h"
 #include <sstream>
 
-static llvm::Module *get_module(PyLlvmModuleObject *obj)
+static llvm::Module *
+get_module(PyLlvmModuleObject *obj)
 {
     return (llvm::Module *)obj->the_module;
 }
 
-PyObject *PyLlvmModule_New(const char *module_name)
+PyObject *
+PyLlvmModule_New(const char *module_name)
 {
     PyLlvmModuleObject *result =
         PyObject_NEW(PyLlvmModuleObject, &PyLlvmModule_Type);
@@ -26,8 +28,8 @@ PyObject *PyLlvmModule_New(const char *module_name)
     return (PyObject *)result;
 }
 
-PyObject *PyLlvmModule_FromBitcode(PyObject *module_name_obj,
-                                   PyObject *bitcode_str)
+PyObject *
+PyLlvmModule_FromBitcode(PyObject *module_name_obj, PyObject *bitcode_str)
 {
     if (!PyString_Check(module_name_obj)) {
         PyErr_Format(PyExc_TypeError,
@@ -255,7 +257,8 @@ PyTypeObject PyLlvmModule_Type = {
 	0,				/* tp_new */
 };
 
-int _PyLlvm_Init()
+int
+_PyLlvm_Init()
 {
     if (PyType_Ready(&PyLlvmModule_Type) < 0)
         return 0;

@@ -24,7 +24,8 @@ PyAPI_DATA(PyTypeObject) PyLlvmFunction_Type;
 
 #define PyLlvmFunction_Check(op) (Py_TYPE(op) == &PyLlvmFunction_Type)
 
-/* Expects a string object full of LLVM bitcode. */
+/* llvm_function must be an llvm::Function, and module must be the
+   PyLlvmModuleObject holding llvm_function->getParent(). */
 PyAPI_FUNC(PyObject *) _PyLlvmFunction_FromModuleAndPtr(PyObject *module,
                                                         void *llvm_function);
 

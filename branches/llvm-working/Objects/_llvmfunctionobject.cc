@@ -10,12 +10,14 @@
 #include "llvm/Support/raw_ostream.h"
 #include <sstream>
 
-static llvm::Function *get_function(PyLlvmFunctionObject *obj)
+static llvm::Function *
+get_function(PyLlvmFunctionObject *obj)
 {
     return (llvm::Function *)obj->the_function;
 }
 
-PyObject *_PyLlvmFunction_FromModuleAndPtr(PyObject *module, void *llvm_function)
+PyObject *
+_PyLlvmFunction_FromModuleAndPtr(PyObject *module, void *llvm_function)
 {
     if (!PyLlvmModule_Check(module)) {
         PyErr_Format(PyExc_TypeError,
@@ -70,6 +72,7 @@ static PyMemberDef llvmfunction_memberlist[] = {
     {NULL}  // Sentinel
 };
 
+// PyType_Ready is called on this in _llvmmoduleobject.cc:_PyLlvm_Init().
 PyTypeObject PyLlvmFunction_Type = {
 	PyVarObject_HEAD_INIT(&PyType_Type, 0)
 	"_llvmfunction",
