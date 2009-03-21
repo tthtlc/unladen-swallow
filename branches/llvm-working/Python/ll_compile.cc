@@ -8,6 +8,7 @@
 #include "llvm/Constants.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/Function.h"
+#include "llvm/Intrinsics.h"
 #include "llvm/Module.h"
 #include "llvm/Type.h"
 
@@ -477,5 +478,13 @@ LlvmFunctionBuilder::Pop()
     builder().CreateStore(new_stack_pointer, this->stack_pointer_addr_);
     return former_top;
 }
+
+void
+LlvmFunctionBuilder::InsertAbort()
+{
+    builder().CreateCall(llvm::Intrinsic::getDeclaration(
+                             this->module_, llvm::Intrinsic::trap));
+}
+
 
 }  // namespace py

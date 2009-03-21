@@ -24,6 +24,8 @@
 #include "Python.h"
 
 #include "Python-ast.h"
+#undef Module  // Macros that break LLVM
+#undef Pass
 #include "node.h"
 #include "pyarena.h"
 #include "ast.h"
@@ -32,13 +34,12 @@
 #include "instructionsobject.h"
 #include "symtable.h"
 #include "opcode.h"
-
-#undef Module
-
-#include "Python/ll_compile.h"
 #include "_llvmfunctionobject.h"
 #include "_llvmmoduleobject.h"
 
+#include "Python/ll_compile.h"
+
+#include "llvm/Analysis/Verifier.h"
 #include "llvm/BasicBlock.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/Function.h"
@@ -621,7 +622,7 @@ compiler_new_block(struct compiler *c)
 		return NULL;
 	}
 	memset((void *)b, 0, sizeof(basicblock));
-	b->b_llvm_block = llvm::BasicBlock::Create("", u->fb->function());
+	b->b_llvm_block = llvm::BasicBlock::Create("L", u->fb->function());
 	/* Extend the singly linked list of blocks with new block. */
 	b->b_list = u->u_blocks;
 	u->u_blocks = b;
@@ -641,27 +642,30 @@ compiler_use_new_block(struct compiler *c)
 }
 
 static basicblock *
+compiler_use_next_block(struct compiler *c, basicblock *block)
+{
+	assert(block != NULL);
+
+        if (c->u->u_curblock->b_llvm_block->getTerminator() == NULL) {
+            // If the block doesn't already end with a branch or
+            // return, branch to the next block.
+            c->u->fb->builder().CreateBr(block->b_llvm_block);
+        }
+	c->u->fb->builder().SetInsertPoint(block->b_llvm_block);
+
+	c->u->u_curblock->b_next = block;
+	c->u->u_curblock = block;
+	return block;
+}
+
+static basicblock *
 compiler_next_block(struct compiler *c)
 {
 	basicblock *block = compiler_new_block(c);
 	if (block == NULL)
 		return NULL;
-	c->u->u_curblock->b_next = block;
-	c->u->u_curblock = block;
-	c->u->fb->builder().CreateBr(block->b_llvm_block);
-	c->u->fb->builder().SetInsertPoint(block->b_llvm_block);
-	return block;
-}
 
-static basicblock *
-compiler_use_next_block(struct compiler *c, basicblock *block)
-{
-	assert(block != NULL);
-	c->u->u_curblock->b_next = block;
-	c->u->u_curblock = block;
-	c->u->fb->builder().CreateBr(block->b_llvm_block);
-	c->u->fb->builder().SetInsertPoint(block->b_llvm_block);
-	return block;
+        return compiler_use_next_block(c, block);
 }
 
 /* Returns the offset of the next instruction in the current block's
@@ -1791,8 +1795,10 @@ compiler_while(struct compiler *c, stmt_ty s)
 		ADDOP(c, POP_BLOCK);
 	}
 	compiler_pop_fblock(c, LOOP, loop);
-	if (orelse != NULL) /* what if orelse is just pass? */
+	if (orelse != NULL) { /* what if orelse is just pass? */
+		compiler_use_next_block(c, orelse);
 		VISIT_SEQ(c, stmt, s->v.While.orelse);
+	}
 	compiler_use_next_block(c, end);
 
 	return 1;
@@ -2226,6 +2232,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 		}
 		ADDOP(c, RETURN_VALUE);
 		c->u->fb->RETURN_VALUE();
+		NEXT_BLOCK(c);
 		break;
 	case Delete_kind:
 		VISIT_SEQ(c, expr, s->v.Delete.targets)
@@ -2748,16 +2755,14 @@ compiler_listcomp_generator(struct compiler *c, PyObject *tmpname,
 	   and then write to the element */
 
 	comprehension_ty l;
-	basicblock *start, *anchor, *skip, *if_cleanup;
+	basicblock *start, *anchor, *if_cleanup;
 	int i, n;
 
 	start = compiler_new_block(c);
-	skip = compiler_new_block(c);
 	if_cleanup = compiler_new_block(c);
 	anchor = compiler_new_block(c);
 
-	if (start == NULL || skip == NULL || if_cleanup == NULL ||
-		anchor == NULL)
+	if (start == NULL || if_cleanup == NULL || anchor == NULL)
 	    return 0;
 
 	l = (comprehension_ty)asdl_seq_GET(generators, gen_index);
@@ -2788,8 +2793,6 @@ compiler_listcomp_generator(struct compiler *c, PyObject *tmpname,
 		return 0;
 	    VISIT(c, expr, elt);
 	    ADDOP(c, LIST_APPEND);
-
-	    compiler_use_next_block(c, skip);
 	}
 	compiler_use_next_block(c, if_cleanup);
 	ADDOP_JABS(c, JUMP_ABSOLUTE, start);
@@ -2831,16 +2834,15 @@ compiler_genexp_generator(struct compiler *c,
 	   and then write to the element */
 
 	comprehension_ty ge;
-	basicblock *start, *anchor, *skip, *if_cleanup, *end;
+	basicblock *start, *anchor, *if_cleanup, *end;
 	int i, n;
 
 	start = compiler_new_block(c);
-	skip = compiler_new_block(c);
 	if_cleanup = compiler_new_block(c);
 	anchor = compiler_new_block(c);
 	end = compiler_new_block(c);
 
-	if (start == NULL || skip == NULL || if_cleanup == NULL ||
+	if (start == NULL || if_cleanup == NULL ||
 	    anchor == NULL || end == NULL)
 		return 0;
 
@@ -2882,8 +2884,6 @@ compiler_genexp_generator(struct compiler *c,
 		VISIT(c, expr, elt);
 		ADDOP(c, YIELD_VALUE);
 		ADDOP(c, POP_TOP);
-
-		compiler_use_next_block(c, skip);
 	}
 	compiler_use_next_block(c, if_cleanup);
 	ADDOP_JABS(c, JUMP_ABSOLUTE, start);
@@ -4081,6 +4081,12 @@ assemble(struct compiler *c, int addNone)
 			ADDOP_O(c, LOAD_CONST, Py_None, consts);
 		ADDOP(c, RETURN_VALUE);
 		c->u->fb->RETURN_VALUE();
+	}
+
+	if (llvm::verifyFunction(*c->u->fb->function(),
+				 llvm::PrintMessageAction)) {
+		PyErr_SetString(PyExc_SystemError, "invalid LLVM IR produced");
+		return NULL;
 	}
 
 	nblocks = 0;

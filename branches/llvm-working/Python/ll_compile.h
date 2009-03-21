@@ -24,19 +24,19 @@ public:
     /// name.
     void LOAD_CONST(int index);
     void LOAD_ATTR(int index) {
-        builder().CreateUnreachable();
+        InsertAbort();
     }
     void LOAD_GLOBAL(int index) {
-        builder().CreateUnreachable();
+        InsertAbort();
     }
     void LOAD_FAST(int index) {
-        builder().CreateUnreachable();
+        InsertAbort();
     }
     void STORE_FAST(int index) {
-        builder().CreateUnreachable();
+        InsertAbort();
     }
     void DELETE_FAST(int index) {
-        builder().CreateUnreachable();
+        InsertAbort();
     }
 
     void RETURN_VALUE();
@@ -52,6 +52,10 @@ private:
     /// subclass.
     void Push(llvm::Value *value);
     llvm::Value *Pop();
+
+    /// Inserts a call that will abort the program when it's
+    /// reached. This is useful for not-yet-defined instructions.
+    void InsertAbort();
 
     llvm::Module *const module_;
     llvm::Function *const function_;

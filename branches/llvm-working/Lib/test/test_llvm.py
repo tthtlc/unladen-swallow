@@ -95,7 +95,7 @@ entry:
 
 define private %__pyobject* @foo(%__pyframeobject*, %__pyobject*, %__pyobject*, %__pyobject*) {
 entry:
-	%stack_pointer_addr = alloca %__pyobject**		; <%__pyobject***> [#uses=5]
+	%stack_pointer_addr = alloca %__pyobject**		; <%__pyobject***> [#uses=9]
 	%4 = getelementptr %__pyframeobject* %0, i32 0, i32 8		; <%__pyobject***> [#uses=1]
 	%initial_stack_pointer = load %__pyobject*** %4		; <%__pyobject**> [#uses=1]
 	store %__pyobject** %initial_stack_pointer, %__pyobject*** %stack_pointer_addr
@@ -103,28 +103,51 @@ entry:
 	%co = load %__pycodeobject** %5		; <%__pycodeobject*> [#uses=1]
 	%6 = getelementptr %__pycodeobject* %co, i32 0, i32 6		; <%__pyobject**> [#uses=1]
 	%7 = load %__pyobject** %6		; <%__pyobject*> [#uses=1]
-	%consts = bitcast %__pyobject* %7 to %__pytupleobject*		; <%__pytupleobject*> [#uses=1]
-	br label %8
+	%consts = bitcast %__pyobject* %7 to %__pytupleobject*		; <%__pytupleobject*> [#uses=2]
+	br label %L
 
-; <label>:8		; preds = %entry
-	%9 = getelementptr %__pytupleobject* %consts, i32 0, i32 2, i32 0		; <%__pyobject**> [#uses=1]
-	%10 = load %__pyobject** %9		; <%__pyobject*> [#uses=2]
-	%11 = load i32* @_Py_RefTotal		; <i32> [#uses=1]
-	%12 = add i32 %11, 1		; <i32> [#uses=1]
-	store i32 %12, i32* @_Py_RefTotal
-	%13 = getelementptr %__pyobject* %10, i32 0, i32 2		; <i32*> [#uses=2]
-	%14 = load i32* %13		; <i32> [#uses=1]
-	%15 = add i32 %14, 1		; <i32> [#uses=1]
-	store i32 %15, i32* %13
-	%16 = load %__pyobject*** %stack_pointer_addr		; <%__pyobject**> [#uses=2]
-	store %__pyobject* %10, %__pyobject** %16
-	%17 = getelementptr %__pyobject** %16, i32 1		; <%__pyobject**> [#uses=1]
-	store %__pyobject** %17, %__pyobject*** %stack_pointer_addr
-	%18 = load %__pyobject*** %stack_pointer_addr		; <%__pyobject**> [#uses=1]
-	%19 = getelementptr %__pyobject** %18, i32 -1		; <%__pyobject**> [#uses=2]
-	%20 = load %__pyobject** %19		; <%__pyobject*> [#uses=1]
-	store %__pyobject** %19, %__pyobject*** %stack_pointer_addr
-	ret %__pyobject* %20
+L:		; preds = %entry
+	%8 = getelementptr %__pytupleobject* %consts, i32 0, i32 2, i32 0		; <%__pyobject**> [#uses=1]
+	%9 = load %__pyobject** %8		; <%__pyobject*> [#uses=2]
+	%10 = load i32* @_Py_RefTotal		; <i32> [#uses=1]
+	%11 = add i32 %10, 1		; <i32> [#uses=1]
+	store i32 %11, i32* @_Py_RefTotal
+	%12 = getelementptr %__pyobject* %9, i32 0, i32 2		; <i32*> [#uses=2]
+	%13 = load i32* %12		; <i32> [#uses=1]
+	%14 = add i32 %13, 1		; <i32> [#uses=1]
+	store i32 %14, i32* %12
+	%15 = load %__pyobject*** %stack_pointer_addr		; <%__pyobject**> [#uses=2]
+	store %__pyobject* %9, %__pyobject** %15
+	%16 = getelementptr %__pyobject** %15, i32 1		; <%__pyobject**> [#uses=1]
+	store %__pyobject** %16, %__pyobject*** %stack_pointer_addr
+	%17 = load %__pyobject*** %stack_pointer_addr		; <%__pyobject**> [#uses=1]
+	%18 = getelementptr %__pyobject** %17, i32 -1		; <%__pyobject**> [#uses=2]
+	%19 = load %__pyobject** %18		; <%__pyobject*> [#uses=1]
+	store %__pyobject** %18, %__pyobject*** %stack_pointer_addr
+	ret %__pyobject* %19
+
+L1:		; No predecessors!
+	br label %L2
+
+L2:		; preds = %L1
+	%20 = getelementptr %__pytupleobject* %consts, i32 0, i32 2, i32 0		; <%__pyobject**> [#uses=1]
+	%21 = load %__pyobject** %20		; <%__pyobject*> [#uses=2]
+	%22 = load i32* @_Py_RefTotal		; <i32> [#uses=1]
+	%23 = add i32 %22, 1		; <i32> [#uses=1]
+	store i32 %23, i32* @_Py_RefTotal
+	%24 = getelementptr %__pyobject* %21, i32 0, i32 2		; <i32*> [#uses=2]
+	%25 = load i32* %24		; <i32> [#uses=1]
+	%26 = add i32 %25, 1		; <i32> [#uses=1]
+	store i32 %26, i32* %24
+	%27 = load %__pyobject*** %stack_pointer_addr		; <%__pyobject**> [#uses=2]
+	store %__pyobject* %21, %__pyobject** %27
+	%28 = getelementptr %__pyobject** %27, i32 1		; <%__pyobject**> [#uses=1]
+	store %__pyobject** %28, %__pyobject*** %stack_pointer_addr
+	%29 = load %__pyobject*** %stack_pointer_addr		; <%__pyobject**> [#uses=1]
+	%30 = getelementptr %__pyobject** %29, i32 -1		; <%__pyobject**> [#uses=2]
+	%31 = load %__pyobject** %30		; <%__pyobject*> [#uses=1]
+	store %__pyobject** %30, %__pyobject*** %stack_pointer_addr
+	ret %__pyobject* %31
 }
 """)
 
