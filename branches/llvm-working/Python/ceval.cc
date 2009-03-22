@@ -15,8 +15,13 @@
 #include "instructionsobject.h"
 #include "frameobject.h"
 #include "eval.h"
+#include "global_llvm_data.h"
 #include "opcode.h"
 #include "structmember.h"
+#include "_llvmfunctionobject.h"
+
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/Function.h"
 
 #include <ctype.h>
 
@@ -87,6 +92,7 @@ void dump_tsc(int opcode, int ticked, uint64 inst0, uint64 inst1,
 typedef PyObject *(*callproc)(PyObject *, PyObject *, PyObject *);
 
 /* Forward declarations */
+static PyObject * eval_llvm_function(PyLlvmFunctionObject *, PyFrameObject *);
 #ifdef WITH_TSC
 static PyObject * call_function(PyObject ***, int, uint64*, uint64*);
 #else
@@ -804,7 +810,14 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	if (Py_EnterRecursiveCall(""))
 		return NULL;
 
+	co = f->f_code;
 	tstate->frame = f;
+
+	if (co->co_use_llvm) {
+		retval = eval_llvm_function(
+			(PyLlvmFunctionObject *)co->co_llvm_function, f);
+		goto exit_eval_frame;
+	}
 
 	if (tstate->use_tracing) {
 		if (tstate->c_tracefunc != NULL) {
@@ -840,7 +853,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 		}
 	}
 
-	co = f->f_code;
 	names = co->co_names;
 	consts = co->co_consts;
 	fastlocals = f->f_localsplus;
@@ -2504,6 +2516,26 @@ ext_call_fail:
 	Py_XDECREF(kwdict);
 	Py_XDECREF(stararg);
 	return result;
+}
+
+PyObject *
+eval_llvm_function(PyLlvmFunctionObject *function_obj, PyFrameObject *frame)
+{
+	if (!PyLlvmFunction_Check(function_obj)) {
+		PyErr_Format(PyExc_TypeError,
+			     "Expected PyLlvmFunctionObject; got %s",
+			     function_obj->ob_type->tp_name);
+		return NULL;
+	}
+	llvm::Function *function =
+		(llvm::Function*)function_obj->the_function;
+	PyGlobalLlvmData *global_llvm_data =
+		PyThreadState_GET()->interp->global_llvm_data;
+	typedef PyObject *(*NativeFunction)(PyFrameObject *);
+	llvm::ExecutionEngine *engine = global_llvm_data->getExecutionEngine();
+	NativeFunction native =
+		(NativeFunction)engine->getPointerToFunction(function);
+	return native(frame);
 }
 
 /* Extract a slice index from a PyInt or PyLong or an object with the
