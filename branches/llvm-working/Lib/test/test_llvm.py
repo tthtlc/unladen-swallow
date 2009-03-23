@@ -118,10 +118,29 @@ entry:
     def test_run_simple_function(self):
         def foo():
             pass
-        self.assertEquals(foo.__code__.__use_llvm__, False)
         foo.__code__.__use_llvm__ = True
-        self.assertEquals(foo.__code__.__use_llvm__, True)
         self.assertEquals(None, foo())
+
+    def test_return_arg(self):
+        def foo(a):
+            return a
+        foo.__code__.__use_llvm__ = True
+        self.assertEquals(3, foo(3))
+        self.assertEquals("Hello", foo("Hello"))
+
+    def test_unbound_local(self):
+        def foo():
+            # STORE_FAST(a) isn't implemented yet, but the
+            # UnboundLocalError is raised before we get there.
+            a = a
+        foo.__code__.__use_llvm__ = True
+        try:
+            foo()
+        except UnboundLocalError as e:
+            self.assertEquals(
+                str(e), "local variable 'a' referenced before assignment")
+        else:
+            self.fail("Expected UnboundLocalError")
 
 
 def test_main():
