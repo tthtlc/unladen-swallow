@@ -8,7 +8,7 @@ The first release. Unladen Swallow 2009Q1 is based on CPython 2.6.1. This releas
 
 == Performance ==
 
-We recommend building Plumage with 64-bit mode for maximum performance. The following timings are comparing virgin Python 2.6.1 against Unladen Swallow 2009Q1 in 64-bit mode. Compiled with gcc 4.3.1 on Intel Core 2 Duo machines. See the [Benchmarks] page for a description of each benchmark below.
+We recommend building Unladen Swallow with 64-bit mode for maximum performance. The following timings are comparing virgin Python 2.6.1 against Unladen Swallow 2009Q1 in 64-bit mode. Compiled with gcc 4.3.1 on Intel Core 2 Duo machines. See the [Benchmarks] page for a description of each benchmark below.
 
 2to3:<br>
 Min: 22.888 -> 20.299: 12.75% faster<br>
