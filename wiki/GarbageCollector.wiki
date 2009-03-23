@@ -1,4 +1,4 @@
-#Garbage Collection Plan
+#summary Garbage Collection Plan
 
 = Garbage Collection Development Plan =
 
