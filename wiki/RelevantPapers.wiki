@@ -1,20 +1,24 @@
 #summary Papers we should read for Unladen Swallow
 
+Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers to all work after that release.
 
-==To read:==
-  * http://lambda-the-ultimate.org/node/3159: *[http://research.microsoft.com/apps/pubs/default.aspx?id=76524 Verifying Compiler Transformations for Concurrent Programs]*: When we start really optimizing Python programs, we'll want to verify that our optimizations preserve our memory model.
-  * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.30.1652 The Design and Implementation of the SELF Compiler, an Optimizing Compiler for Object-Oriented Programming Languages] (Chambers, 1992)*
-  * *[http://www.ics.uci.edu/~franz/Site/pubs-pdf/ICS-TR-07-12.pdf Making the Compilation “Pipeline” Explicit: Dynamic Compilation Using Trace Tree Serialization] (Gal et al, 2007)*
-  * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.46.1558 Iterative type analysis and extended message splitting: Optimizing dynamically-typed object-oriented programs] (Chambers & Ungar, 1990)*
 
-==Read, useful:==
+==Phase One Papers:==
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.12.918 The behaviour of efficient virtual machine interpreters on modern architectures] (Ertl & Gregg, 2001)* Argues for using some variation of direct threading for opcode dispatch, rather than a switch statement.
   * *[http://www.usenix.org/events/vee05/full_papers/p153-yunhe.pdf Virtual Machine Showdown: Stack Versus Registers] (Shi, Gregg, Beatty & Ertl, 2005)* Experiment in converting the JVM from a stack-based design to a register architecture. They observed a 32% speed-up in their benchmarks due to this change.
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.37.8546 The Structure and Performance of Interpreters] (Romer et al, 1996)* Comparison of a variety of high- and low-level interpreters. May be somewhat out of date.
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.59.1271 Context Threading: A Flexible and Efficient Dispatch Technique for Virtual Machine Interpreters] (Berndl et al, 2005)* An enhancement to the direct threading approach advocated by Ertl.
   * *[http://www.tecgraf.puc-rio.br/~lhf/ftp/doc/jucs05.pdf The Implementation of Lua 5.0] (Ierusalimschy, Henrique de Figueiredo & Celes, 2005)* Interesting notes on moving from a stack-based VM to a register-based VM, including benchmarks comparing just the stack vs register aspect.
+
+
+==Phase Two Papers:==
+  * http://lambda-the-ultimate.org/node/3159: *[http://research.microsoft.com/apps/pubs/default.aspx?id=76524 Verifying Compiler Transformations for Concurrent Programs]*: When we start really optimizing Python programs, we'll want to verify that our optimizations preserve our memory model.
+  * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.30.1652 The Design and Implementation of the SELF Compiler, an Optimizing Compiler for Object-Oriented Programming Languages] (Chambers, 1992)*
+  * *[http://www.ics.uci.edu/~franz/Site/pubs-pdf/ICS-TR-07-12.pdf Making the Compilation “Pipeline” Explicit: Dynamic Compilation Using Trace Tree Serialization] (Gal et al, 2007)*
+  * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.46.1558 Iterative type analysis and extended message splitting: Optimizing dynamically-typed object-oriented programs] (Chambers & Ungar, 1990)*
   * *[http://portal.acm.org/citation.cfm?id=800542 Efficient implementation of the smalltalk-80 system] (Deutsch & Schiffman, 1984)*
   * *[http://research.sun.com/self/papers/urs-thesis.html Adaptive optimization for Self: Reconciling High Performance with Exploratory Programming] (Hölzle, 1994)*
+
 
 ==Garbage Collection:==
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.19.1065 Java without the coffee breaks: A nonintrusive multiprocessor garbage collector] (Bacon et al, 2001)* Presents Recycler, a reference counting GC system we might reuse for Python.
@@ -23,6 +27,7 @@
   * *[http://portal.acm.org/citation.cfm?id=1134023&coll=GUIDE&dl=GUIDE&CFID=13233945&CFTOKEN=85731901 The Compressor: concurrent, incremental, and parallel compaction] (Kermany & Petrank, 2006)* Another algorithm implemented on JikesRVM, claims to be "the most efficient compactor known today".
   * *[http://portal.acm.org/citation.cfm?doid=949343.949329 An on-the-fly mark and sweep garbage collector based on sliding views] (Azatchi et al, 2003)* A collector designed to minimize pause times. This one is worth reading if you are interested in the details of the sliding window technique, mutator synchronization, and write barriers.
   * *[http://portal.acm.org/citation.cfm?id=362422.362480&type=series A generational mostly-concurrent garbage collector] (Printezis & Detlefs, 2000)* Worth reading for its description of card marking algorithms.
+
 
 ==Regular Expressions:==
   * *[http://blog.chromium.org/2009/02/irregexp-google-chromes-new-regexp.html Overview of Chrome's new regex engine]*
