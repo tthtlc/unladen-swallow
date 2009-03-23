@@ -1,20 +1,75 @@
 #summary Plans for optimizing Python
 
-= Quick Optimizations =
+= Goals =
 
-Q1 will likely be dominated by getting a 30%-50% improvement with
-existing approaches. These will probably include compiling Python with
-LLVM+LTO (10%), [VmgenEvalLoop vmgen] (10%(-30%??)), [SixtyFourBitCompile 64 bits] (guess -20-+20%) and
-other small ceval, function call, etc. tweaks. I'll probably also
-start pushing to [SimplifyEvalFrameEx simplify the EvalFrameEx loop] even if that doesn't
-help performance because it'll make migrating to LLVM easier.
+We want to make Python faster, but we also want to make it easy for large, well-established applications to switch to Unladen Swallow.
 
-See ShortTermPerformanceIdeas for some of the ideas for this first phase.
+  # Produce a version of Python 5x faster than CPython.
+  # Python application performance should be stable.
+  # Maintain source-level compatibility with CPython applications.
+  # Maintain source-level compatibility with CPython extension modules.
+  # We do not want to maintain a Python implementation forever; we view our work as a branch, not a fork.
 
-= Long-term Plan =
-Once we get the quick improvements out of the way and convince some
-people to adopt our Python, we'll start switching to LLVM, probably
-initially in a separate branch. This can go in lots of stages:
+
+= Overview =
+
+In order to achieve our combination of performance and compatibility goals, we opt to modify CPython, rather than start our own implementation from scratch. In particular, we opt to start working on CPython 2.6.1: Python 2.6 nestles nicely between 2.4/2.5 (which most interesting applications are using) and 3.x (which is the eventual future). Starting from a CPython release allows us to avoid reimplementing a wealth of built-in functions, objects and standard library modules, and allows us to reuse the existing, well-used CPython C extension API.
+
+The majority of our work will focus on speeding the execution of Python code, while spending comparatively little time on the Python runtime library. Our long-term proposal is to replace CPython's custom virtual machine with a JIT built on top of [http://llvm.org/ LLVM], while leaving the rest of the Python runtime relatively intact. We have observed that Python applications spend a large portion of their time in the main eval loop. In particular, even relatively minor changes to VM components such as opcode dispatch have a significant effect on Python application performance. We believe that compiling Python to machine code via LLVM's JIT engine will deliver large performance benefits.
+
+Some of the obvious benefits:
+  # Moving to a JIT will also allow us to move Python from a stack-based machine to a register machine, which has been shown to improve performance in other similar languages (Ierusalimschy et al, 2005; Shi et al, 2005).
+  # Eliminating the need to fetch and dispatch opcodes should alone be a win, even if we do nothing else. See http://bugs.python.org/issue4753 for a discussion of CPython's current sensitivity to opcode dispatch changes.
+  # The current CPython VM opcode fetch/dispatch overhead makes implementing additional optimizations prohibitive. For example, we would like to implement type feedback and dynamic recompilation ala SELF-93 (Hölzle, Chambers and Ungar, 1992), but we feel that implementing the polymorphic inline caches in terms of CPython bytecode would be unacceptably slow.
+  # LLVM in particular is interesting because of its easy-to-use codegen available for multiple platforms and its ability to compile C and C++ to the same intermediate representation we'll be targeting with Python. This will allows us to do inlining and analysis across what is currently a Python/C language barrier.
+
+
+
+= Milestones =
+
+Unladen Swallow will be released every three months, with bugfix releases in between as necessary.
+
+== 2009 Q1 ==
+
+Q1 will be spent making relatively minor tweaks to the existing CPython implementation. We aim for a 25-35% performance improvement over our baseline.
+
+Ideas for achieving this goal:
+  * Re-implement the eval loop in terms of [http://www.complang.tuwien.ac.at/anton/vmgen/ vmgen].
+  * Experiment with compiler options such as 64 bits, LLVM's LTO support, and gcc 4.4's FDO support.
+  * Replace rarely-used opcodes with functions, saving critical code space.
+  * Improve GC performance (see http://bugs.python.org/issue4074).
+  * Improve cPickle performance. Many large websites use this heavily for interacting with memcache.
+  * Simplify frame objects to make frame alloc/dealloc faster.
+  * Implement one of the several proposed schemes for speeding lookups of globals and builtins.
+
+
+== 2009 Q2 ==
+
+Q2 will focus on eliminating the Python VM and replacing it with a functionally-equivalent implementation in terms of LLVM. We anticipate some performance improvement, but that is not the primary focus of the 2009Q2 release. We will focus on just getting something working on top of LLVM. Making it faster will come in subsequent quarters.
+
+Goals:
+  * Python VM in ceval.c eliminated in favor of an LLVM-based JIT.
+  * All tests in the standard library regression suite pass.
+  * Source compatibility maintained with existing applications, extension modules.
+  * 10% performance improvement.
+  * Stretch goal: 25% performance improvement.
+
+
+== 2009 Q3 and Beyond ==
+
+The plan for Q3 onwards is to simply iterate over [RelevantPapers the literature]. We aspire to do no original work, instead using as much of the last 30 years of research as possible. See RelevantPapers for a partial (by no means complete) list of the papers we plan to implement or draw upon.
+
+We plan to address performance considerations in the regular expression engine, as well as any other extension modules found to be bottlenecks. However, regular expressions are already known to be a good target for our work and will be considered first for optimization.
+
+In addition, we intend to remove the GIL and fix the state of multithreading in Python. We believe this is possible through the implementation of a more sophisticated GC system, something like IBM's Recycler (Bacon et al, 2001).
+
+The exact list of features for the 2009Q3 release will be finalized some time in Q2.
+
+
+= Detailed Plans =
+
+Once we get the quick improvements out of the way and convince some people to adopt our Python, we'll start switching to LLVM, probably initially in a separate branch. This can go in lots of stages:
+
 
 <ol>
 <li>Add `llvmmodule` and `llvmfunction` types in Python, which interface to the LLVM [http://llvm.org/docs/ProgrammersManual.html#Module Module] and [http://llvm.org/docs/ProgrammersManual.html#Function Function] types. Teach `llvmmodule` to [http://llvm.org/doxygen/ReaderWriter_8h.html read bitcode files] and [http://llvm.org/doxygen/PrintModulePass_8h.html pretty-print them]. (Reading the bitcode files isn't really necessary for the next step, but it'll help with testing this one.)
@@ -62,3 +117,37 @@ Talin points out that it'll be hard to apply most of the pre-defined optimizatio
 <li>[PersistentIr Persist the generated and optimized IR to disk] in place of .pyc
 files, perhaps along with any gathered profile data. This allows subsequent runs to take advantage of the optimization work previous runs have already done. Matches LLVM's promise to be "A Compilation Framework for Lifelong Program Analysis & Transformation". :)</li>
 </ol>
+
+
+= Testing and Measurement =
+
+== Performance ==
+
+Unladen Swallow maintains a directory of interesting performance tests under the [http://code.google.com/p/unladen-swallow/source/browse/#svn/tests tests] directory. `perf.py` is the main interface to the benchmarks we care about, and will take care of priming runs, clearing `*.py[co]` files and running interesting statistics over the results.
+
+Unladen Swallow's benchmark suite is focused on the hot spots in major Python applications, in particular web applications. The major web applications we have surveyed have indicated that they bottleneck primarily on template systems, and hence our initial benchmark suite focuses on them:
+  * *Django and Spitfire templates*. Two very different ways of implementing a template language.
+  * *2to3*. Translates Python 2 syntax to Python 3. Has an interesting, pure-Python kernel that makes heavy use of objects and method dispatch.
+  * *Pickling and unpickling*. Large-scale web applications rely on memcache, which in turns uses Python's Pickle format for serialization.
+
+Apart from these, our benchmark suite includes several crap benchmarks like Richards, PyStone and PyBench; these are only included for completeness and comparison with other Python implementations, which have tended to use them. Unladen Swallow does not consider these benchmarks to be representative of real Python applications or Python implementation performance, and does not run them by default or make decisions based on them.
+
+For charting the long-term performance trend of the project, Unladen Swallow makes use of Google's standard internal performance measurement framework. Project members will post regular performance updates to the mailing lists. For testing individual changes, however, using `perf.py` as described on the [Benchmarks] page is sufficient.
+
+== Correctness ==
+
+In order to ensure correctness of the implementation, Unladen Swallow uses both the standard Python test suite, plus a number of third-party libraries that are known-good on Python 2.6. In particular, we test third-party C extension modules, since these are the easiest to break via unwitting changes at the C level.
+
+As work on the JIT implementation moves forward, we will incorporate a fuzzer into our regular test run. We plan to reuse Victor Stinner's [http://fusil.hachoir.org/svn/trunk/ Fusil] Python fuzzer as much as possible, since it a) exists, and b) has been demonstrated to find real bugs in Python.
+
+Unladen Swallow maintains a [http://buildbot.net/trac BuildBot] instance that runs the above tests against every commit to trunk.
+
+
+= Risks =
+
+  * *May not be able to merge back into mainline.* There are vocal, conservative senior members of the Python core development community who may oppose the merger of our work, since it will represent such a significant change. Accordingly, we may be stuck supporting a de facto separate implementation of Python. This is particularly worrying since support load can kill forward momentum on small projects like Unladen Swallow.
+  * *LLVM comes with a lot of unknowns:*  Impact on extension modules? JIT behaviour in multithreaded apps? Impact on Python start-up time? Will probably kill Python Windows support (for now).
+
+= Communication =
+
+All communication about Unladen Swallow should take place on the [http://groups.google.com/group/unladen-swallow Unladen Swallow list]. This is where design issues will be discussed, as well as notifications of continuous build results, performance numbers, code reviews, and all the other details of an open-source project.
