@@ -101,17 +101,17 @@ entry:
 	%co = load %__pycodeobject** %1		; <%__pycodeobject*> [#uses=1]
 	%2 = getelementptr %__pycodeobject* %co, i32 0, i32 6		; <%__pyobject**> [#uses=1]
 	%3 = load %__pyobject** %2		; <%__pyobject*> [#uses=1]
-	%4 = getelementptr %__pyobject* %3, i32 1, i32 1		; <%__pyobject**> [#uses=1]
-	%5 = load %__pyobject** %4		; <%__pyobject*> [#uses=3]
-	%6 = load i32* @_Py_RefTotal		; <i32> [#uses=1]
-	%7 = add i32 %6, 1		; <i32> [#uses=1]
-	store i32 %7, i32* @_Py_RefTotal
-	%8 = getelementptr %__pyobject* %5, i32 0, i32 2		; <i32*> [#uses=2]
-	%9 = load i32* %8		; <i32> [#uses=1]
-	%10 = add i32 %9, 1		; <i32> [#uses=1]
-	store i32 %10, i32* %8
-	store %__pyobject* %5, %__pyobject** %initial_stack_pointer
-	ret %__pyobject* %5
+	%consts = getelementptr %__pyobject* %3, i32 1, i32 1		; <%__pyobject**> [#uses=1]
+	%4 = load %__pyobject** %consts		; <%__pyobject*> [#uses=3]
+	%5 = load i32* @_Py_RefTotal		; <i32> [#uses=1]
+	%6 = add i32 %5, 1		; <i32> [#uses=1]
+	store i32 %6, i32* @_Py_RefTotal
+	%7 = getelementptr %__pyobject* %4, i32 0, i32 2		; <i32*> [#uses=2]
+	%8 = load i32* %7		; <i32> [#uses=1]
+	%9 = add i32 %8, 1		; <i32> [#uses=1]
+	store i32 %9, i32* %7
+	store %__pyobject* %4, %__pyobject** %initial_stack_pointer
+	ret %__pyobject* %4
 }
 """)
 

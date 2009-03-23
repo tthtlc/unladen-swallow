@@ -387,11 +387,20 @@ LlvmFunctionBuilder::LlvmFunctionBuilder(
             builder().CreateStructGEP(code, CodeTy::FIELD_NAMES)),
         TypeBuilder<PyTupleObject*>::cache(module),
         "names");
-    this->consts_ = builder().CreateBitCast(
-        builder().CreateLoad(
-            builder().CreateStructGEP(code, CodeTy::FIELD_CONSTS)),
-        TypeBuilder<PyTupleObject*>::cache(module),
-        "consts");
+    Value *consts_tuple =  // (PyTupleObject*)code->co_consts
+        builder().CreateBitCast(
+            builder().CreateLoad(
+                builder().CreateStructGEP(code, CodeTy::FIELD_CONSTS)),
+            TypeBuilder<PyTupleObject*>::cache(module));
+    Value *consts_item_indices[] = {
+        ConstantInt::get(Type::Int32Ty, 0),
+        ConstantInt::get(Type::Int32Ty, TupleTy::FIELD_ITEM),
+        ConstantInt::get(Type::Int32Ty, 0),
+    };
+    this->consts_ =  // &consts_tuple->ob_item[0]
+        builder().CreateGEP(consts_tuple,
+                            consts_item_indices, end(consts_item_indices),
+                            "consts");
 
     Value* fastlocals_indices[] = {
         Constant::getNullValue(Type::Int32Ty),
@@ -424,13 +433,9 @@ LlvmFunctionBuilder::FallThroughTo(BasicBlock *next_block)
 void
 LlvmFunctionBuilder::LOAD_CONST(int index)
 {
-    Value *indices[] = {
-        ConstantInt::get(Type::Int32Ty, 0),
-        ConstantInt::get(Type::Int32Ty, TupleTy::FIELD_ITEM),
-        ConstantInt::get(Type::Int32Ty, index),
-    };
     Value *const_ = builder().CreateLoad(
-        builder().CreateGEP(this->consts_, indices, end(indices)));
+        builder().CreateGEP(this->consts_,
+                            ConstantInt::get(Type::Int32Ty, index)));
     IncRef(const_);
     Push(const_);
 }
