@@ -18,6 +18,8 @@ Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.46.1558 Iterative type analysis and extended message splitting: Optimizing dynamically-typed object-oriented programs] (Chambers & Ungar, 1990)*
   * *[http://portal.acm.org/citation.cfm?id=800542 Efficient implementation of the smalltalk-80 system] (Deutsch & Schiffman, 1984)*
   * *[http://research.sun.com/self/papers/urs-thesis.html Adaptive optimization for Self: Reconciling High Performance with Exploratory Programming] (Hölzle, 1994)*
+    * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.41.4430 Optimizing Dynamically-Typed Object-Oriented Languages With Polymorphic Inline Caches] (Hölzle, Chambers & Ungar, 1991)* Long-form paper that originally introduced the type feedback system in Hölzle, 1994.
+    * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.49.1810 Debugging Optimized Code with Dynamic Deoptimization] (Hölzle, Chambers & Ungar, 1992)* Long-form paper of the section of Hölzle, 1994 that deals with dynamically deoptimizing SELF code for debugging purposes.
 
 
 ==Garbage Collection:==
