@@ -42,6 +42,10 @@ def TestCheetah():
 def TestDjango():
     pass
 
+def TestMercurial():
+    with ChangeDir("tests"):
+        return subprocess.call([sys.executable] + ["run-tests.py"])
+
 def TestPyxml():
     with ChangeDir("test"):
         return subprocess.call([sys.executable] + ["regrtest.py"])
@@ -76,6 +80,7 @@ if __name__ == "__main__":
     for dirname, subdir in FindThirdPartyLibs(basedir):
         test_func = globals()["Test" + dirname.capitalize()]
 
+        print "Testing", dirname.capitalize()
         current_dir = os.getcwd()
         os.chdir(subdir)
         try:
