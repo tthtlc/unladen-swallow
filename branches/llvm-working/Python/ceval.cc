@@ -814,6 +814,18 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 	tstate->frame = f;
 
 	if (co->co_use_llvm) {
+		if (co->co_llvm_function == NULL) {
+			PyErr_Format(PyExc_SystemError,
+				     "Requested execution of %s at %s:%d but"
+				     " it has no LLVM function object"
+				     " attached, probably because it was"
+				     " loaded from a .pyc file.",
+				     PyString_AsString(co->co_name),
+				     PyString_AsString(co->co_filename),
+				     co->co_firstlineno);
+			retval = NULL;
+			goto exit_eval_frame;
+		}
 		retval = eval_llvm_function(
 			(PyLlvmFunctionObject *)co->co_llvm_function, f);
 		goto exit_eval_frame;

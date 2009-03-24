@@ -116,6 +116,7 @@ PyCode_New(int argcount, int nlocals, int stacksize, int flags,
 		co->co_lnotab = lnotab;
                 co->co_zombieframe = NULL;
                 co->co_tcode = NULL;
+		co->co_llvm_function = NULL;
 		co->co_use_llvm = 0;
 	}
 	return co;
