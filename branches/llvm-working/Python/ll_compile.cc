@@ -65,6 +65,7 @@ public:
         llvm::PATypeHolder object_ty = llvm::OpaqueType::get();
         Type *p_object_ty = PointerType::getUnqual(object_ty);
         llvm::StructType *temp_object_ty = llvm::StructType::get(
+            // Fields from PyObject_HEAD.
 #ifdef Py_TRACE_REFS
             // _ob_next, _ob_prev
             p_object_ty, p_object_ty,
@@ -72,6 +73,8 @@ public:
             TypeBuilder<ssize_t>::cache(module),
             p_object_ty,
             NULL);
+	// Unifies the OpaqueType fields with the whole structure.  We
+	// couldn't do that originally because the type's recursive.
         llvm::cast<llvm::OpaqueType>(object_ty.get())
             ->refineAbstractTypeTo(temp_object_ty);
         module->addTypeName(pyobject_name, object_ty.get());
@@ -356,7 +359,7 @@ LlvmFunctionBuilder::LlvmFunctionBuilder(
     : module_(module),
       function_(llvm::Function::Create(
                     get_function_type(module),
-                    llvm::GlobalValue::PrivateLinkage,
+                    llvm::GlobalValue::ExternalLinkage,
                     name,
                     module))
 {

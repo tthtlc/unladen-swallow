@@ -74,7 +74,7 @@ entry:
         exec "def foo(): pass" in namespace
         disassembly = str(namespace['foo'].__code__.co_llvm.module)
         module_data = disassembly[:disassembly.find(
-                'define private %__pyobject* @"<module>"')]
+                'define %__pyobject* @"<module>"')]
         self.assertEquals(module_data,
                           """\
 ; ModuleID = '<string>'
@@ -93,7 +93,7 @@ entry:
         self.assertEquals(str(namespace['foo'].__code__.co_llvm),
                           """\
 
-define private %__pyobject* @foo(%__pyframeobject* %frame) {
+define %__pyobject* @foo(%__pyframeobject* %frame) {
 entry:
 	%0 = getelementptr %__pyframeobject* %frame, i32 0, i32 8		; <%__pyobject***> [#uses=1]
 	%initial_stack_pointer = load %__pyobject*** %0		; <%__pyobject**> [#uses=1]

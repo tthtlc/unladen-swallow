@@ -11,6 +11,7 @@
 #include "llvm/ModuleProvider.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 #include <sstream>
 
 static llvm::Module *
