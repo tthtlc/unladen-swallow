@@ -596,6 +596,9 @@ def ShouldRun(benchmark, options):
         return False
     if options.positive_benchmarks:
         return benchmark in options.positive_benchmarks
+    # pybench must be explicitly requested, such is its quality.
+    if benchmark == "pybench":
+        return False
     return True
 
 
