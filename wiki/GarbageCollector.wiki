@@ -2,6 +2,12 @@
 
 = Garbage Collection Development Plan =
 
+== Plan Update 25/03/2009  ==
+
+Talin: The garbage collector has been split off into its own development project. The primary reason for this is that much of the work is not specific to Python, and there are a number of goals which are not Python related. It turns out that there are a lot of people out there who would like a general-purpose garbage collector that is compatible with LLVM.
+
+The new project is called "Scarcity", and you can join the mailing list here: http://groups.google.com/group/scarcity-dev. The code project and source repository are still in the process of being set up, however a fair amount of work on the code has been accomplished already.
+
 == Goals ==
 
 The primary goal is to produce a workable concurrent garbage collector that can be used for an optimized Python. A secondary goal is to make the collector independent enough from Python to be usable for other languages.
