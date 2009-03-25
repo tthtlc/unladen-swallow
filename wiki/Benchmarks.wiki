@@ -11,7 +11,7 @@ Example `perf.py` command:
 python2.5 tests/perf.py --rigorous --benchmarks=2to3,django control/python experiment/python
 }}}
 
-This will run the 2to3 and Django benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with.
+This will run the 2to3 and Django benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with. `perf.py` will take care of comparing the performance and running statistics on the result to determine statistical significance. The performance degradation/improvement is calculated using `((new - old) / new)`.
 
 
 ==Benchmarks==
