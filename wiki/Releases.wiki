@@ -4,7 +4,7 @@ Unladen Swallow is released every three months, with bug-fix releases in between
 
 = 2009Q1 =
 
-The first release. Unladen Swallow 2009Q1 is based on CPython 2.6.1. This release is primarily a collection of tweaks to 2.6.1, most of which are now available in mainline Python trunk.
+The first release. Unladen Swallow 2009Q1 is based on CPython 2.6.1. This release is primarily a collection of tweaks to 2.6.1, most of which are now available in mainline Python trunk. What are not currently available are in the process of being pushed upstream.
 
 == Performance ==
 
