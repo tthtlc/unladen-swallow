@@ -1,8 +1,9 @@
 #summary A function calling convention for LLVM functions
 
-LLVM functions need to know what parameters to expect from their environment. This is similar to the various C calling conventions defined in [http://docs.python.org/c-api/structures.html#PyMethodDef PyMethodDef]. Initially, I think I'll arrange for LLVM functions to resemble METH_KEYWORDS C functions, except they'll need a few extra arguments. The whole list of arguments is:
+LLVM functions need to know what parameters to expect from their environment. This is similar to the various C calling conventions defined in [http://docs.python.org/c-api/structures.html#PyMethodDef PyMethodDef]. Initially, I'm just using the PyFrameObject to communicate everything, so the signature of an LLVM-generated function is:
 
-   # The PyFrameObject being called. The PyCodeObject is accessible through this.
-   # self
-   # args tuple
-   # kwargs dict
+{{{PyObject *the_function(PyFrameObject *frame);}}}
+
+We use the frame->f_code (the PyCodeObject) to access lots of constants. This is dumb, of course, since those constants are known at compile time, but it's easy so we can get something working quickly.
+
+Second, we rely on Python's existing argument-passing machinery. Python copies arguments into the frame's fastlocals array, and we just look them up there. Eventually, we'll want to pass arguments directly into the LLVM functions, but we'll need a new calling convention for that.
