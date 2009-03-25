@@ -1,10 +1,12 @@
 #summary Plans for optimizing Python
 
+<font size="1">NB: all cited papers are linked on [RelevantPapers].</font>
+
 = Goals =
 
 We want to make Python faster, but we also want to make it easy for large, well-established applications to switch to Unladen Swallow.
 
-  # Produce a version of Python 5x faster than CPython.
+  # Produce a version of Python at least 5x faster than CPython.
   # Python application performance should be stable.
   # Maintain source-level compatibility with CPython applications.
   # Maintain source-level compatibility with CPython extension modules.
@@ -18,11 +20,42 @@ In order to achieve our combination of performance and compatibility goals, we o
 The majority of our work will focus on speeding the execution of Python code, while spending comparatively little time on the Python runtime library. Our long-term proposal is to replace CPython's custom virtual machine with a JIT built on top of [http://llvm.org/ LLVM], while leaving the rest of the Python runtime relatively intact. We have observed that Python applications spend a large portion of their time in the main eval loop. In particular, even relatively minor changes to VM components such as opcode dispatch have a significant effect on Python application performance. We believe that compiling Python to machine code via LLVM's JIT engine will deliver large performance benefits.
 
 Some of the obvious benefits:
-  # Moving to a JIT will also allow us to move Python from a stack-based machine to a register machine, which has been shown to improve performance in other similar languages (Ierusalimschy et al, 2005; Shi et al, 2005).
-  # Eliminating the need to fetch and dispatch opcodes should alone be a win, even if we do nothing else. See http://bugs.python.org/issue4753 for a discussion of CPython's current sensitivity to opcode dispatch changes.
-  # The current CPython VM opcode fetch/dispatch overhead makes implementing additional optimizations prohibitive. For example, we would like to implement type feedback and dynamic recompilation ala SELF-93 (Hölzle, Chambers and Ungar, 1992), but we feel that implementing the polymorphic inline caches in terms of CPython bytecode would be unacceptably slow.
-  # LLVM in particular is interesting because of its easy-to-use codegen available for multiple platforms and its ability to compile C and C++ to the same intermediate representation we'll be targeting with Python. This will allows us to do inlining and analysis across what is currently a Python/C language barrier.
+<ul>
+  <li>Moving to a JIT will also allow us to move Python from a stack-based machine to a register machine, which has been shown to improve performance in other similar languages (Ierusalimschy et al, 2005; Shi et al, 2005).</li>
+  <li>Eliminating the need to fetch and dispatch opcodes should alone be a win, even if we do nothing else. See http://bugs.python.org/issue4753 for a discussion of CPython's current sensitivity to opcode dispatch changes.</li>
+  <li>The current CPython VM opcode fetch/dispatch overhead makes implementing additional optimizations prohibitive. For example, we would like to implement type feedback and dynamic recompilation ala SELF-93 (Hölzle, Chambers and Ungar, 1992), but we feel that implementing the polymorphic inline caches in terms of CPython bytecode would be unacceptably slow.</li>
+  <li>LLVM in particular is interesting because of its easy-to-use codegen available for multiple platforms and its ability to compile C and C++ to the same intermediate representation we'll be targeting with Python. This will allows us to do inlining and analysis across what is currently a Python/C language barrier.</li>
+</ul>
 
+With the infrastructure to generate machine code comes the possibility of compiling Python into a much more efficient implementation. For example, take the snippet
+
+{{{
+for i in range(3):
+  foo(i)
+}}}
+This currently desugars to something like
+{{{
+$x = range(3)
+while True:
+  try:
+    i = $x.next()
+  except StopIteration:
+    break
+  foo(i)
+}}}
+Once we have a mechanism to know that `range()` means the `range()` builtin function, we can turn this into something more akin to
+{{{
+for (i = 0; i < 3; i++)
+  foo(i)
+}}}
+in C, possibly using unboxed types for the math. We can then unroll the loop to yield
+{{{
+foo(0)
+foo(1)
+foo(2)
+}}}
+
+We intend to structure Unladen Swallow's internals to assume that multiple cores are available for our use. Servers are only going to acquire more and more cores, and we want to exploit that to do more and more work in parallel. For example, we would like to have a concurrent code optimizer that applies increasingly-expensive (and beneficial!) optimizations in parallel with code execution, using another core to do the work. We are also considering [GarbageCollector a concurrent garbage collector] that would, again, utilize additional cores to offload work units. Since most production server machines are shipping with between 4 and 32 cores, we believe this avenue of optimization is potentially lucrative. However, we will have to be sensitive to the needs of highly-parallel applications and not consume extra cores blindly.
 
 
 = Milestones =
@@ -48,7 +81,7 @@ Ideas for achieving this goal:
 Q2 will focus on eliminating the Python VM and replacing it with a functionally-equivalent implementation in terms of LLVM. We anticipate some performance improvement, but that is not the primary focus of the 2009Q2 release. We will focus on just getting something working on top of LLVM. Making it faster will come in subsequent quarters.
 
 Goals:
-  * Python VM in ceval.c eliminated in favor of an LLVM-based JIT.
+  * The custom Python VM in ceval.c eliminated in favor of an LLVM-based JIT.
   * All tests in the standard library regression suite pass.
   * Source compatibility maintained with existing applications, extension modules.
   * 10% performance improvement.
@@ -63,7 +96,9 @@ We plan to address performance considerations in the regular expression engine, 
 
 In addition, we intend to remove the GIL and fix the state of multithreading in Python. We believe this is possible through the implementation of a more sophisticated GC system, something like IBM's Recycler (Bacon et al, 2001).
 
-The exact list of features for the 2009Q3 release will be finalized some time in Q2.
+Our long-term goal is to make Python fast enough to start moving performance-important types and functions from C back to Python.
+
+The exact performance targets for the 2009Q3 release will be finalized some time in Q2.
 
 
 = Detailed Plans =
