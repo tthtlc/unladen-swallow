@@ -7,6 +7,7 @@
 #endif
 
 #include "llvm/Support/IRBuilder.h"
+#include <string>
 
 namespace py {
 
@@ -29,6 +30,17 @@ public:
     /// name.
     void LOAD_CONST(int index);
     void LOAD_FAST(int index);
+    void STORE_FAST(int index);
+
+    void SETUP_LOOP(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
+    void GET_ITER();
+    void FOR_ITER(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
+    void POP_BLOCK();
+
+    void JUMP_FORWARD(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough) {
+        JUMP_ABSOLUTE(target, fallthrough);
+    }
+    void JUMP_ABSOLUTE(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
 
     void RETURN_VALUE();
 
@@ -102,9 +114,7 @@ public:
     UNIMPLEMENTED(STORE_MAP)
     UNIMPLEMENTED(BUILD_SLICE_TWO)
     UNIMPLEMENTED(BUILD_SLICE_THREE)
-    UNIMPLEMENTED(GET_ITER)
     UNIMPLEMENTED(BREAK_LOOP)
-    UNIMPLEMENTED(POP_BLOCK)
     UNIMPLEMENTED(RAISE_VARARGS_ZERO)
     UNIMPLEMENTED(RAISE_VARARGS_ONE)
     UNIMPLEMENTED(RAISE_VARARGS_TWO)
@@ -114,7 +124,6 @@ public:
     UNIMPLEMENTED(YIELD_VALUE)
 
     UNIMPLEMENTED_I(LOAD_ATTR)
-    UNIMPLEMENTED_I(STORE_FAST)
     UNIMPLEMENTED_I(STORE_ATTR)
     UNIMPLEMENTED_I(DELETE_FAST)
     UNIMPLEMENTED_I(DELETE_ATTR)
@@ -140,10 +149,6 @@ public:
     UNIMPLEMENTED_J(POP_JUMP_IF_TRUE);
     UNIMPLEMENTED_J(JUMP_IF_FALSE_OR_POP);
     UNIMPLEMENTED_J(JUMP_IF_TRUE_OR_POP);
-    UNIMPLEMENTED_J(JUMP_FORWARD);
-    UNIMPLEMENTED_J(JUMP_ABSOLUTE);
-    UNIMPLEMENTED_J(SETUP_LOOP);
-    UNIMPLEMENTED_J(FOR_ITER);
     UNIMPLEMENTED_J(CONTINUE_LOOP);
     UNIMPLEMENTED_J(SETUP_EXCEPT);
     UNIMPLEMENTED_J(SETUP_FINALLY);
@@ -159,11 +164,19 @@ private:
     /// isn't PyObject* or a subclass.
     void IncRef(llvm::Value *value);
     void DecRef(llvm::Value *value);
+    void XDecRef(llvm::Value *value);
     /// These two push or pop a value onto or off of the stack. The
     /// behavior is undefined if the Value's type isn't PyObject* or a
-    /// subclass.
+    /// subclass.  These do no refcount operations.  You have to
+    /// ensure that a pointer in the live part of the stack owns a
+    /// reference.
     void Push(llvm::Value *value);
     llvm::Value *Pop();
+
+    // Replaces a local variable with the PyObject* stored in
+    // new_value.  Decrements the original value's refcount after
+    // replacing it.
+    void SetLocal(int locals_index, llvm::Value *new_value);
 
     /// Inserts a call that will abort the program when it's
     /// reached. This is useful for not-yet-defined instructions.
@@ -172,8 +185,22 @@ private:
     /// Like format_exc_check_arg in ceval.cc.  exc_name and format_str are
     /// runtime constants; obj is computed.
     void FormatExcCheckArg(const std::string &exc_name,
-                           const std::string &format_str,
+                           const char *format_str,
                            llvm::Value *obj);
+
+    // Returns the global variable with type T and name 'name'. The
+    // variable will be looked up in Python's runtime.
+    template<typename T>
+    llvm::Constant *GetGlobalVariable(const std::string &name);
+    // Returns the global function with type T and name 'name'. The
+    // function will be looked up in Python's runtime.
+    template<typename T>
+    llvm::Function *GetGlobalFunction(const std::string &name);
+
+    // Returns an i1, true if value represents a NULL pointer.
+    llvm::Value *IsNull(llvm::Value *value);
+    // Returns an i1, true if value is a non-zero integer.
+    llvm::Value *IsNonZero(llvm::Value *value);
 
     llvm::Module *const module_;
     llvm::Function *const function_;

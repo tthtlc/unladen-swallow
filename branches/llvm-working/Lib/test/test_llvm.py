@@ -130,8 +130,6 @@ entry:
 
     def test_unbound_local(self):
         def foo():
-            # STORE_FAST(a) isn't implemented yet, but the
-            # UnboundLocalError is raised before we get there.
             a = a
         foo.__code__.__use_llvm__ = True
         try:
@@ -141,6 +139,45 @@ entry:
                 str(e), "local variable 'a' referenced before assignment")
         else:
             self.fail("Expected UnboundLocalError")
+
+    def test_assign(self):
+        def foo(a):
+            b = a
+            return b
+        foo.__code__.__use_llvm__ = True
+        self.assertEquals(3, foo(3))
+        self.assertEquals("Hello", foo("Hello"))
+
+    def test_raising_getiter(self):
+        class RaisingIter(object):
+            def __iter__(self):
+                raise RuntimeError
+        def loop(range):
+            for i in range:
+                pass
+        loop.__code__.__use_llvm__ = True
+        self.assertRaises(RuntimeError, loop, RaisingIter())
+
+    def test_raising_next(self):
+        class RaisingNext(object):
+            def __iter__(self):
+                return self
+            def next(self):
+                raise RuntimeError
+        def loop(range):
+            for i in range:
+                pass
+        loop.__code__.__use_llvm__ = True
+        self.assertRaises(RuntimeError, loop, RaisingNext())
+
+    def test_loop(self):
+        def loop(range):
+            for i in range:
+                pass
+        loop.__code__.__use_llvm__ = True
+        r = iter(range(12))
+        self.assertEquals(None, loop(r))
+        self.assertRaises(StopIteration, next, r)
 
 
 def test_main():
