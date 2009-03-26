@@ -220,4 +220,4 @@ private:
 
 }  // namespace py
 
-#endif PYTHON_LL_COMPILE_H
+#endif /* PYTHON_LL_COMPILE_H */
