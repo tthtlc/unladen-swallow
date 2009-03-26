@@ -24,7 +24,7 @@ Note: The [http://chaoticjava.com/posts/parallel-and-concurrent-garbage-collecto
 
 == Overall Architecture ==
 
-It is not our intent to come up with a novel algorithm for a GC, but rather to leverage the work that has already been done. Unfortunately, it is infeasible to evaluate the merits of all of the various collectors out there, since very few GCs are open source or even available in binary form (for some reason, academics who do research on GCs like to publish papers but not code.)
+It is not our intent to come up with a novel algorithm for a GC, but rather to leverage the work that has already been done. Unfortunately, it is infeasible to evaluate the merits of all of the various collectors out there, since very few GCs are open source or even available in binary form.
 
 However, what we can do is notice that over the last few years there has been a gradual convergences of GC architectures into a small number of designs which have gained widespread popularity. From this set, we are currently considering two contenders:
 
