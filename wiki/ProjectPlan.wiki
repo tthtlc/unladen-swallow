@@ -57,6 +57,8 @@ foo(2)
 
 We intend to structure Unladen Swallow's internals to assume that multiple cores are available for our use. Servers are only going to acquire more and more cores, and we want to exploit that to do more and more work in parallel. For example, we would like to have a concurrent code optimizer that applies increasingly-expensive (and beneficial!) optimizations in parallel with code execution, using another core to do the work. We are also considering [GarbageCollector a concurrent garbage collector] that would, again, utilize additional cores to offload work units. Since most production server machines are shipping with between 4 and 32 cores, we believe this avenue of optimization is potentially lucrative. However, we will have to be sensitive to the needs of highly-parallel applications and not consume extra cores blindly.
 
+Note that many of the areas we will need to address have been considered and developed by the other dynamic language implementations like [http://jruby.codehaus.org/ JRuby], [http://rubini.us/ Rubinius] and [http://www.parrot.org/ Parrot], and in particular other Python implementations like [http://www.jython.org/Project/ Jython], [http://codespeak.net/pypy/dist/pypy/doc/ PyPy], and [http://www.codeplex.com/Wiki/View.aspx?ProjectName=IronPython IronPython]. In particular, we're looking at these other implementations for ideas on debug information, regex performance ideas, and generally useful performance ideas for dynamic languages. This is all fairly well-trodden ground, and we want to avoid reinventing the wheel as much as possible.
+
 
 = Milestones =
 
@@ -75,6 +77,7 @@ Ideas for achieving this goal:
   * Simplify frame objects to make frame alloc/dealloc faster.
   * Implement one of the several proposed schemes for speeding lookups of globals and builtins.
 
+The 2009Q1 release can be found in the [http://code.google.com/p/unladen-swallow/source/browse/branches/release-2009Q1-maint release-2009Q1-maint branch]. See [Releases] for our performance relative to CPython 2.6.1.
 
 == 2009 Q2 ==
 
