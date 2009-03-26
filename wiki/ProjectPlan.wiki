@@ -66,7 +66,7 @@ Unladen Swallow will be released every three months, with bugfix releases in bet
 
 == 2009 Q1 ==
 
-Q1 will be spent making relatively minor tweaks to the existing CPython implementation. We aim for a 25-35% performance improvement over our baseline.
+Q1 will be spent making relatively minor tweaks to the existing CPython implementation. We aim for a 25-35% performance improvement over our baseline. Our goals for this quarter are conservative, and are aimed at delivering tangible performance benefits to client applications as soon as possible, that is, without waiting until the completion of the project.
 
 Ideas for achieving this goal:
   * Re-implement the eval loop in terms of [http://www.complang.tuwien.ac.at/anton/vmgen/ vmgen].
