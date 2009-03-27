@@ -184,7 +184,8 @@ Unladen Swallow maintains a [http://buildbot.net/trac BuildBot] instance that ru
 = Risks =
 
   * *May not be able to merge back into mainline.* There are vocal, conservative senior members of the Python core development community who may oppose the merger of our work, since it will represent such a significant change. This is a good thing! Resistance to change can be very healthy in situations like this, as it will force a thorough, public examination of our patches and their possible long-term impact on the maintenance of CPython -- this is open source, and another set of eyes is always welcome. We believe we can justify the changes we're proposing, and by keeping in close coordination with Guido and other senior members of the community we hope to limit our work to only changes that have a good chance of being accepted. However: there is still the chance that some patches will be rejected. Accordingly, we may be stuck supporting a de facto separate implementation of Python, or as a compromise, not being as fast as we'd like. C'est la vie.
-  * *LLVM comes with a lot of unknowns:*  Impact on extension modules? JIT behaviour in multithreaded apps? Impact on Python start-up time? Will probably kill Python Windows support (for now).
+  * *LLVM comes with a lot of unknowns:*  Impact on extension modules? JIT behaviour in multithreaded apps? Impact on Python start-up time?
+  * *Windows support:* CPython currently has good Windows support, and we'll have to maintain that in order for our patches to be merged into mainline. Since none of the Unladen Swallow engineers have any/much Windows experience or even Windows machines, keeping Windows support at an acceptable level may slow down our forward progress or force us to disable some performance-beneficial code on Windows. Community contributions may be able to help with this.
 
 = Communication =
 
