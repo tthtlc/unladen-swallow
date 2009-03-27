@@ -157,4 +157,4 @@ public:
 
 }  // namespace py
 
-#endif UTIL_TYPEBUILDER_H
+#endif /* UTIL_TYPEBUILDER_H */
