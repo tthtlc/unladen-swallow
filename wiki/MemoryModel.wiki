@@ -9,7 +9,7 @@ I sent this model out in May 2008, but didn't get many responses. For now, Unlad
 ----
                                                                      
 {{{
-PEP: 4321
+PEP: ???
 Title: A Concurrency Memory Model for Python
 Version: $Revision: 56116 $
 Last-Modified: $Date: 2007-06-28 12:53:41 -0700 (Thu, 28 Jun 2007) $
@@ -792,7 +792,7 @@ References
 
 .. [#JMM-popl] The Java Memory Model, by Jeremy Manson, Bill Pugh, and
    Sarita Adve
-   (http://www.cs.umd.edu/users/jmanson/java/journal.pdf). This paper
+   (http://unladen-swallow.googlecode.com/files/journal.pdf). This paper
    is an excellent introduction to memory models in general and has
    lots of examples of compiler/processor optimizations and the
    strange program behaviors they can produce.
