@@ -1,6 +1,6 @@
 #summary Frequently Asked Questions
 
-== Q: Why base your Unladen Swallow on 2.6.1 instead of 3.x? ==
+== Q: Why base Unladen Swallow on 2.6.1 instead of 3.x? ==
 
 A: We're based on the 2.6.1 branch because of internal considerations. Google's currently running 2.4 internally, and we want to offer our internal users an easy and stable target for porting. Python 2.7 is still in flux, and will be through the entire life of this project, and 3.0 would be too big a jump for our existing client applications. We want to make it as easy as possible for large applications to obtain the performance benefits we're offering.
 
