@@ -44,6 +44,40 @@ public:
 
     void RETURN_VALUE();
 
+    void BINARY_ADD();
+    void BINARY_SUBTRACT();
+    void BINARY_MULTIPLY();
+    void BINARY_TRUE_DIVIDE();
+    void BINARY_DIVIDE();
+    void BINARY_MODULO();
+    void BINARY_POWER();
+    void BINARY_LSHIFT();
+    void BINARY_RSHIFT();
+    void BINARY_OR();
+    void BINARY_XOR();
+    void BINARY_AND();
+    void BINARY_FLOOR_DIVIDE();
+    void BINARY_SUBSCR();
+
+    void INPLACE_ADD();
+    void INPLACE_SUBTRACT();
+    void INPLACE_MULTIPLY();
+    void INPLACE_TRUE_DIVIDE();
+    void INPLACE_DIVIDE();
+    void INPLACE_MODULO();
+    void INPLACE_POWER();
+    void INPLACE_LSHIFT();
+    void INPLACE_RSHIFT();
+    void INPLACE_OR();
+    void INPLACE_XOR();
+    void INPLACE_AND();
+    void INPLACE_FLOOR_DIVIDE();
+
+    void UNARY_CONVERT();
+    void UNARY_INVERT();
+    void UNARY_POSITIVE();
+    void UNARY_NEGATIVE();
+
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
         InsertAbort(); \
@@ -64,38 +98,7 @@ public:
     UNIMPLEMENTED(ROT_TWO)
     UNIMPLEMENTED(ROT_THREE)
     UNIMPLEMENTED(ROT_FOUR)
-    UNIMPLEMENTED(UNARY_CONVERT)
-    UNIMPLEMENTED(UNARY_INVERT)
     UNIMPLEMENTED(UNARY_NOT)
-    UNIMPLEMENTED(UNARY_POSITIVE)
-    UNIMPLEMENTED(UNARY_NEGATIVE)
-    UNIMPLEMENTED(BINARY_ADD)
-    UNIMPLEMENTED(BINARY_SUBTRACT)
-    UNIMPLEMENTED(BINARY_MULTIPLY)
-    UNIMPLEMENTED(BINARY_TRUE_DIVIDE)
-    UNIMPLEMENTED(BINARY_DIVIDE)
-    UNIMPLEMENTED(BINARY_MODULO)
-    UNIMPLEMENTED(BINARY_POWER)
-    UNIMPLEMENTED(BINARY_LSHIFT)
-    UNIMPLEMENTED(BINARY_RSHIFT)
-    UNIMPLEMENTED(BINARY_OR)
-    UNIMPLEMENTED(BINARY_XOR)
-    UNIMPLEMENTED(BINARY_AND)
-    UNIMPLEMENTED(BINARY_FLOOR_DIVIDE)
-    UNIMPLEMENTED(BINARY_SUBSCR)
-    UNIMPLEMENTED(INPLACE_ADD)
-    UNIMPLEMENTED(INPLACE_SUBTRACT)
-    UNIMPLEMENTED(INPLACE_MULTIPLY)
-    UNIMPLEMENTED(INPLACE_TRUE_DIVIDE)
-    UNIMPLEMENTED(INPLACE_DIVIDE)
-    UNIMPLEMENTED(INPLACE_MODULO)
-    UNIMPLEMENTED(INPLACE_POWER)
-    UNIMPLEMENTED(INPLACE_LSHIFT)
-    UNIMPLEMENTED(INPLACE_RSHIFT)
-    UNIMPLEMENTED(INPLACE_OR)
-    UNIMPLEMENTED(INPLACE_XOR)
-    UNIMPLEMENTED(INPLACE_AND)
-    UNIMPLEMENTED(INPLACE_FLOOR_DIVIDE)
     UNIMPLEMENTED(STORE_SUBSCR)
     UNIMPLEMENTED(DELETE_SUBSCR)
     UNIMPLEMENTED(SLICE_NONE);
@@ -201,6 +204,11 @@ private:
     llvm::Value *IsNull(llvm::Value *value);
     // Returns an i1, true if value is a non-zero integer.
     llvm::Value *IsNonZero(llvm::Value *value);
+
+    // Helper methods for binary and unary operators
+    void GenericBinOp(const char *name, const char *funcname);
+    void GenericPowOp(const char *name, const char *funcname);
+    void GenericUnaryOp(const char *name, const char *funcname);
 
     llvm::Module *const module_;
     llvm::Function *const function_;

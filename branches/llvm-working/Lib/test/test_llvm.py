@@ -179,6 +179,51 @@ entry:
         self.assertEquals(None, loop(r))
         self.assertRaises(StopIteration, next, r)
 
+    def test_basic_arithmetic(self):
+        def arithmetic(x):
+            x = x + 1
+            x = x * 2
+            x = x ** 2
+            x = x - 8
+            x = x // 5
+            x = x % 3
+            x = x & 2
+            x = x | 5
+            x = x ^ 1
+            x = x / 2
+            return x
+        arithmetic.__code__.__use_llvm__ = True
+        self.assertEquals(arithmetic(2), 3)
+
+    def test_basic_augassign(self):
+        def augassign(x):
+            x += 1
+            x *= 2
+            x **= 2
+            x -= 8
+            x //= 5
+            x %= 3
+            x &= 2
+            x |= 5
+            x ^= 1
+            x /= 2
+            return x
+        augassign.__code__.__use_llvm__ = True
+        self.assertEquals(augassign(2), 3)
+
+    def test_basic_unary(self):
+        def unary(x):
+            x = ~x
+            x = -x
+            x = --x
+            x = ---x
+            x = +x
+            x = ++x
+            x = +++x
+            x = ~x
+            return x
+        unary.__code__.__use_llvm__ = True
+        self.assertEquals(unary(10), 10)
 
 def test_main():
     run_unittest(LlvmTests)

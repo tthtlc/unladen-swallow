@@ -653,6 +653,99 @@ LlvmFunctionBuilder::RETURN_VALUE()
 }
 
 
+void
+LlvmFunctionBuilder::GenericBinOp(const char *name, const char *funcname)
+{
+    Value *rhs = Pop();
+    Value *lhs = Pop();
+    Function *op =
+        GetGlobalFunction<PyObject*(PyObject*, PyObject*)>(funcname);
+    Value *result = builder().CreateCall2(op, lhs, rhs, name);
+    Push(result);
+}
+
+#define BINOP_METH(OPCODE, FUNCNAME) 		\
+void						\
+LlvmFunctionBuilder:: OPCODE ()			\
+{						\
+    GenericBinOp(#OPCODE, #FUNCNAME);		\
+}
+
+BINOP_METH(BINARY_ADD, PyNumber_Add)
+BINOP_METH(BINARY_SUBTRACT, PyNumber_Subtract)
+BINOP_METH(BINARY_MULTIPLY, PyNumber_Multiply)
+BINOP_METH(BINARY_TRUE_DIVIDE, PyNumber_TrueDivide)
+BINOP_METH(BINARY_DIVIDE, PyNumber_Divide)
+BINOP_METH(BINARY_MODULO, PyNumber_Remainder)
+BINOP_METH(BINARY_LSHIFT, PyNumber_Lshift)
+BINOP_METH(BINARY_RSHIFT, PyNumber_Rshift)
+BINOP_METH(BINARY_OR, PyNumber_Or)
+BINOP_METH(BINARY_XOR, PyNumber_Xor)
+BINOP_METH(BINARY_AND, PyNumber_And)
+BINOP_METH(BINARY_FLOOR_DIVIDE, PyNumber_FloorDivide)
+BINOP_METH(BINARY_SUBSCR, PyObject_GetItem)
+
+BINOP_METH(INPLACE_ADD, PyNumber_InPlaceAdd)
+BINOP_METH(INPLACE_SUBTRACT, PyNumber_InPlaceAdd)
+BINOP_METH(INPLACE_MULTIPLY, PyNumber_InPlaceMultiply)
+BINOP_METH(INPLACE_TRUE_DIVIDE, PyNumber_InPlaceTrueDivide)
+BINOP_METH(INPLACE_DIVIDE, PyNumber_InPlaceDivide)
+BINOP_METH(INPLACE_MODULO, PyNumber_InPlaceRemainder)
+BINOP_METH(INPLACE_LSHIFT, PyNumber_InplaceLshift)
+BINOP_METH(INPLACE_RSHIFT, PyNumber_InPlaceRshift)
+BINOP_METH(INPLACE_OR, PyNumber_InPlaceOr)
+BINOP_METH(INPLACE_XOR, PyNumber_InPlaceXor)
+BINOP_METH(INPLACE_AND, PyNumber_InPlaceAnd)
+BINOP_METH(INPLACE_FLOOR_DIVIDE, PyNumber_InPlaceFloorDivide)
+
+
+// PyNumber_Power() and PyNumber_InPlacePower() take three arguments, the
+// third being unused when called from BINARY_POWER/INPLACE_POWER.
+void
+LlvmFunctionBuilder::GenericPowOp(const char *name, const char *funcname)
+{
+    Value *rhs = Pop();
+    Value *lhs = Pop();
+    Function *op = GetGlobalFunction<PyObject*(PyObject*, PyObject*,
+        PyObject *)>(funcname);
+    Value *noval = GetGlobalVariable<PyObject>("_Py_NoneStruct");
+    Value *result = builder().CreateCall3(op, lhs, rhs, noval, name);
+    Push(result);
+}
+
+void
+LlvmFunctionBuilder::BINARY_POWER()
+{
+    GenericPowOp("BINARY_POWER", "PyNumber_Power");
+}
+
+void
+LlvmFunctionBuilder::INPLACE_POWER()
+{
+    GenericPowOp("INPLACE_POWER", "PyNumber_InPlacePower");
+}
+
+void
+LlvmFunctionBuilder::GenericUnaryOp(const char *name, const char *funcname)
+{
+    Value *val = Pop();
+    Function *op = GetGlobalFunction<PyObject*(PyObject*)>(funcname);
+    Value *result = builder().CreateCall(op, val, name);
+    Push(result);
+}
+
+#define UNARYOP_METH(NAME, FUNCNAME)			\
+void							\
+LlvmFunctionBuilder:: NAME ()				\
+{							\
+    GenericUnaryOp(#NAME, #FUNCNAME);			\
+}
+
+UNARYOP_METH(UNARY_CONVERT, PyNumber_Convert)
+UNARYOP_METH(UNARY_INVERT, PyNumber_Invert)
+UNARYOP_METH(UNARY_POSITIVE, PyNumber_Positive)
+UNARYOP_METH(UNARY_NEGATIVE, PyNumber_Negative)
+
 // Adds delta to *addr, and returns the new value.
 static Value *
 increment_and_get(llvm::IRBuilder<>& builder, Value *addr, int64_t delta)
