@@ -746,6 +746,41 @@ UNARYOP_METH(UNARY_INVERT, PyNumber_Invert)
 UNARYOP_METH(UNARY_POSITIVE, PyNumber_Positive)
 UNARYOP_METH(UNARY_NEGATIVE, PyNumber_Negative)
 
+void
+LlvmFunctionBuilder::UNARY_NOT()
+{
+     BasicBlock *endbb = BasicBlock::Create("UNARY_NOT_end", function());
+     BasicBlock *falsebb = BasicBlock::Create("UNARY_NOT_false", function());
+     BasicBlock *truebb = BasicBlock::Create("UNARY_NOT_true", function());
+     BasicBlock *noerrbb = BasicBlock::Create("UNARY_NOT_noerr", function());
+     BasicBlock *errbb = BasicBlock::Create("UNARY_NOT_err", function());
+
+     Value *val = Pop();
+     Value *endresult = NULL;
+     Function *op = GetGlobalFunction<int(PyObject *)>("PyObject_IsTrue");
+     Value *result = builder().CreateCall(op, val, "UNARY_NOT");
+     Value *zero = Constant::getNullValue(result->getType());
+     Value *iserr = builder().CreateICmpSLT(result, zero, "UNARY_NOT_iserr");
+     builder().CreateCondBr(iserr, errbb, noerrbb);
+     
+     builder().SetInsertPoint(errbb);
+     builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
+
+     builder().SetInsertPoint(noerrbb);
+     Value *istrue = builder().CreateICmpSGT(result, zero, "UNARY_NOT_istrue");
+     builder().CreateCondBr(istrue, truebb, falsebb);
+
+     builder().SetInsertPoint(truebb);
+     Push(GetGlobalVariable<PyObject>("_Py_ZeroStruct"));
+     builder().CreateBr(endbb);
+
+     builder().SetInsertPoint(falsebb);
+     Push(GetGlobalVariable<PyObject>("_Py_TrueStruct"));
+     builder().CreateBr(endbb);
+     
+     builder().SetInsertPoint(endbb);
+}
+
 // Adds delta to *addr, and returns the new value.
 static Value *
 increment_and_get(llvm::IRBuilder<>& builder, Value *addr, int64_t delta)

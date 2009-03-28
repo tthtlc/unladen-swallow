@@ -225,6 +225,15 @@ entry:
         unary.__code__.__use_llvm__ = True
         self.assertEquals(unary(10), 10)
 
+    def test_unary_not(self):
+        def unary_not(x):
+            return not x
+        unary_not.__code__.__use_llvm__ = True
+        self.assertEquals(unary_not(True), False)
+        self.assertEquals(unary_not(False), True)
+        self.assertEquals(unary_not([]), True)
+        self.assertEquals(unary_not("false"), False)
+
 def test_main():
     run_unittest(LlvmTests)
 
