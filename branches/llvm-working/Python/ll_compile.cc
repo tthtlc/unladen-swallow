@@ -781,6 +781,108 @@ LlvmFunctionBuilder::UNARY_NOT()
      builder().SetInsertPoint(endbb);
 }
 
+void
+LlvmFunctionBuilder::STORE_SUBSCR()
+{
+    Value *idx = Pop();
+    Value *obj = Pop();
+    Value *val = Pop();
+    Function *op = GetGlobalFunction<PyObject *
+          (PyObject *, PyObject *, PyObject *)>("PyObject_SetItem");
+    Value *result = builder().CreateCall3(op, obj, idx, val, "STORE_SUBSCR");
+    Push(result);
+}
+
+void
+LlvmFunctionBuilder::DELETE_SUBSCR()
+{
+    Value *idx = Pop();
+    Value *obj = Pop();
+    Function *op = GetGlobalFunction<PyObject *
+          (PyObject *, PyObject *)>("PyObject_DelItem");
+    Value *result = builder().CreateCall2(op, obj, idx, "DELETE_SUBSCR");
+    Push(result);
+}
+
+void
+LlvmFunctionBuilder::POP_TOP()
+{
+     Value *top = Pop();
+     DecRef(top);
+}
+
+void
+LlvmFunctionBuilder::DUP_TOP()
+{
+     Value *top = Pop();
+     IncRef(top);
+     Push(top);
+     Push(top);
+}
+
+void
+LlvmFunctionBuilder::DUP_TOP_TWO()
+{
+     Value *top = Pop();
+     Value *bottom = Pop();
+     IncRef(top);
+     IncRef(bottom);
+     Push(bottom);
+     Push(top);
+     Push(bottom);
+     Push(top);
+}
+
+void
+LlvmFunctionBuilder::DUP_TOP_THREE()
+{
+     Value *top = Pop();
+     Value *middle = Pop();
+     Value *bottom = Pop();
+     IncRef(top);
+     IncRef(middle);
+     IncRef(bottom);
+     Push(bottom);
+     Push(middle);
+     Push(top);
+     Push(bottom);
+     Push(middle);
+     Push(top);
+}
+
+void
+LlvmFunctionBuilder::ROT_TWO()
+{
+     Value *top = Pop();
+     Value *bottom = Pop();
+     Push(top);
+     Push(bottom);
+}
+
+void
+LlvmFunctionBuilder::ROT_THREE()
+{
+     Value *top = Pop();
+     Value *middle = Pop();
+     Value *bottom = Pop();
+     Push(top);
+     Push(bottom);
+     Push(middle);
+}
+
+void
+LlvmFunctionBuilder::ROT_FOUR()
+{
+     Value *top = Pop();
+     Value *second = Pop();
+     Value *third = Pop();
+     Value *bottom = Pop();
+     Push(top);
+     Push(bottom);
+     Push(third);
+     Push(second);
+}
+
 // Adds delta to *addr, and returns the new value.
 static Value *
 increment_and_get(llvm::IRBuilder<>& builder, Value *addr, int64_t delta)

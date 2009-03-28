@@ -234,6 +234,15 @@ entry:
         self.assertEquals(unary_not([]), True)
         self.assertEquals(unary_not("false"), False)
 
+    def test_subscr(self):
+        def subscr(x):
+            x[0] = x[1]
+            x[0] += 10
+            del x[1]
+            return x
+        subscr.__code__.__use_llvm__ = True
+        self.assertEquals(subscr([1, 2, 3]), [12, 3])
+
 def test_main():
     run_unittest(LlvmTests)
 

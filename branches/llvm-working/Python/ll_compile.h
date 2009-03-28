@@ -79,6 +79,17 @@ public:
     void UNARY_NEGATIVE();
     void UNARY_NOT();
 
+    void STORE_SUBSCR();
+    void DELETE_SUBSCR();
+
+    void POP_TOP();
+    void DUP_TOP();
+    void DUP_TOP_TWO();
+    void DUP_TOP_THREE();
+    void ROT_TWO();
+    void ROT_THREE();
+    void ROT_FOUR();
+
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
         InsertAbort(); \
@@ -92,15 +103,6 @@ public:
         InsertAbort(); \
     }
 
-    UNIMPLEMENTED(POP_TOP)
-    UNIMPLEMENTED(DUP_TOP)
-    UNIMPLEMENTED(DUP_TOP_TWO)
-    UNIMPLEMENTED(DUP_TOP_THREE)
-    UNIMPLEMENTED(ROT_TWO)
-    UNIMPLEMENTED(ROT_THREE)
-    UNIMPLEMENTED(ROT_FOUR)
-    UNIMPLEMENTED(STORE_SUBSCR)
-    UNIMPLEMENTED(DELETE_SUBSCR)
     UNIMPLEMENTED(SLICE_NONE);
     UNIMPLEMENTED(SLICE_LEFT);
     UNIMPLEMENTED(SLICE_RIGHT);
