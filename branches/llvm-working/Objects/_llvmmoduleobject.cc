@@ -108,9 +108,6 @@ static void
 llvmmodule_dealloc(PyLlvmModuleObject *moduleobj)
 {
     PyInterpreterState *interp = PyThreadState_Get()->interp;
-    // Hands ownership of the_module to the ExecutionEngine. We'll
-    // tell the ExecutionEngine to delete it when our refcount goes to
-    // zero.
     interp->global_llvm_data->getExecutionEngine()->deleteModuleProvider(
         (llvm::ModuleProvider *)moduleobj->module_provider);
 }

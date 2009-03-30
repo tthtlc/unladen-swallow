@@ -973,6 +973,12 @@ compiler_addop(struct compiler *c, int opcode,
 	return 1;
 }
 
+// Adds 'o' to the mapping stored in 'dict' (if it wasn't already
+// there) so it can be looked up by opcodes like LOAD_CONST and
+// LOAD_NAME.  This function derives a tuple from o to avoid pairs of
+// values like 0.0 and -0.0 or 0 and 0.0 that compare equal but need
+// to be kept separate.  'o' is mapped to a small integer, and its
+// mapping is returned.
 static int
 compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
 {
@@ -1053,6 +1059,12 @@ compiler_add_o(struct compiler *c, PyObject *dict, PyObject *o)
 	return arg;
 }
 
+// Adds opcode(o) as the next instruction in the current basic block.
+// Because opcodes only take integer arguments, we give 'o' a number
+// unique within 'dict' and store the mapping in 'dict'.  We also call
+// 'method()' to add the same opcode to the LLVM function.  'dict' is
+// one of c->u->u_{consts,names,varnames} and must match the
+// code::co_list that 'opcode' looks in.
 static int
 compiler_addop_o(struct compiler *c, int opcode,
 		 void (py::LlvmFunctionBuilder::*method)(int),
@@ -1064,6 +1076,7 @@ compiler_addop_o(struct compiler *c, int opcode,
     return compiler_addop_i(c, opcode, method, arg);
 }
 
+// Mangles 'o' and then behaves like compiler_addop_o.
 static int
 compiler_addop_name(struct compiler *c, int opcode,
 		    void (py::LlvmFunctionBuilder::*method)(int),
@@ -1103,6 +1116,8 @@ compiler_addop_i(struct compiler *c, int opcode,
 	return 1;
 }
 
+// Adds a jump opcode whose target is 'b'. This works for both
+// conditional and unconditional jumps.
 static int
 compiler_addop_j(struct compiler *c, int opcode,
 		 void (py::LlvmFunctionBuilder::*method)(
@@ -2553,6 +2568,10 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
 					"param invalid for local variable");
 			return 0;
 		}
+		// This switch is equivalent to ADDOP_O(c, op,
+		// mangled, varnames) but allows the preprocessor to
+		// construct &py::LlvmFunctionBuilder::LOAD_FAST
+		// instead of ...::op.
 		switch (op) {
 		case LOAD_FAST:
 			ADDOP_O(c, LOAD_FAST, mangled, varnames);
