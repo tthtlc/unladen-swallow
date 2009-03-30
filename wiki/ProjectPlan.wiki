@@ -1,6 +1,6 @@
 #summary Plans for optimizing Python
 
-<font size="1">NB: all cited papers are linked on [RelevantPapers].</font>
+<font size="1">NB: all cited papers are linked on [RelevantPapers]. This document is also [http://danmarner.yo2.cn/unladen-swallow-project-plan/ available in Chinese], though we can't vouch for the translation.</font>
 
 = Goals =
 
