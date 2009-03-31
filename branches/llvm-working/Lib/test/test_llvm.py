@@ -242,6 +242,49 @@ entry:
             return x
         subscr.__code__.__use_llvm__ = True
         self.assertEquals(subscr([1, 2, 3]), [12, 3])
+        
+    def test_listcomp(self):
+        def listcomp(x):
+            return [ item+1 for item in x ]
+        listcomp.__code__.__use_llvm__ = True
+        self.assertEquals(listcomp([1, 2, 3]), [2, 3, 4])
+        
+        def listcomp(x):
+            return [ [ i + j for j in x ] for i in x ]
+        listcomp.__code__.__use_llvm__ = True
+        self.assertEquals(listcomp([1, 2, 3]), [[2, 3, 4], [3, 4, 5],
+                                                [4, 5, 6]])
+
+    def test_literals(self):
+        def lits(x):
+            return (1, x, 3)
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), (1, 2, 3))
+        def lits(x):
+            return (1, x, (3, 4, x), 1)
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), (1, 2, (3, 4, 2), 1))
+        def lits(x):
+            return [1, x, 3]
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), [1, 2, 3])
+        def lits(x):
+            return [1, x, [3, 2], 1]
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), [1, 2, [3, 2], 1])
+        def lits(x):
+            return {1: x, 3: 4}
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), {1: 2, 3: 4})
+        def lits(x):
+            return {(1, x): {3: x}, x: 1}
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), {(1, 2): {3: 2}, 2: 1})
+        def lits(x):
+            return (1, x, 3, (3, 4), [3, x, 1], {1: x, 3: 4 })
+        lits.__code__.__use_llvm__ = True
+        self.assertEquals(lits(2), (1, 2, 3, (3, 4), [3, 2, 1], {1: 2, 3: 4}))
+
 
 def test_main():
     run_unittest(LlvmTests)

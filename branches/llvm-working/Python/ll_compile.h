@@ -31,6 +31,7 @@ public:
     void LOAD_CONST(int index);
     void LOAD_FAST(int index);
     void STORE_FAST(int index);
+    void DELETE_FAST(int index);
 
     void SETUP_LOOP(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
     void GET_ITER();
@@ -89,6 +90,12 @@ public:
     void ROT_TWO();
     void ROT_THREE();
     void ROT_FOUR();
+    void LIST_APPEND();
+    void STORE_MAP();
+
+    void BUILD_TUPLE(int size);
+    void BUILD_LIST(int size);
+    void BUILD_MAP(int size);
 
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
@@ -115,8 +122,6 @@ public:
     UNIMPLEMENTED(DELETE_SLICE_LEFT);
     UNIMPLEMENTED(DELETE_SLICE_RIGHT);
     UNIMPLEMENTED(DELETE_SLICE_BOTH);
-    UNIMPLEMENTED(LIST_APPEND)
-    UNIMPLEMENTED(STORE_MAP)
     UNIMPLEMENTED(BUILD_SLICE_TWO)
     UNIMPLEMENTED(BUILD_SLICE_THREE)
     UNIMPLEMENTED(BREAK_LOOP)
@@ -130,7 +135,6 @@ public:
 
     UNIMPLEMENTED_I(LOAD_ATTR)
     UNIMPLEMENTED_I(STORE_ATTR)
-    UNIMPLEMENTED_I(DELETE_FAST)
     UNIMPLEMENTED_I(DELETE_ATTR)
     UNIMPLEMENTED_I(LOAD_DEREF);
     UNIMPLEMENTED_I(STORE_DEREF);
@@ -146,9 +150,6 @@ public:
     UNIMPLEMENTED_I(MAKE_CLOSURE)
     UNIMPLEMENTED_I(COMPARE_OP)
     UNIMPLEMENTED_I(UNPACK_SEQUENCE)
-    UNIMPLEMENTED_I(BUILD_TUPLE)
-    UNIMPLEMENTED_I(BUILD_LIST)
-    UNIMPLEMENTED_I(BUILD_MAP)
 
     UNIMPLEMENTED_J(POP_JUMP_IF_FALSE);
     UNIMPLEMENTED_J(POP_JUMP_IF_TRUE);
@@ -211,6 +212,14 @@ private:
     void GenericBinOp(const char *name, const char *funcname);
     void GenericPowOp(const char *name, const char *funcname);
     void GenericUnaryOp(const char *name, const char *funcname);
+
+    // Helper methods for list and tuple indexing
+    void List_SET_ITEM(llvm::Value *lst, llvm::Value *idx, llvm::Value *item);
+    void Tuple_SET_ITEM(llvm::Value *tup, llvm::Value *idx, llvm::Value *item);
+
+    void SequenceBuilder(int size, const char *createname,
+        void (LlvmFunctionBuilder::*method)(llvm::Value *, llvm::Value *,
+                                            llvm::Value *));
 
     llvm::Module *const module_;
     llvm::Function *const function_;
