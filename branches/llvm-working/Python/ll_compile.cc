@@ -6,6 +6,7 @@
 
 #include "Util/TypeBuilder.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/BasicBlock.h"
 #include "llvm/Constant.h"
 #include "llvm/Constants.h"
@@ -29,6 +30,7 @@ using llvm::PHINode;
 using llvm::PointerType;
 using llvm::Type;
 using llvm::Value;
+using llvm::array_endof;
 
 namespace py {
 
@@ -449,12 +451,12 @@ public:
 };
 typedef TypeBuilder<PyFrameObject> FrameTy;
 
-static const llvm::FunctionType *
+static const FunctionType *
 get_function_type(Module *module)
 {
     std::string function_type_name("__function_type");
-    const llvm::FunctionType *result =
-        llvm::cast_or_null<llvm::FunctionType>(
+    const FunctionType *result =
+        llvm::cast_or_null<FunctionType>(
             module->getTypeByName(function_type_name));
     if (result != NULL)
         return result;
@@ -505,25 +507,28 @@ LlvmFunctionBuilder::LlvmFunctionBuilder(
             builder().CreateLoad(
                 builder().CreateStructGEP(code, CodeTy::FIELD_CONSTS)),
             TypeBuilder<PyTupleObject*>::cache(module));
+    // The next GEP-magic assigns this->consts_ to &consts_tuple[0].ob_item[0].
     Value *consts_item_indices[] = {
         ConstantInt::get(Type::Int32Ty, 0),
         ConstantInt::get(Type::Int32Ty, TupleTy::FIELD_ITEM),
         ConstantInt::get(Type::Int32Ty, 0),
     };
-    this->consts_ =  // &consts_tuple->ob_item[0]
-        builder().CreateGEP(consts_tuple,
-                            consts_item_indices, end(consts_item_indices),
-                            "consts");
+    this->consts_ =
+        builder().CreateGEP(
+            consts_tuple,
+            consts_item_indices, array_endof(consts_item_indices),
+            "consts");
 
+    // The next GEP-magic assigns this->fastlocals_ to
+    // &frame_[0].f_localsplus[0].
     Value* fastlocals_indices[] = {
-        Constant::getNullValue(Type::Int32Ty),
+        ConstantInt::get(Type::Int32Ty, 0),
         ConstantInt::get(Type::Int32Ty, FrameTy::FIELD_LOCALSPLUS),
-        // Get the address of frame->localsplus[0]
-        Constant::getNullValue(Type::Int32Ty),
+        ConstantInt::get(Type::Int32Ty, 0),
     };
     this->fastlocals_ =
         builder().CreateGEP(this->frame_,
-                            fastlocals_indices, end(fastlocals_indices),
+                            fastlocals_indices, array_endof(fastlocals_indices),
                             "fastlocals");
     Value *nlocals = builder().CreateLoad(
         builder().CreateStructGEP(code, CodeTy::FIELD_NLOCALS), "nlocals");
@@ -568,13 +573,13 @@ LlvmFunctionBuilder::LOAD_FAST(int index)
     builder().CreateCondBr(IsNull(local), unbound_local, success);
 
     builder().SetInsertPoint(unbound_local);
-    Function *tuple_getitem =
-        GetGlobalFunction<PyObject*(PyObject*, Py_ssize_t)>("PyTuple_GetItem");
-    Value *varname = builder().CreateCall2(
-        tuple_getitem, this->varnames_,
-        ConstantInt::get(IntegerType::get(sizeof(Py_ssize_t) * 8),
+    Function *do_raise =
+        GetGlobalFunction<void(PyFrameObject*, int)>(
+            "_PyEval_RaiseForUnboundLocal");
+    builder().CreateCall2(
+        do_raise, this->frame_,
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_),
                          index, true /* signed */));
-    FormatExcCheckArg("PyExc_UnboundLocalError", UNBOUNDLOCAL_ERROR_MSG, varname);
     builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
 
     builder().SetInsertPoint(success);
@@ -1126,7 +1131,7 @@ LlvmFunctionBuilder::DecRef(Value *value)
 #ifdef Py_REF_DEBUG
     builder().SetInsertPoint(block_ref_ne_zero);
     Value *less_zero = builder().CreateICmpSLT(
-        new_refcnt, llvm::Constant::getNullValue(new_refcnt->getType()));
+        new_refcnt, Constant::getNullValue(new_refcnt->getType()));
     BasicBlock *block_ref_lt_zero = BasicBlock::Create("negative_refcount",
                                                  this->function_);
     builder().CreateCondBr(less_zero, block_ref_lt_zero, block_tail);
@@ -1138,7 +1143,7 @@ LlvmFunctionBuilder::DecRef(Value *value)
     builder().CreateCall3(
         neg_refcount,
         builder().CreateGlobalStringPtr(__FILE__, __FILE__),
-        ConstantInt::get(IntegerType::get(sizeof(int) * 8), __LINE__),
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_), __LINE__),
         as_pyobject);
     builder().CreateBr(block_tail);
 #endif
@@ -1202,46 +1207,6 @@ LlvmFunctionBuilder::InsertAbort()
 {
     builder().CreateCall(llvm::Intrinsic::getDeclaration(
                              this->module_, llvm::Intrinsic::trap));
-}
-
-void
-LlvmFunctionBuilder::FormatExcCheckArg(const std::string &exc_name,
-                                       const char *format_str,
-                                       Value *obj)
-{
-    BasicBlock *skip_exc = BasicBlock::Create("end_format_exc", function());
-    BasicBlock *to_string = BasicBlock::Create("to_string", function());
-    BasicBlock *format_block = BasicBlock::Create("format", function());
-
-    builder().CreateCondBr(IsNull(obj), skip_exc, to_string);
-
-    builder().SetInsertPoint(to_string);
-    Function *as_string = GetGlobalFunction<PyObject*(PyObject*)>(
-        "PyString_AsString");
-    Value *obj_str = builder().CreateCall(as_string, obj);
-    builder().CreateCondBr(IsNull(obj_str), skip_exc, format_block);
-
-    builder().SetInsertPoint(format_block);
-    Function *err_format =
-        GetGlobalFunction<PyObject*(PyObject*, const char*, ...)>(
-            "PyErr_Format");
-    llvm::GlobalVariable *exc = this->module_->getGlobalVariable(exc_name);
-    if (exc == NULL) {
-        exc = llvm::cast<llvm::GlobalVariable>(
-            this->module_->getOrInsertGlobal(
-                exc_name,
-                TypeBuilder<PyObject*>::cache(this->module_)));
-        exc->setConstant(true);
-        exc->setLinkage(llvm::GlobalValue::ExternalLinkage);
-    }
-    builder().CreateCall3(
-        err_format,
-        builder().CreateLoad(exc, exc_name.c_str()),
-        builder().CreateGlobalStringPtr(format_str, format_str),
-        obj_str);
-    builder().CreateBr(skip_exc);
-
-    builder().SetInsertPoint(skip_exc);
 }
 
 template<typename FunctionType> Function *
