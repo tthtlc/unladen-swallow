@@ -180,18 +180,6 @@ entry:
         self.assertEquals(None, loop(r))
         self.assertRaises(StopIteration, next, r)
 
-    def test_subscr(self):
-        def subscr(x):
-            x[0] = x[1], x[-1]
-            x[1] += 10
-            x[-1] = 4
-            del x[3]
-            del x[-2]
-            return x
-        non_llvm = subscr([1, 2, 3, 4, 5])
-        subscr.__code__.__use_llvm__ = True
-        self.assertEquals(subscr([1, 2, 3, 4, 5]), non_llvm)
-        
     def test_listcomp(self):
         def listcomp(x):
             return [ item+1 for item in x ]
@@ -266,6 +254,8 @@ class OpRecorder(object):
     # regular binary arithmetic operations
     def __init__(self):
         self.ops = []
+    def __cmp__(self, other):
+        return cmp(self.ops, other)
     def __add__(self, other):
         self.ops.append('add')
         return 1
@@ -405,10 +395,37 @@ class OpRecorder(object):
         self.ops.append('ixor')
         return 1013
 
+    # Indexing
+    def __getitem__(self, item):
+        self.ops.append(('getitem', item))
+        return 1014
+    def __setitem__(self, item, value):
+        self.ops.append(('setitem', item, value))
+    def __delitem__(self, item):
+        self.ops.append(('delitem', item))
+
 class OperatorTests(unittest.TestCase):
+    def run_and_compare(self, testfunc, nops, nresults):
+        non_llvm_results = {}
+        non_llvm_recorder = OpRecorder()
+        testfunc(non_llvm_recorder, non_llvm_results)
+        self.assertEquals(len(non_llvm_recorder.ops), nops)
+        self.assertEquals(len(non_llvm_results), nresults)
+        self.assertEquals(len(set(non_llvm_results.values())),
+                          len(non_llvm_results))
+        
+        testfunc.__code__.__use_llvm__ = True
+        llvm_results = {}
+        llvm_recorder = OpRecorder()
+        testfunc(llvm_recorder, llvm_results)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
+
     def test_basic_arithmetic(self):
         operators = ('+', '-', '*', '/', '//', '%', '**',
                      '<<', '>>', '&', '|', '^')
+        nops = len(operators)
         parts = []
         for op in operators:
             parts.extend([
@@ -422,24 +439,8 @@ class OperatorTests(unittest.TestCase):
                      flags=0, dont_inherit=True)
         namespace = {}
         exec co in namespace
-        testfunc = namespace['test']
-
-        non_llvm_results = {}
-        non_llvm_recorder = OpRecorder()
-        testfunc(non_llvm_recorder, non_llvm_results)
-        self.assertEquals(len(non_llvm_recorder.ops), len(operators) * 3)
-        self.assertEquals(len(non_llvm_results), len(operators) * 3)
-        self.assertEquals(len(set(non_llvm_results.values())),
-                          len(non_llvm_results))
-        
-
-        testfunc.__code__.__use_llvm__ = True
-        llvm_results = {}
-        llvm_recorder = OpRecorder()
-        testfunc(llvm_recorder, llvm_results)
-
-        self.assertEquals(non_llvm_results, llvm_results)
-        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
+        del namespace['__builtins__']
+        self.run_and_compare(namespace['test'], nops * 3, nops * 3)
 
     def test_truediv(self):
         truedivcode = '''def test(x, results):
@@ -451,22 +452,8 @@ class OperatorTests(unittest.TestCase):
                      dont_inherit=True)
         namespace = {}
         exec co in namespace
-        testfunc = namespace['test']
-
-        non_llvm_results = {}
-        non_llvm_recorder = OpRecorder()
-        testfunc(non_llvm_recorder, non_llvm_results)
-        self.assertEquals(len(non_llvm_recorder.ops), 3)
-        self.assertEquals(len(non_llvm_results), 3)
-        self.assertEquals(len(set(non_llvm_results.values())), 3)
-
-        testfunc.__code__.__use_llvm__ = True
-        llvm_results = {}
-        llvm_recorder = OpRecorder()
-        testfunc(llvm_recorder, llvm_results)
-
-        self.assertEquals(non_llvm_results, llvm_results)
-        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
+        del namespace['__builtins__']
+        self.run_and_compare(namespace['test'], 3, 3)
                              
     def test_unary(self):
         def testfunc(x, results):
@@ -476,20 +463,15 @@ class OperatorTests(unittest.TestCase):
             results['neg'] = -x
             results['convert'] = `x`
 
-        non_llvm_results = {}
-        non_llvm_recorder = OpRecorder()
-        testfunc(non_llvm_recorder, non_llvm_results)
-        self.assertEquals(len(non_llvm_recorder.ops), 5)
-        self.assertEquals(len(non_llvm_results), 5)
-        self.assertEquals(len(set(non_llvm_results.values())), 5)
+        self.run_and_compare(testfunc, 5, 5)
 
-        testfunc.__code__.__use_llvm__ = True
-        llvm_results = {}
-        llvm_recorder = OpRecorder()
-        testfunc(llvm_recorder, llvm_results)
+    def test_subscr(self):
+        def testfunc(x, results):
+            results['idx'] = x['item']
+            x['item'] = 1
+            del x[3]
 
-        self.assertEquals(non_llvm_results, llvm_results)
-        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
+        self.run_and_compare(testfunc, 3, 1)
 
 class OpExc(Exception):
     def __cmp__(self, other):
@@ -501,6 +483,9 @@ class OpRaiser(object):
     # regular binar arithmetic operations
     def __init__(self):
         self.ops = []
+        self.recording = True
+    def __cmp__(self, other):
+        return cmp(self.ops, other)
     def __add__(self, other):
         self.ops.append('add')
         raise OpExc(1)
@@ -555,6 +540,8 @@ class OpRaiser(object):
         self.ops.append('neg')
         raise OpExc(16)
     def __repr__(self):
+        if not self.recording:
+            return '<OpRecorder %r>' % self.ops
         self.ops.append('repr')
         raise OpExc('<OpRecorder 17>')
         
@@ -640,7 +627,48 @@ class OpRaiser(object):
         self.ops.append('ixor')
         raise OpExc(1013)
 
+    # Indexing
+    def __getitem__(self, item):
+        self.ops.append(('getitem', item))
+        raise OpExc(1014)
+    def __setitem__(self, item, value):
+        self.ops.append(('setitem', item, value))
+        raise OpExc(1015)
+    def __delitem__(self, item):
+        self.ops.append(('delitem', item))
+        raise OpExc(1016)
+
 class OperatorRaisingTests(unittest.TestCase):
+    def run_and_compare(self, namespace):
+        non_llvm_results = []
+        non_llvm_raiser = OpRaiser()
+        funcs = namespace.items()
+        funcs.sort()
+        for fname, func in funcs:
+            try:
+                func(non_llvm_raiser)
+            except OpExc, e:
+                non_llvm_results.append(e)
+        non_llvm_raiser.recording = False
+
+        self.assertEquals(len(non_llvm_raiser.ops), len(funcs))
+        self.assertEquals(len(non_llvm_results), len(funcs))
+        self.assertEquals(len(set(non_llvm_results)),
+                          len(non_llvm_results))
+
+        llvm_results = []
+        llvm_raiser = OpRaiser()
+        for fname, func in funcs:
+            func.__code__.__use_llvm__ = True
+            try:
+                func(llvm_raiser)
+            except OpExc, e:
+                llvm_results.append(e)
+        llvm_raiser.recording = False
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
+
     def test_basic_arithmetic(self):
         operators = ('+', '-', '*', '/', '//', '%', '**',
                      '<<', '>>', '&', '|', '^')
@@ -651,40 +679,16 @@ class OperatorRaisingTests(unittest.TestCase):
                 'def reverse_%s(x): 1 %s x' % (idx, op),
                 'def inplace_%s(x): x %s= 1' % (idx, op),
             ])
+        # Compile in a single codeblock to avoid (current) LLVM
+        # exec overhead.
         testcode = '\n'.join(parts)
         co = compile(testcode, 'basic_arithmetic', 'exec',
                      flags=0, dont_inherit=True)
         namespace = {}
         exec co in namespace
+        del namespace['__builtins__']
+        self.run_and_compare(namespace)
         
-        non_llvm_results = []
-        non_llvm_raiser = OpRaiser()
-        for idx, op in enumerate(operators):
-            for fname in ('regular', 'reverse', 'inplace'):
-                f = namespace['%s_%s' % (fname, idx)]
-                try:
-                    f(non_llvm_raiser)
-                except OpExc, e:
-                    non_llvm_results.append(e)
-        self.assertEquals(len(non_llvm_raiser.ops), len(operators) * 3)
-        self.assertEquals(len(non_llvm_results), len(operators) * 3)
-        self.assertEquals(len(set(non_llvm_results)),
-                          len(non_llvm_results))
-
-        llvm_results = []
-        llvm_raiser = OpRaiser()
-        for idx, op in enumerate(operators):
-            for fname in ('regular', 'reverse', 'inplace'):
-                f = namespace['%s_%s' % (fname, idx)]
-                f.__code__.__use_llvm__ = True
-                try:
-                    f(llvm_raiser)
-                except OpExc, e:
-                    llvm_results.append(e)
-
-        self.assertEquals(non_llvm_results, llvm_results)
-        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
-
     def test_truediv(self):
         truedivcode = '\n'.join(['def regular(x): x / 1',
                                  'def reverse(x): 1 / x',
@@ -695,63 +699,53 @@ class OperatorRaisingTests(unittest.TestCase):
                      dont_inherit=True)
         namespace = {}
         exec co in namespace
-
-        non_llvm_results = []
-        non_llvm_raiser = OpRaiser()
-        for fname in ('regular', 'reverse', 'inplace'):
-            f = namespace[fname]
-            try:
-                f(non_llvm_raiser)
-            except OpExc, e:
-                non_llvm_results.append(e)
-        self.assertEquals(len(non_llvm_raiser.ops), 3)
-        self.assertEquals(len(non_llvm_results), 3)
-        self.assertEquals(len(set(non_llvm_results)),
-                          len(non_llvm_results))
-
-        llvm_results = []
-        llvm_raiser = OpRaiser()
-        for fname in ('regular', 'reverse', 'inplace'):
-            f = namespace[fname]
-            f.__code__.__use_llvm__ = True
-            try:
-                f(llvm_raiser)
-            except OpExc, e:
-                llvm_results.append(e)
-
-        self.assertEquals(non_llvm_results, llvm_results)
-        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
+        del namespace['__builtins__']
+        self.run_and_compare(namespace)
 
     def test_unary(self):
-        funcs = (lambda x: not x,
-                 lambda x: ~x,
-                 lambda x: +x,
-                 lambda x: -x,
-                 lambda x: `x`)
+        funcs = {'not': lambda x: not x,
+                 'invert': lambda x: ~x,
+                 'pos': lambda x: +x,
+                 'neg': lambda x: -x,
+                 'convert': lambda x: `x`}
 
-        non_llvm_results = []
-        non_llvm_raiser = OpRaiser()
-        for f in funcs:
-            try:
-                f(non_llvm_raiser)
-            except OpExc, e:
-                non_llvm_results.append(e)
-        self.assertEquals(len(non_llvm_raiser.ops), 5)
-        self.assertEquals(len(non_llvm_results), 5)
-        self.assertEquals(len(set(non_llvm_results)),
-                          len(non_llvm_results))
+        self.run_and_compare(funcs)
 
-        llvm_results = []
-        llvm_raiser = OpRaiser()
-        for f in funcs:
-            f.__code__.__use_llvm__ = True
-            try:
-                f(llvm_raiser)
-            except OpExc, e:
-                llvm_results.append(e)
+    def test_subscr(self):
+        def getitem(x): x['item']
+        def setitem(x): x['item'] = 1
+        def delitem(x): del x['item']
 
-        self.assertEquals(non_llvm_results, llvm_results)
-        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
+        self.run_and_compare({'getitem': getitem, 'setitem': setitem,
+                              'delitem': delitem})
+
+    def test_listcomp(self):
+        def listcomp(x): [ item + 5 for item in x ]
+        non_llvm_recorders = [OpRecorder(), OpRecorder(), OpRaiser(),
+                              OpRecorder()]
+        try:
+            listcomp(non_llvm_recorders)
+        except OpExc, non_llvm_exc:
+            pass
+        else:
+            self.fail('expected exception')
+        self.assertEquals([o.ops for o in non_llvm_recorders],
+                          [['add'], ['add'], ['add'], []])
+
+        listcomp.__code__.__use_llvm__ = True
+        llvm_recorders = [OpRecorder(), OpRecorder(), OpRaiser(),
+                          OpRecorder()]
+        try:
+            listcomp(llvm_recorders)
+        except OpExc, llvm_exc:
+            pass
+        else:
+            self.fail('expected exception')
+
+        for o in non_llvm_recorders + llvm_recorders:
+            o.recording = False
+        self.assertEquals(non_llvm_recorders, llvm_recorders)
+        self.assertEquals(non_llvm_exc, llvm_exc)
 
 def test_main():
     run_unittest(LlvmTests, OperatorTests, OperatorRaisingTests)
