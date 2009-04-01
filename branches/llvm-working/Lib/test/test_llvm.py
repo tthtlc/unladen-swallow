@@ -3,6 +3,7 @@
 from test.test_support import run_unittest, findfile
 import unittest
 import _llvm
+import __future__
 
 
 class LlvmTests(unittest.TestCase):
@@ -179,81 +180,36 @@ entry:
         self.assertEquals(None, loop(r))
         self.assertRaises(StopIteration, next, r)
 
-    def test_basic_arithmetic(self):
-        def arithmetic(x):
-            x = x + 1
-            x = x * 2
-            x = x ** 2
-            x = x - 8
-            x = x // 5
-            x = x % 3
-            x = x & 2
-            x = x | 5
-            x = x ^ 1
-            x = x / 2
-            return x
-        arithmetic.__code__.__use_llvm__ = True
-        self.assertEquals(arithmetic(2), 3)
-
-    def test_basic_augassign(self):
-        def augassign(x):
-            x += 1
-            x *= 2
-            x **= 2
-            x -= 8
-            x //= 5
-            x %= 3
-            x &= 2
-            x |= 5
-            x ^= 1
-            x /= 2
-            return x
-        augassign.__code__.__use_llvm__ = True
-        self.assertEquals(augassign(2), 3)
-
-    def test_basic_unary(self):
-        def unary(x):
-            x = ~x
-            x = -x
-            x = --x
-            x = ---x
-            x = +x
-            x = ++x
-            x = +++x
-            x = ~x
-            return x
-        unary.__code__.__use_llvm__ = True
-        self.assertEquals(unary(10), 10)
-
-    def test_unary_not(self):
-        def unary_not(x):
-            return not x
-        unary_not.__code__.__use_llvm__ = True
-        self.assertEquals(unary_not(True), False)
-        self.assertEquals(unary_not(False), True)
-        self.assertEquals(unary_not([]), True)
-        self.assertEquals(unary_not("false"), False)
-
     def test_subscr(self):
         def subscr(x):
-            x[0] = x[1]
-            x[0] += 10
-            del x[1]
+            x[0] = x[1], x[-1]
+            x[1] += 10
+            x[-1] = 4
+            del x[3]
+            del x[-2]
             return x
+        non_llvm = subscr([1, 2, 3, 4, 5])
         subscr.__code__.__use_llvm__ = True
-        self.assertEquals(subscr([1, 2, 3]), [12, 3])
+        self.assertEquals(subscr([1, 2, 3, 4, 5]), non_llvm)
         
     def test_listcomp(self):
         def listcomp(x):
             return [ item+1 for item in x ]
+        non_llvm = listcomp([1, 2, 3])
         listcomp.__code__.__use_llvm__ = True
-        self.assertEquals(listcomp([1, 2, 3]), [2, 3, 4])
+        self.assertEquals(listcomp([1, 2, 3]), non_llvm)
         
         def listcomp(x):
             return [ [ i + j for j in x ] for i in x ]
+        non_llvm = listcomp([1, 2, 3])
         listcomp.__code__.__use_llvm__ = True
-        self.assertEquals(listcomp([1, 2, 3]), [[2, 3, 4], [3, 4, 5],
-                                                [4, 5, 6]])
+        self.assertEquals(listcomp([1, 2, 3]), non_llvm)
+
+        def listcomp(x):
+            return [ [ i + j for j in () ] for i in x ]
+        non_llvm = listcomp([1, 2, 3])
+        listcomp.__code__.__use_llvm__ = True
+        self.assertEquals(listcomp([1, 2, 3]), non_llvm)
 
     def test_literals(self):
         def lits(x):
@@ -285,9 +241,258 @@ entry:
         lits.__code__.__use_llvm__ = True
         self.assertEquals(lits(2), (1, 2, 3, (3, 4), [3, 2, 1], {1: 2, 3: 4}))
 
+    def test_opcodes(self):
+        # Test some specific opcodes
+        def pop_top(x):
+            x
+            x
+            x
+            
+        pop_top.__code__.__use_llvm__ = True
+        pop_top('pop me')
+
+
+# dont_inherit will unfortunately not turn off true division when
+# running with -Qnew, so we can't test classic division in
+# test_basic_arithmetic when running with -Qnew.
+# Make sure we aren't running with -Qnew. A __future__
+# statement in this module should not affect things.
+_co = compile('1 / 2', 'truediv_check', 'eval',
+             flags=0, dont_inherit=True)
+assert eval(_co) == 0, "Do not run test_llvm with -Qnew"
+del _co
+
+class OpRecorder(object):
+    # regular binary arithmetic operations
+    def __init__(self):
+        self.ops = []
+    def __add__(self, other):
+        self.ops.append('add')
+        return 1
+    def __sub__(self, other):
+        self.ops.append('sub')
+        return 2
+    def __mul__(self, other):
+        self.ops.append('mul')
+        return 3
+    def __div__(self, other):
+        self.ops.append('div')
+        return 4
+    def __truediv__(self, other):
+        self.ops.append('truediv')
+        return 5
+    def __floordiv__(self, other):
+        self.ops.append('floordiv')
+        return 6
+    def __mod__(self, other):
+        self.ops.append('mod')
+        return 7
+    def __pow__(self, other):
+        self.ops.append('pow')
+        return 8
+    def __lshift__(self, other):
+        self.ops.append('lshift')
+        return 9
+    def __rshift__(self, other):
+        self.ops.append('rshift')
+        return 10
+    def __and__(self, other):
+        self.ops.append('and')
+        return 11
+    def __or__(self, other):
+        self.ops.append('or')
+        return 12
+    def __xor__(self, other):
+        self.ops.append('xor')
+        return 13
+
+    # Unary operations
+    def __nonzero__(self):
+        self.ops.append('nonzero')
+        return False
+    def __invert__(self):
+        self.ops.append('invert')
+        return 14
+    def __pos__(self):
+        self.ops.append('pos')
+        return 15
+    def __neg__(self):
+        self.ops.append('neg')
+        return 16
+    def __repr__(self):
+        self.ops.append('repr')
+        return '<OpRecorder 17>'
+        
+    # right-hand binary arithmetic operations
+    def __radd__(self, other):
+        self.ops.append('radd')
+        return 101
+    def __rsub__(self, other):
+        self.ops.append('rsub')
+        return 102
+    def __rmul__(self, other):
+        self.ops.append('rmul')
+        return 103
+    def __rdiv__(self, other):
+        self.ops.append('rdiv')
+        return 104
+    def __rtruediv__(self, other):
+        self.ops.append('rtruediv')
+        return 105
+    def __rfloordiv__(self, other):
+        self.ops.append('rfloordiv')
+        return 106
+    def __rmod__(self, other):
+        self.ops.append('rmod')
+        return 107
+    def __rpow__(self, other):
+        self.ops.append('rpow')
+        return 108
+    def __rlshift__(self, other):
+        self.ops.append('rlshift')
+        return 109
+    def __rrshift__(self, other):
+        self.ops.append('rrshift')
+        return 110
+    def __rand__(self, other):
+        self.ops.append('rand')
+        return 111
+    def __ror__(self, other):
+        self.ops.append('ror')
+        return 112
+    def __rxor__(self, other):
+        self.ops.append('rxor')
+        return 113
+
+    # In-place binary arithmetic operations
+    def __iadd__(self, other):
+        self.ops.append('iadd')
+        return 1001
+    def __isub__(self, other):
+        self.ops.append('isub')
+        return 1002
+    def __imul__(self, other):
+        self.ops.append('imul')
+        return 1003
+    def __idiv__(self, other):
+        self.ops.append('idiv')
+        return 1004
+    def __itruediv__(self, other):
+        self.ops.append('itruediv')
+        return 1005
+    def __ifloordiv__(self, other):
+        self.ops.append('ifloordiv')
+        return 1006
+    def __imod__(self, other):
+        self.ops.append('imod')
+        return 1007
+    def __ipow__(self, other):
+        self.ops.append('ipow')
+        return 1008
+    def __ilshift__(self, other):
+        self.ops.append('ilshift')
+        return 1009
+    def __irshift__(self, other):
+        self.ops.append('irshift')
+        return 1010
+    def __iand__(self, other):
+        self.ops.append('iand')
+        return 1011
+    def __ior__(self, other):
+        self.ops.append('ior')
+        return 1012
+    def __ixor__(self, other):
+        self.ops.append('ixor')
+        return 1013
+
+class OperatorTests(unittest.TestCase):
+    def test_basic_arithmetic(self):
+        operators = ('+', '-', '*', '/', '//', '%', '**',
+                     '<<', '>>', '&', '|', '^')
+        parts = []
+        for op in operators:
+            parts.extend([
+                'results["regular %s"] = x %s 1' % (op, op),
+                'results["reverse %s"] = 1 %s x' % (op, op),
+                'y = x;y %s= 1; results["in-place %s"] = y' % (op, op),
+            ])
+        testcode = '\n'.join(['def test(x, results):',
+                              '  ' + '\n  '.join(parts)])
+        co = compile(testcode, 'basic_arithmetic', 'exec',
+                     flags=0, dont_inherit=True)
+        namespace = {}
+        exec co in namespace
+        testfunc = namespace['test']
+
+        non_llvm_results = {}
+        non_llvm_recorder = OpRecorder()
+        testfunc(non_llvm_recorder, non_llvm_results)
+        self.assertEquals(len(non_llvm_recorder.ops), len(operators) * 3)
+        self.assertEquals(len(non_llvm_results), len(operators) * 3)
+        self.assertEquals(len(set(non_llvm_results.values())),
+                          len(non_llvm_results))
+        
+
+        testfunc.__code__.__use_llvm__ = True
+        llvm_results = {}
+        llvm_recorder = OpRecorder()
+        testfunc(llvm_recorder, llvm_results)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
+
+    def test_truediv(self):
+        truedivcode = '''def test(x, results):
+                             results["regular div"] = x / 1
+                             results["reverse div"] = 1 / x
+                             x /= 1; results["in-place div"] = x'''
+        co = compile(truedivcode, 'truediv_arithmetic', 'exec',
+                     flags=__future__.division.compiler_flag,
+                     dont_inherit=True)
+        namespace = {}
+        exec co in namespace
+        testfunc = namespace['test']
+
+        non_llvm_results = {}
+        non_llvm_recorder = OpRecorder()
+        testfunc(non_llvm_recorder, non_llvm_results)
+        self.assertEquals(len(non_llvm_recorder.ops), 3)
+        self.assertEquals(len(non_llvm_results), 3)
+        self.assertEquals(len(set(non_llvm_results.values())), 3)
+
+        testfunc.__code__.__use_llvm__ = True
+        llvm_results = {}
+        llvm_recorder = OpRecorder()
+        testfunc(llvm_recorder, llvm_results)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
+                             
+    def test_unary(self):
+        def testfunc(x, results):
+            results['not'] = not x
+            results['invert'] = ~x
+            results['pos'] = +x
+            results['neg'] = -x
+            results['convert'] = `x`
+
+        non_llvm_results = {}
+        non_llvm_recorder = OpRecorder()
+        testfunc(non_llvm_recorder, non_llvm_results)
+        self.assertEquals(len(non_llvm_recorder.ops), 5)
+        self.assertEquals(len(non_llvm_results), 5)
+        self.assertEquals(len(set(non_llvm_results.values())), 5)
+
+        testfunc.__code__.__use_llvm__ = True
+        llvm_results = {}
+        llvm_recorder = OpRecorder()
+        testfunc(llvm_recorder, llvm_results)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
 
 def test_main():
-    run_unittest(LlvmTests)
+    run_unittest(LlvmTests, OperatorTests)
 
 
 if __name__ == "__main__":

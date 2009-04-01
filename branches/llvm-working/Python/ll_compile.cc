@@ -739,7 +739,7 @@ BINOP_METH(INPLACE_MULTIPLY, PyNumber_InPlaceMultiply)
 BINOP_METH(INPLACE_TRUE_DIVIDE, PyNumber_InPlaceTrueDivide)
 BINOP_METH(INPLACE_DIVIDE, PyNumber_InPlaceDivide)
 BINOP_METH(INPLACE_MODULO, PyNumber_InPlaceRemainder)
-BINOP_METH(INPLACE_LSHIFT, PyNumber_InplaceLshift)
+BINOP_METH(INPLACE_LSHIFT, PyNumber_InPlaceLshift)
 BINOP_METH(INPLACE_RSHIFT, PyNumber_InPlaceRshift)
 BINOP_METH(INPLACE_OR, PyNumber_InPlaceOr)
 BINOP_METH(INPLACE_XOR, PyNumber_InPlaceXor)
@@ -790,7 +790,7 @@ LlvmFunctionBuilder:: NAME ()				\
     GenericUnaryOp(#NAME, #FUNCNAME);			\
 }
 
-UNARYOP_METH(UNARY_CONVERT, PyNumber_Convert)
+UNARYOP_METH(UNARY_CONVERT, PyObject_Repr)
 UNARYOP_METH(UNARY_INVERT, PyNumber_Invert)
 UNARYOP_METH(UNARY_POSITIVE, PyNumber_Positive)
 UNARYOP_METH(UNARY_NEGATIVE, PyNumber_Negative)
@@ -834,24 +834,43 @@ LlvmFunctionBuilder::UNARY_NOT()
 void
 LlvmFunctionBuilder::STORE_SUBSCR()
 {
+    BasicBlock *failure = BasicBlock::Create("STORE_SUBSCR_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("STORE_SUBSCR_success",
+                                             function());
     Value *idx = Pop();
     Value *obj = Pop();
     Value *val = Pop();
-    Function *op = GetGlobalFunction<PyObject *
-          (PyObject *, PyObject *, PyObject *)>("PyObject_SetItem");
-    Value *result = builder().CreateCall3(op, obj, idx, val, "STORE_SUBSCR");
-    Push(result);
+    Function *op = GetGlobalFunction<
+          int(PyObject *, PyObject *, PyObject *)>("PyObject_SetItem");
+    Value *result = builder().CreateCall3(op, obj, idx, val,
+                                          "SetItem_succeeded");
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
 }
 
 void
 LlvmFunctionBuilder::DELETE_SUBSCR()
 {
+    BasicBlock *failure = BasicBlock::Create("DELETE_SUBSCR_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("DELETE_SUBSCR_success",
+                                             function());
     Value *idx = Pop();
     Value *obj = Pop();
-    Function *op = GetGlobalFunction<PyObject *
-          (PyObject *, PyObject *)>("PyObject_DelItem");
-    Value *result = builder().CreateCall2(op, obj, idx, "DELETE_SUBSCR");
-    Push(result);
+    Function *op = GetGlobalFunction<
+          int(PyObject *, PyObject *)>("PyObject_DelItem");
+    Value *result = builder().CreateCall2(op, obj, idx, "DelItem_succeeded");
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
 }
 
 void
@@ -883,6 +902,7 @@ LlvmFunctionBuilder::DUP_TOP_TWO()
     Push(top);
 }
 
+// untested; only used in augmented slice assignment.
 void
 LlvmFunctionBuilder::DUP_TOP_THREE()
 {
@@ -900,6 +920,7 @@ LlvmFunctionBuilder::DUP_TOP_THREE()
     Push(top);
 }
 
+// untested; used in comparisons, with stmt, attribute access, slicing
 void
 LlvmFunctionBuilder::ROT_TWO()
 {
@@ -920,6 +941,7 @@ LlvmFunctionBuilder::ROT_THREE()
     Push(middle);
 }
 
+// untested; only used in slice assignment.
 void
 LlvmFunctionBuilder::ROT_FOUR()
 {
