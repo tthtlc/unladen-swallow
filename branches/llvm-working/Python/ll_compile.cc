@@ -701,16 +701,17 @@ LlvmFunctionBuilder::RETURN_VALUE()
 }
 
 
+// Implementation of almost all binary operations
 void
-LlvmFunctionBuilder::GenericBinOp(const char *name, const char *funcname)
+LlvmFunctionBuilder::GenericBinOp(const char *apifunc)
 {
     BasicBlock *failure = BasicBlock::Create("binop_failure", function());
     BasicBlock *success = BasicBlock::Create("binop_success", function());
     Value *rhs = Pop();
     Value *lhs = Pop();
     Function *op =
-        GetGlobalFunction<PyObject*(PyObject*, PyObject*)>(funcname);
-    Value *result = builder().CreateCall2(op, lhs, rhs, name);
+        GetGlobalFunction<PyObject*(PyObject*, PyObject*)>(apifunc);
+    Value *result = builder().CreateCall2(op, lhs, rhs, "binop_result");
     builder().CreateCondBr(IsNull(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -720,55 +721,83 @@ LlvmFunctionBuilder::GenericBinOp(const char *name, const char *funcname)
     Push(result);
 }
 
-#define BINOP_METH(OPCODE, FUNCNAME) 		\
+#define BINOP_METH(OPCODE, APIFUNC) 		\
 void						\
-LlvmFunctionBuilder:: OPCODE ()			\
+LlvmFunctionBuilder::OPCODE()			\
 {						\
-    GenericBinOp(#OPCODE, #FUNCNAME);		\
+    GenericBinOp(#APIFUNC);			\
 }
 
+// Implements "lhs + rhs"
 BINOP_METH(BINARY_ADD, PyNumber_Add)
+// Implements "lhs - rhs"
 BINOP_METH(BINARY_SUBTRACT, PyNumber_Subtract)
+// Implements "lhs * rhs"
 BINOP_METH(BINARY_MULTIPLY, PyNumber_Multiply)
+// Implements "lhs / rhs" with "from __future__ import division"
 BINOP_METH(BINARY_TRUE_DIVIDE, PyNumber_TrueDivide)
+// Implements "lhs / rhs" without "from __future__ import division"
 BINOP_METH(BINARY_DIVIDE, PyNumber_Divide)
+// Implements "lhs % rhs"
 BINOP_METH(BINARY_MODULO, PyNumber_Remainder)
+// Implements "lhs << rhs"
 BINOP_METH(BINARY_LSHIFT, PyNumber_Lshift)
+// Implements "lhs >> rhs"
 BINOP_METH(BINARY_RSHIFT, PyNumber_Rshift)
+// Implements "lhs | rhs"
 BINOP_METH(BINARY_OR, PyNumber_Or)
+// Implements "lhs ^ rhs"
 BINOP_METH(BINARY_XOR, PyNumber_Xor)
+// Implements "lhs & rhs"
 BINOP_METH(BINARY_AND, PyNumber_And)
+// Implements "lhs // rhs"
 BINOP_METH(BINARY_FLOOR_DIVIDE, PyNumber_FloorDivide)
+// Implements "lhs[rhs]"
 BINOP_METH(BINARY_SUBSCR, PyObject_GetItem)
 
+// Implements "lhs += rhs" (except the assignment)
 BINOP_METH(INPLACE_ADD, PyNumber_InPlaceAdd)
+// Implements "lhs -= rhs" (except the assignment)
 BINOP_METH(INPLACE_SUBTRACT, PyNumber_InPlaceSubtract)
+// Implements "lhs *= rhs" (except the assignment)
 BINOP_METH(INPLACE_MULTIPLY, PyNumber_InPlaceMultiply)
+// Implements "lhs /= rhs" with "from __future__ import division"
+// (except the assignment)
 BINOP_METH(INPLACE_TRUE_DIVIDE, PyNumber_InPlaceTrueDivide)
+// Implements "lhs /= rhs" without "from __future__ import division"
+// (except the assignment)
 BINOP_METH(INPLACE_DIVIDE, PyNumber_InPlaceDivide)
+// Implements "lhs %= rhs" (except the assignment)
 BINOP_METH(INPLACE_MODULO, PyNumber_InPlaceRemainder)
+// Implements "lhs <<= rhs" (except the assignment)
 BINOP_METH(INPLACE_LSHIFT, PyNumber_InPlaceLshift)
+// Implements "lhs >>= rhs" (except the assignment)
 BINOP_METH(INPLACE_RSHIFT, PyNumber_InPlaceRshift)
+// Implements "lhs |= rhs" (except the assignment)
 BINOP_METH(INPLACE_OR, PyNumber_InPlaceOr)
+// Implements "lhs ^= rhs" (except the assignment)
 BINOP_METH(INPLACE_XOR, PyNumber_InPlaceXor)
+// Implements "lhs &= rhs" (except the assignment)
 BINOP_METH(INPLACE_AND, PyNumber_InPlaceAnd)
+// Implements "lhs //= rhs" (except the assignment)
 BINOP_METH(INPLACE_FLOOR_DIVIDE, PyNumber_InPlaceFloorDivide)
 
 #undef BINOP_METH
 
 // PyNumber_Power() and PyNumber_InPlacePower() take three arguments, the
-// third being unused when called from BINARY_POWER/INPLACE_POWER.
+// third should be Py_None when calling from BINARY_POWER/INPLACE_POWER.
 void
-LlvmFunctionBuilder::GenericPowOp(const char *name, const char *funcname)
+LlvmFunctionBuilder::GenericPowOp(const char *apifunc)
 {
-    BasicBlock *failure = BasicBlock::Create("pow_failure", function());
-    BasicBlock *success = BasicBlock::Create("pow_success", function());
+    BasicBlock *failure = BasicBlock::Create("powop_failure", function());
+    BasicBlock *success = BasicBlock::Create("powop_success", function());
     Value *rhs = Pop();
     Value *lhs = Pop();
     Function *op = GetGlobalFunction<PyObject*(PyObject*, PyObject*,
-        PyObject *)>(funcname);
-    Value *noval = GetGlobalVariable<PyObject>("_Py_NoneStruct");
-    Value *result = builder().CreateCall3(op, lhs, rhs, noval, name);
+        PyObject *)>(apifunc);
+    Value *pynone = GetGlobalVariable<PyObject>("_Py_NoneStruct");
+    Value *result = builder().CreateCall3(op, lhs, rhs, pynone,
+                                          "powop_result");
     builder().CreateCondBr(IsNull(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -778,26 +807,29 @@ LlvmFunctionBuilder::GenericPowOp(const char *name, const char *funcname)
     Push(result);
 }
 
+// Implements "lhs ** rhs"
 void
 LlvmFunctionBuilder::BINARY_POWER()
 {
-    GenericPowOp("BINARY_POWER", "PyNumber_Power");
+    GenericPowOp("PyNumber_Power");
 }
 
+// Implements "lhs **= rhs"
 void
 LlvmFunctionBuilder::INPLACE_POWER()
 {
-    GenericPowOp("INPLACE_POWER", "PyNumber_InPlacePower");
+    GenericPowOp("PyNumber_InPlacePower");
 }
 
+// Implementation of almost all unary operations
 void
-LlvmFunctionBuilder::GenericUnaryOp(const char *name, const char *funcname)
+LlvmFunctionBuilder::GenericUnaryOp(const char *apifunc)
 {
-    BasicBlock *failure = BasicBlock::Create("unary_failure", function());
-    BasicBlock *success = BasicBlock::Create("unary_success", function());
+    BasicBlock *failure = BasicBlock::Create("unaryop_failure", function());
+    BasicBlock *success = BasicBlock::Create("unaryop_success", function());
     Value *val = Pop();
-    Function *op = GetGlobalFunction<PyObject*(PyObject*)>(funcname);
-    Value *result = builder().CreateCall(op, val, name);
+    Function *op = GetGlobalFunction<PyObject*(PyObject*)>(apifunc);
+    Value *result = builder().CreateCall(op, val, "unaryop_result");
     builder().CreateCondBr(IsNull(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -807,54 +839,56 @@ LlvmFunctionBuilder::GenericUnaryOp(const char *name, const char *funcname)
     Push(result);
 }
 
-#define UNARYOP_METH(NAME, FUNCNAME)			\
+#define UNARYOP_METH(NAME, APIFUNC)			\
 void							\
-LlvmFunctionBuilder:: NAME ()				\
+LlvmFunctionBuilder::NAME()				\
 {							\
-    GenericUnaryOp(#NAME, #FUNCNAME);			\
+    GenericUnaryOp(#APIFUNC);				\
 }
 
+// Implements "`val`"
 UNARYOP_METH(UNARY_CONVERT, PyObject_Repr)
+// Implements "~val"
 UNARYOP_METH(UNARY_INVERT, PyNumber_Invert)
+// Implements "+val"
 UNARYOP_METH(UNARY_POSITIVE, PyNumber_Positive)
+// Implements "-val"
 UNARYOP_METH(UNARY_NEGATIVE, PyNumber_Negative)
 
 #undef UNARYOP_METH
 
+// Implements "not val"
 void
 LlvmFunctionBuilder::UNARY_NOT()
 {
-    BasicBlock *endbb = BasicBlock::Create("UNARY_NOT_end", function());
-    BasicBlock *falsebb = BasicBlock::Create("UNARY_NOT_false", function());
-    BasicBlock *truebb = BasicBlock::Create("UNARY_NOT_true", function());
-    BasicBlock *noerrbb = BasicBlock::Create("UNARY_NOT_noerr", function());
-    BasicBlock *errbb = BasicBlock::Create("UNARY_NOT_err", function());
+    BasicBlock *success = BasicBlock::Create("UNARY_NOT_success", function());
+    BasicBlock *failure = BasicBlock::Create("UNARY_NOT_failure", function());
 
     Value *val = Pop();
-    Function *op = GetGlobalFunction<int(PyObject *)>("PyObject_IsTrue");
-    Value *result = builder().CreateCall(op, val, "UNARY_NOT");
+    Function *pyobject_istrue = GetGlobalFunction<
+        int(PyObject *)>("PyObject_IsTrue");
+    Value *result = builder().CreateCall(pyobject_istrue, val,
+                                         "UNARY_NOT_obj_as_bool");
     Value *zero = Constant::getNullValue(result->getType());
-    Value *iserr = builder().CreateICmpSLT(result, zero, "UNARY_NOT_iserr");
-    builder().CreateCondBr(iserr, errbb, noerrbb);
-    
-    builder().SetInsertPoint(errbb);
+    Value *iserr = builder().CreateICmpSLT(result, zero, "UNARY_NOT_is_err");
+    builder().CreateCondBr(iserr, failure, success);
+
+    builder().SetInsertPoint(failure);
     builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
 
-    builder().SetInsertPoint(noerrbb);
-    Value *istrue = builder().CreateICmpSGT(result, zero, "UNARY_NOT_istrue");
-    builder().CreateCondBr(istrue, truebb, falsebb);
-
-    builder().SetInsertPoint(truebb);
-    Push(GetGlobalVariable<PyObject>("_Py_ZeroStruct"));
-    builder().CreateBr(endbb);
-
-    builder().SetInsertPoint(falsebb);
-    Push(GetGlobalVariable<PyObject>("_Py_TrueStruct"));
-    builder().CreateBr(endbb);
-    
-    builder().SetInsertPoint(endbb);
+    builder().SetInsertPoint(success);
+    Value *istrue = builder().CreateICmpSGT(result, zero,
+                                            "UNARY_NOT_is_true");
+    Value *retval = builder().CreateSelect(
+        istrue,
+        GetGlobalVariable<PyObject>("_Py_ZeroStruct"),
+        GetGlobalVariable<PyObject>("_Py_TrueStruct"),
+        "UNARY_NOT_result");
+    Push(retval);
 }
 
+
+// Implements "obj[idx] = val"
 void
 LlvmFunctionBuilder::STORE_SUBSCR()
 {
@@ -865,10 +899,10 @@ LlvmFunctionBuilder::STORE_SUBSCR()
     Value *idx = Pop();
     Value *obj = Pop();
     Value *val = Pop();
-    Function *op = GetGlobalFunction<
+    Function *setitem = GetGlobalFunction<
           int(PyObject *, PyObject *, PyObject *)>("PyObject_SetItem");
-    Value *result = builder().CreateCall3(op, obj, idx, val,
-                                          "SetItem_succeeded");
+    Value *result = builder().CreateCall3(setitem, obj, idx, val,
+                                          "STORE_SUBSCR_result");
     builder().CreateCondBr(IsNonZero(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -877,6 +911,7 @@ LlvmFunctionBuilder::STORE_SUBSCR()
     builder().SetInsertPoint(success);
 }
 
+// Implements "del obj[idx]"
 void
 LlvmFunctionBuilder::DELETE_SUBSCR()
 {
@@ -886,9 +921,10 @@ LlvmFunctionBuilder::DELETE_SUBSCR()
                                              function());
     Value *idx = Pop();
     Value *obj = Pop();
-    Function *op = GetGlobalFunction<
+    Function *delitem = GetGlobalFunction<
           int(PyObject *, PyObject *)>("PyObject_DelItem");
-    Value *result = builder().CreateCall2(op, obj, idx, "DelItem_succeeded");
+    Value *result = builder().CreateCall2(delitem, obj, idx,
+                                          "DELETE_SUBSCR_result");
     builder().CreateCondBr(IsNonZero(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -897,6 +933,7 @@ LlvmFunctionBuilder::DELETE_SUBSCR()
     builder().SetInsertPoint(success);
 }
 
+// Toss the top item off the the stack.
 void
 LlvmFunctionBuilder::POP_TOP()
 {
@@ -904,81 +941,88 @@ LlvmFunctionBuilder::POP_TOP()
     DecRef(top);
 }
 
+// Duplicate the top item on the stack.
 void
 LlvmFunctionBuilder::DUP_TOP()
 {
-    Value *top = Pop();
-    IncRef(top);
-    Push(top);
-    Push(top);
+    Value *first = Pop();
+    IncRef(first);
+    Push(first);
+    Push(first);
 }
 
+// Duplicate the top two items on the stack.
 void
 LlvmFunctionBuilder::DUP_TOP_TWO()
 {
-    Value *top = Pop();
-    Value *bottom = Pop();
-    IncRef(top);
-    IncRef(bottom);
-    Push(bottom);
-    Push(top);
-    Push(bottom);
-    Push(top);
+    Value *first = Pop();
+    Value *second = Pop();
+    IncRef(first);
+    IncRef(second);
+    Push(second);
+    Push(first);
+    Push(second);
+    Push(first);
 }
 
+// Duplicate the top three items on the stack.
 // untested; only used in augmented slice assignment.
 void
 LlvmFunctionBuilder::DUP_TOP_THREE()
 {
-    Value *top = Pop();
-    Value *middle = Pop();
-    Value *bottom = Pop();
-    IncRef(top);
-    IncRef(middle);
-    IncRef(bottom);
-    Push(bottom);
-    Push(middle);
-    Push(top);
-    Push(bottom);
-    Push(middle);
-    Push(top);
+    Value *first = Pop();
+    Value *second = Pop();
+    Value *third = Pop();
+    IncRef(first);
+    IncRef(second);;
+    IncRef(third);
+    Push(third);
+    Push(second);
+    Push(first);
+    Push(third);
+    Push(second);
+    Push(first);
 }
 
+// Rotate the top two items of the stack.
 // untested; used in comparisons, with stmt, attribute access, slicing
 void
 LlvmFunctionBuilder::ROT_TWO()
 {
-    Value *top = Pop();
-    Value *bottom = Pop();
-    Push(top);
-    Push(bottom);
+    Value *first = Pop();
+    Value *second = Pop();
+    Push(first);
+    Push(second);
 }
 
+// Rotate the top three items of the stack upward.
 void
 LlvmFunctionBuilder::ROT_THREE()
 {
-    Value *top = Pop();
-    Value *middle = Pop();
-    Value *bottom = Pop();
-    Push(top);
-    Push(bottom);
-    Push(middle);
-}
-
-// untested; only used in slice assignment.
-void
-LlvmFunctionBuilder::ROT_FOUR()
-{
-    Value *top = Pop();
+    Value *first = Pop();
     Value *second = Pop();
     Value *third = Pop();
-    Value *bottom = Pop();
-    Push(top);
-    Push(bottom);
+    Push(first);
     Push(third);
     Push(second);
 }
 
+// Rotate the top four items of the stack upward.
+// untested; only used in slice assignment.
+void
+LlvmFunctionBuilder::ROT_FOUR()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    Value *third = Pop();
+    Value *fourth = Pop();
+    Push(first);
+    Push(fourth);
+    Push(third);
+    Push(second);
+}
+
+// Append item to list (used in list comprehensions)
 void
 LlvmFunctionBuilder::LIST_APPEND()
 {
@@ -988,9 +1032,10 @@ LlvmFunctionBuilder::LIST_APPEND()
                                              function());
     Value *item = Pop();
     Value *listobj = Pop();
-    Function *op = GetGlobalFunction<int(PyObject *,
-                                         PyObject *)>("PyList_Append");
-    Value *result = builder().CreateCall2(op, listobj, item, "LIST_APPEND");
+    Function *list_append = GetGlobalFunction<
+        int(PyObject *, PyObject *)>("PyList_Append");
+    Value *result = builder().CreateCall2(list_append, listobj, item,
+                                          "LIST_APPEND_result");
     builder().CreateCondBr(IsNonZero(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -999,6 +1044,7 @@ LlvmFunctionBuilder::LIST_APPEND()
     builder().SetInsertPoint(success);
 }
 
+// Store item in dict (used in dict literals)
 void
 LlvmFunctionBuilder::STORE_MAP()
 {
@@ -1009,9 +1055,10 @@ LlvmFunctionBuilder::STORE_MAP()
     Value *dict = Pop();
     Push(dict);
     // old ceval loop does assert(PyDict_CheckExact()), should we?
-    Function *op = GetGlobalFunction<int(PyObject *,
-        PyObject *, PyObject *)>("PyDict_SetItem");
-    Value *result = builder().CreateCall3(op, dict, key, value, "STORE_MAP");
+    Function *setitem = GetGlobalFunction<
+        int(PyObject *, PyObject *, PyObject *)>("PyDict_SetItem");
+    Value *result = builder().CreateCall3(setitem, dict, key, value,
+                                          "STORE_MAP_result");
     builder().CreateCondBr(IsNonZero(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -1020,6 +1067,7 @@ LlvmFunctionBuilder::STORE_MAP()
     builder().SetInsertPoint(success);
 }
 
+// LLVM IR version of PyList_SET_ITEM(); does not DECREF old contents
 void
 LlvmFunctionBuilder::List_SET_ITEM(Value *lst, Value *idx, Value *item)
 {
@@ -1027,11 +1075,11 @@ LlvmFunctionBuilder::List_SET_ITEM(Value *lst, Value *idx, Value *item)
         lst, TypeBuilder<PyListObject*>::cache(this->module_));
     Value *list_items = builder().CreateLoad(
         builder().CreateStructGEP(listobj, ListTy::FIELD_ITEM));
-    Value *itemslot = builder().CreateGEP(list_items, idx, "List_SET_ITEM");
-    // SET_ITEM nukes references, it should only be used on empty tuples.
+    Value *itemslot = builder().CreateGEP(list_items, idx, "list_item_slot");
     builder().CreateStore(item, itemslot);
 }
 
+// LLVM IR version of PyTuple_SET_ITEM(); does not DECREF old contents
 void
 LlvmFunctionBuilder::Tuple_SET_ITEM(Value *tup, Value *idx, Value *item)
 {
@@ -1044,50 +1092,54 @@ LlvmFunctionBuilder::Tuple_SET_ITEM(Value *tup, Value *idx, Value *item)
     };
     Value *itemslot = builder().CreateGEP(tupobj, tup_item_indices,
                                           end(tup_item_indices),
-                                          "Tuple_SET_ITEM");
-    // SET_ITEM nukes references, it should only be used on empty tuples.
+                                          "tuple_item_slot");
     builder().CreateStore(item, itemslot);
 }
 
+// Common code for BUILD_TUPLE and BUILD_LIST
 void
 LlvmFunctionBuilder::SequenceBuilder(int size, const char *createname,
     void (LlvmFunctionBuilder::*method)(Value*, Value*, Value*))
 {
     BasicBlock *failure = BasicBlock::Create("SeqBuild_failure", function());
-    BasicBlock *start = BasicBlock::Create("SeqBuild_start", function());
-    BasicBlock *body = BasicBlock::Create("SeqBuild_body", function());
+    BasicBlock *loop_start = BasicBlock::Create("SeqBuild_loop_start",
+                                                function());
+    BasicBlock *loop_body = BasicBlock::Create("SeqBuild_loop_body",
+                                               function());
     BasicBlock *end = BasicBlock::Create("SeqBuild_end", function());
+
     const Type *IntSsizeTy = TypeBuilder<Py_ssize_t>::cache(this->module_);
     Value *seqsize = ConstantInt::get(IntSsizeTy, size, true /* signed */);
     Value *zero = Constant::getNullValue(IntSsizeTy);
     Value *one = ConstantInt::get(IntSsizeTy, 1, true /* signed */);
 
-    Function *op = GetGlobalFunction<PyObject *(Py_ssize_t)>(createname);
-    Value *seq = builder().CreateCall(op, seqsize, "SeqBuild_create");
+    Function *create = GetGlobalFunction<PyObject *(Py_ssize_t)>(createname);
+    Value *seq = builder().CreateCall(create, seqsize, "SeqBuild_seq");
     BasicBlock *preamble = builder().GetInsertBlock();
-    builder().CreateCondBr(IsNull(seq), failure, start);
+    builder().CreateCondBr(IsNull(seq), failure, loop_start);
 
     builder().SetInsertPoint(failure);
     builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
 
-    builder().SetInsertPoint(start);
-    PHINode *phi = builder().CreatePHI(IntSsizeTy, "SeqBuild_phi");
+    builder().SetInsertPoint(loop_start);
+    PHINode *phi = builder().CreatePHI(IntSsizeTy, "SeqBuild_loop_var");
     phi->addIncoming(seqsize, preamble);
     Value *done = builder().CreateICmpSLE(phi, zero,
-                                          "SeqBuild_loopcheck");
-    builder().CreateCondBr(done, end, body);
+                                          "SeqBuild_loop_check");
+    builder().CreateCondBr(done, end, loop_body);
 
-    builder().SetInsertPoint(body);
+    builder().SetInsertPoint(loop_body);
     Value *item = Pop();
-    Value *nextval = builder().CreateSub(phi, one, "SeqBuild_sub");
+    Value *nextval = builder().CreateSub(phi, one, "SeqBuild_next_loop_var");
     (this->*method)(seq, nextval, item);
     phi->addIncoming(nextval, builder().GetInsertBlock()); 
-    builder().CreateBr(start);
+    builder().CreateBr(loop_start);
 
     builder().SetInsertPoint(end);
     Push(seq);
 }
-                                      
+
+// Build a list out of <size> items from the stack, push the result
 void
 LlvmFunctionBuilder::BUILD_LIST(int size)
 {
@@ -1095,6 +1147,7 @@ LlvmFunctionBuilder::BUILD_LIST(int size)
                    &LlvmFunctionBuilder::List_SET_ITEM);
 }
 
+// Build a tuple out of <size> items from the stack, push the result
 void
 LlvmFunctionBuilder::BUILD_TUPLE(int size)
 {
@@ -1102,6 +1155,7 @@ LlvmFunctionBuilder::BUILD_TUPLE(int size)
                    &LlvmFunctionBuilder::Tuple_SET_ITEM);
 }
 
+// Push a new (empty, but possibly pre-allocated) dict onto the stack
 void
 LlvmFunctionBuilder::BUILD_MAP(int size)
 {
@@ -1109,9 +1163,10 @@ LlvmFunctionBuilder::BUILD_MAP(int size)
     BasicBlock *success = BasicBlock::Create("BUILD_MAP_success", function());
     Value *sizehint = ConstantInt::get(
         TypeBuilder<Py_ssize_t>::cache(this->module_), size, true);
-    Function *op = GetGlobalFunction<PyObject *(Py_ssize_t)>(
-        "_PyDict_NewPresized");
-    Value *result = builder().CreateCall(op, sizehint, "BUILD_MAP");
+    Function *create_dict = GetGlobalFunction<
+        PyObject *(Py_ssize_t)>("_PyDict_NewPresized");
+    Value *result = builder().CreateCall(create_dict, sizehint,
+                                         "BULD_MAP_result");
     builder().CreateCondBr(IsNull(result), failure, success);
 
     builder().SetInsertPoint(failure);

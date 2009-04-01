@@ -208,15 +208,21 @@ private:
     // Returns an i1, true if value is a non-zero integer.
     llvm::Value *IsNonZero(llvm::Value *value);
 
-    // Helper methods for binary and unary operators
-    void GenericBinOp(const char *name, const char *funcname);
-    void GenericPowOp(const char *name, const char *funcname);
-    void GenericUnaryOp(const char *name, const char *funcname);
+    // Helper methods for binary and unary operators, passing the name
+    // of the Python/C API function that implements the operation.
+    // GenericBinOp's apifunc is "PyObject *(*)(PyObject *, PyObject *)"
+    void GenericBinOp(const char *apifunc);
+    // GenericPowOp's is "PyObject *(*)PyObject *, PyObject *, PyObject *)"
+    void GenericPowOp(const char *apifunc);
+    // GenericUnaryOp's is "PyObject *(*)(PyObject *)"
+    void GenericUnaryOp(const char *apifunc);
 
-    // Helper methods for list and tuple indexing
+    // LLVM IR version of PyList_SET_ITEM()
     void List_SET_ITEM(llvm::Value *lst, llvm::Value *idx, llvm::Value *item);
+    // LLVM IR version of PyTuple_SET_ITEM()
     void Tuple_SET_ITEM(llvm::Value *tup, llvm::Value *idx, llvm::Value *item);
 
+    // Helper method for building a new sequence from items on the stack
     void SequenceBuilder(int size, const char *createname,
         void (LlvmFunctionBuilder::*method)(llvm::Value *, llvm::Value *,
                                             llvm::Value *));
