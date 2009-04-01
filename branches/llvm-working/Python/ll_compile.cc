@@ -704,11 +704,19 @@ LlvmFunctionBuilder::RETURN_VALUE()
 void
 LlvmFunctionBuilder::GenericBinOp(const char *name, const char *funcname)
 {
+    BasicBlock *failure = BasicBlock::Create("binop_failure", function());
+    BasicBlock *success = BasicBlock::Create("binop_success", function());
     Value *rhs = Pop();
     Value *lhs = Pop();
     Function *op =
         GetGlobalFunction<PyObject*(PyObject*, PyObject*)>(funcname);
     Value *result = builder().CreateCall2(op, lhs, rhs, name);
+    builder().CreateCondBr(IsNull(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
     Push(result);
 }
 
@@ -753,12 +761,20 @@ BINOP_METH(INPLACE_FLOOR_DIVIDE, PyNumber_InPlaceFloorDivide)
 void
 LlvmFunctionBuilder::GenericPowOp(const char *name, const char *funcname)
 {
+    BasicBlock *failure = BasicBlock::Create("pow_failure", function());
+    BasicBlock *success = BasicBlock::Create("pow_success", function());
     Value *rhs = Pop();
     Value *lhs = Pop();
     Function *op = GetGlobalFunction<PyObject*(PyObject*, PyObject*,
         PyObject *)>(funcname);
     Value *noval = GetGlobalVariable<PyObject>("_Py_NoneStruct");
     Value *result = builder().CreateCall3(op, lhs, rhs, noval, name);
+    builder().CreateCondBr(IsNull(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
     Push(result);
 }
 
@@ -777,9 +793,17 @@ LlvmFunctionBuilder::INPLACE_POWER()
 void
 LlvmFunctionBuilder::GenericUnaryOp(const char *name, const char *funcname)
 {
+    BasicBlock *failure = BasicBlock::Create("unary_failure", function());
+    BasicBlock *success = BasicBlock::Create("unary_success", function());
     Value *val = Pop();
     Function *op = GetGlobalFunction<PyObject*(PyObject*)>(funcname);
     Value *result = builder().CreateCall(op, val, name);
+    builder().CreateCondBr(IsNull(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    builder().CreateRet(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
     Push(result);
 }
 

@@ -491,8 +491,270 @@ class OperatorTests(unittest.TestCase):
         self.assertEquals(non_llvm_results, llvm_results)
         self.assertEquals(non_llvm_recorder.ops, llvm_recorder.ops)
 
+class OpExc(Exception):
+    def __cmp__(self, other):
+        return cmp(self.args, other.args)
+    def __hash__(self):
+        return hash(self.args)
+
+class OpRaiser(object):
+    # regular binar arithmetic operations
+    def __init__(self):
+        self.ops = []
+    def __add__(self, other):
+        self.ops.append('add')
+        raise OpExc(1)
+    def __sub__(self, other):
+        self.ops.append('sub')
+        raise OpExc(2)
+    def __mul__(self, other):
+        self.ops.append('mul')
+        raise OpExc(3)
+    def __div__(self, other):
+        self.ops.append('div')
+        raise OpExc(4)
+    def __truediv__(self, other):
+        self.ops.append('truediv')
+        raise OpExc(5)
+    def __floordiv__(self, other):
+        self.ops.append('floordiv')
+        raise OpExc(6)
+    def __mod__(self, other):
+        self.ops.append('mod')
+        raise OpExc(7)
+    def __pow__(self, other):
+        self.ops.append('pow')
+        raise OpExc(8)
+    def __lshift__(self, other):
+        self.ops.append('lshift')
+        raise OpExc(9)
+    def __rshift__(self, other):
+        self.ops.append('rshift')
+        raise OpExc(10)
+    def __and__(self, other):
+        self.ops.append('and')
+        raise OpExc(11)
+    def __or__(self, other):
+        self.ops.append('or')
+        raise OpExc(12)
+    def __xor__(self, other):
+        self.ops.append('xor')
+        raise OpExc(13)
+
+    # Unary operations
+    def __nonzero__(self):
+        self.ops.append('nonzero')
+        raise OpExc(False)
+    def __invert__(self):
+        self.ops.append('invert')
+        raise OpExc(14)
+    def __pos__(self):
+        self.ops.append('pos')
+        raise OpExc(15)
+    def __neg__(self):
+        self.ops.append('neg')
+        raise OpExc(16)
+    def __repr__(self):
+        self.ops.append('repr')
+        raise OpExc('<OpRecorder 17>')
+        
+    # right-hand binary arithmetic operations
+    def __radd__(self, other):
+        self.ops.append('radd')
+        raise OpExc(101)
+    def __rsub__(self, other):
+        self.ops.append('rsub')
+        raise OpExc(102)
+    def __rmul__(self, other):
+        self.ops.append('rmul')
+        raise OpExc(103)
+    def __rdiv__(self, other):
+        self.ops.append('rdiv')
+        raise OpExc(104)
+    def __rtruediv__(self, other):
+        self.ops.append('rtruediv')
+        raise OpExc(105)
+    def __rfloordiv__(self, other):
+        self.ops.append('rfloordiv')
+        raise OpExc(106)
+    def __rmod__(self, other):
+        self.ops.append('rmod')
+        raise OpExc(107)
+    def __rpow__(self, other):
+        self.ops.append('rpow')
+        raise OpExc(108)
+    def __rlshift__(self, other):
+        self.ops.append('rlshift')
+        raise OpExc(109)
+    def __rrshift__(self, other):
+        self.ops.append('rrshift')
+        raise OpExc(110)
+    def __rand__(self, other):
+        self.ops.append('rand')
+        raise OpExc(111)
+    def __ror__(self, other):
+        self.ops.append('ror')
+        raise OpExc(112)
+    def __rxor__(self, other):
+        self.ops.append('rxor')
+        raise OpExc(113)
+
+    # In-place binary arithmetic operations
+    def __iadd__(self, other):
+        self.ops.append('iadd')
+        raise OpExc(1001)
+    def __isub__(self, other):
+        self.ops.append('isub')
+        raise OpExc(1002)
+    def __imul__(self, other):
+        self.ops.append('imul')
+        raise OpExc(1003)
+    def __idiv__(self, other):
+        self.ops.append('idiv')
+        raise OpExc(1004)
+    def __itruediv__(self, other):
+        self.ops.append('itruediv')
+        raise OpExc(1005)
+    def __ifloordiv__(self, other):
+        self.ops.append('ifloordiv')
+        raise OpExc(1006)
+    def __imod__(self, other):
+        self.ops.append('imod')
+        raise OpExc(1007)
+    def __ipow__(self, other):
+        self.ops.append('ipow')
+        raise OpExc(1008)
+    def __ilshift__(self, other):
+        self.ops.append('ilshift')
+        raise OpExc(1009)
+    def __irshift__(self, other):
+        self.ops.append('irshift')
+        raise OpExc(1010)
+    def __iand__(self, other):
+        self.ops.append('iand')
+        raise OpExc(1011)
+    def __ior__(self, other):
+        self.ops.append('ior')
+        raise OpExc(1012)
+    def __ixor__(self, other):
+        self.ops.append('ixor')
+        raise OpExc(1013)
+
+class OperatorRaisingTests(unittest.TestCase):
+    def test_basic_arithmetic(self):
+        operators = ('+', '-', '*', '/', '//', '%', '**',
+                     '<<', '>>', '&', '|', '^')
+        parts = []
+        for idx, op in enumerate(operators):
+            parts.extend([
+                'def regular_%s(x): x %s 1' % (idx, op),
+                'def reverse_%s(x): 1 %s x' % (idx, op),
+                'def inplace_%s(x): x %s= 1' % (idx, op),
+            ])
+        testcode = '\n'.join(parts)
+        co = compile(testcode, 'basic_arithmetic', 'exec',
+                     flags=0, dont_inherit=True)
+        namespace = {}
+        exec co in namespace
+        
+        non_llvm_results = []
+        non_llvm_raiser = OpRaiser()
+        for idx, op in enumerate(operators):
+            for fname in ('regular', 'reverse', 'inplace'):
+                f = namespace['%s_%s' % (fname, idx)]
+                try:
+                    f(non_llvm_raiser)
+                except OpExc, e:
+                    non_llvm_results.append(e)
+        self.assertEquals(len(non_llvm_raiser.ops), len(operators) * 3)
+        self.assertEquals(len(non_llvm_results), len(operators) * 3)
+        self.assertEquals(len(set(non_llvm_results)),
+                          len(non_llvm_results))
+
+        llvm_results = []
+        llvm_raiser = OpRaiser()
+        for idx, op in enumerate(operators):
+            for fname in ('regular', 'reverse', 'inplace'):
+                f = namespace['%s_%s' % (fname, idx)]
+                f.__code__.__use_llvm__ = True
+                try:
+                    f(llvm_raiser)
+                except OpExc, e:
+                    llvm_results.append(e)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
+
+    def test_truediv(self):
+        truedivcode = '\n'.join(['def regular(x): x / 1',
+                                 'def reverse(x): 1 / x',
+                                 'def inplace(x): x /= 1',
+        ])
+        co = compile(truedivcode, 'truediv_arithmetic', 'exec',
+                     flags=__future__.division.compiler_flag,
+                     dont_inherit=True)
+        namespace = {}
+        exec co in namespace
+
+        non_llvm_results = []
+        non_llvm_raiser = OpRaiser()
+        for fname in ('regular', 'reverse', 'inplace'):
+            f = namespace[fname]
+            try:
+                f(non_llvm_raiser)
+            except OpExc, e:
+                non_llvm_results.append(e)
+        self.assertEquals(len(non_llvm_raiser.ops), 3)
+        self.assertEquals(len(non_llvm_results), 3)
+        self.assertEquals(len(set(non_llvm_results)),
+                          len(non_llvm_results))
+
+        llvm_results = []
+        llvm_raiser = OpRaiser()
+        for fname in ('regular', 'reverse', 'inplace'):
+            f = namespace[fname]
+            f.__code__.__use_llvm__ = True
+            try:
+                f(llvm_raiser)
+            except OpExc, e:
+                llvm_results.append(e)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
+
+    def test_unary(self):
+        funcs = (lambda x: not x,
+                 lambda x: ~x,
+                 lambda x: +x,
+                 lambda x: -x,
+                 lambda x: `x`)
+
+        non_llvm_results = []
+        non_llvm_raiser = OpRaiser()
+        for f in funcs:
+            try:
+                f(non_llvm_raiser)
+            except OpExc, e:
+                non_llvm_results.append(e)
+        self.assertEquals(len(non_llvm_raiser.ops), 5)
+        self.assertEquals(len(non_llvm_results), 5)
+        self.assertEquals(len(set(non_llvm_results)),
+                          len(non_llvm_results))
+
+        llvm_results = []
+        llvm_raiser = OpRaiser()
+        for f in funcs:
+            f.__code__.__use_llvm__ = True
+            try:
+                f(llvm_raiser)
+            except OpExc, e:
+                llvm_results.append(e)
+
+        self.assertEquals(non_llvm_results, llvm_results)
+        self.assertEquals(non_llvm_raiser.ops, llvm_raiser.ops)
+
 def test_main():
-    run_unittest(LlvmTests, OperatorTests)
+    run_unittest(LlvmTests, OperatorTests, OperatorRaisingTests)
 
 
 if __name__ == "__main__":
