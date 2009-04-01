@@ -199,36 +199,6 @@ entry:
         listcomp.__code__.__use_llvm__ = True
         self.assertEquals(listcomp([1, 2, 3]), non_llvm)
 
-    def test_literals(self):
-        def lits(x):
-            return (1, x, 3)
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), (1, 2, 3))
-        def lits(x):
-            return (1, x, (3, 4, x), 1)
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), (1, 2, (3, 4, 2), 1))
-        def lits(x):
-            return [1, x, 3]
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), [1, 2, 3])
-        def lits(x):
-            return [1, x, [3, 2], 1]
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), [1, 2, [3, 2], 1])
-        def lits(x):
-            return {1: x, 3: 4}
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), {1: 2, 3: 4})
-        def lits(x):
-            return {(1, x): {3: x}, x: 1}
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), {(1, 2): {3: 2}, 2: 1})
-        def lits(x):
-            return (1, x, 3, (3, 4), [3, x, 1], {1: x, 3: 4 })
-        lits.__code__.__use_llvm__ = True
-        self.assertEquals(lits(2), (1, 2, 3, (3, 4), [3, 2, 1], {1: 2, 3: 4}))
-
     def test_opcodes(self):
         # Test some specific opcodes
         def pop_top(x):
@@ -238,6 +208,47 @@ entry:
             
         pop_top.__code__.__use_llvm__ = True
         pop_top('pop me')
+
+class LiteralsTests(unittest.TestCase):
+    def run_check_return(self, func):
+        non_llvm = func(2)
+        func.__code__.__use_llvm__ = True
+        self.assertEquals(func(2), non_llvm)
+
+    def run_check_exc(self, func):
+        try:
+            func(2)
+        except TypeError, non_llvm_exc:
+            pass
+        else:
+            self.fail("expected exception")
+        func.__code__.__use_llvm__ = True
+        try:
+            func(2)
+        except TypeError, llvm_exc:
+            pass
+        else:
+            self.fail("expected exception")
+        self.assertEquals(llvm_exc.__class__, non_llvm_exc.__class__)
+        self.assertEquals(llvm_exc.args, non_llvm_exc.args)
+
+    def test_build_tuple(self):
+        self.run_check_return(lambda x: (1, x, 3))
+        self.run_check_return(lambda x: (1, x, (3, 4, x), 1))
+        self.run_check_exc(lambda x: (1, x, x + ""))
+        self.run_check_exc(lambda x: (1, x, (3, 4, x + ""), 1))
+    
+    def test_build_list(self):
+        self.run_check_return(lambda x: [1, x, 3])
+        self.run_check_return(lambda x: [1, x, [3, 4, x], 1])
+        self.run_check_exc(lambda x: [1, x, x + ""])
+        self.run_check_exc(lambda x: [1, x, [3, 4, x + ""], 1])
+
+    def test_build_map(self):
+        self.run_check_return(lambda x: {1: x, 3: "4"})
+        self.run_check_return(lambda x: {1: "1", x: {3: 4} })
+        self.run_check_exc(lambda x: {1: x, x + "": 4})
+        self.run_check_exc(lambda x: {1: x, {3: 4, x + "": 3}: 1})
 
 
 # dont_inherit will unfortunately not turn off true division when
@@ -748,7 +759,8 @@ class OperatorRaisingTests(unittest.TestCase):
         self.assertEquals(non_llvm_exc, llvm_exc)
 
 def test_main():
-    run_unittest(LlvmTests, OperatorTests, OperatorRaisingTests)
+    run_unittest(LlvmTests, LiteralsTests, OperatorTests,
+                 OperatorRaisingTests)
 
 
 if __name__ == "__main__":
