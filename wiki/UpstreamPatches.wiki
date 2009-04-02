@@ -1,0 +1,21 @@
+#summary Patches Unladen Swallow has pushed to various upstream projects
+
+= CPython =
+
+== Patches reviewed, submitted ==
+  * [http://bugs.python.org/issue5588 Issue 5588]. Add --randseed to regrtest.py.
+  * [http://bugs.python.org/issue5176 Issue 5176]. Special-case string formatting in BINARY_MODULO implementation.
+
+== Patches under review ==
+  * [http://bugs.python.org/issue5670 Issue 5670]. Improve performance of cPickle when pickling dicts.
+  * [http://bugs.python.org/issue5665 Issue 5665]. Add more tests for pickling, including backwards-compatibility tests.
+  * [http://bugs.python.org/issue5575 Issue 5575]. Add env vars for controlling building sqlite, hashlib and ssl.
+  * [http://bugs.python.org/issue5572 Issue 5572]. Make distutils correctly use the LIBS configure env var.
+  * [http://bugs.python.org/issue5372 Issue 5372]. Fix distutils to not inappropriately reuse .o files between extension modules.
+  * [http://bugs.python.org/issue5362 Issue 5362]. Add configure option to disable Py3k warnings.
+
+
+= LLVM =
+
+== Patches reviewed, submitted ==
+  * [http://llvm.org/viewvc/llvm-project?view=rev&revision=68277 r68277]. Fix overflow checks in SmallVector.
