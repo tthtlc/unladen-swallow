@@ -1,7 +1,27 @@
 #! /usr/bin/python2.5
 
-"""Wrapper script for comparing the performance of two python implementations.
+"""Tool for comparing the performance of two Python implementations.
 
+Typical usage looks like
+
+./perf.py -b 2to3,django control/python experiment/python
+
+This will run the 2to3 and Django template benchmarks, using `control/python`
+as the baseline and `experiment/python` as the experiment. The --fast and
+--rigorous options can be used to vary the duration/accuracy of the run. Run
+--help to get a full list of options that can be passed to -b.
+
+Omitting the -b option will result in the default group of benchmarks being run
+This currently consists of: 2to3, django, slowspitfire, pickle, unpickle.
+Omitting -b is the same as specifying `-b default`.
+
+To run every benchmark perf.py knows about, use `-b all`.
+
+Negative benchmarks specifications are also supported: `-b -2to3` will run every
+benchmark in the default group except for 2to3 (this is the same as
+`-b default,-2to3`). `-b all,-django` will run all benchmarks except the Django
+templates benchmark. Negative groups (e.g., `-b -default`) are not supported.
+Positive benchmarks are parsed before the negative benchmarks are subtracted.
 """
 
 from __future__ import division, with_statement
@@ -572,40 +592,61 @@ def BM_SlowUnpickle(base_python, changed_python, options):
     return _PickleBenchmark(base_python, changed_python, options, ["unpickle"])
 
 
-def ParseBenchmarksOption(options, legal_benchmarks):
-    """Parses and verifies the --benchmarks option so ShouldRun can use it.
+def _FindAllBenchmarks():
+    return dict((name[3:].lower(), func)
+                for (name, func) in sorted(globals().iteritems())
+                if name.startswith("BM_"))
 
-    Sets options.positive_benchmarks and options.negative_benchmarks.
+
+# Benchmark groups. The "default" group is what's run if no -b option is
+# specified. The "all" group includes every benchmark perf.py knows about.
+# If you update the default group, be sure to update the module docstring, too.
+BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "pickle",
+                            "unpickle"],
+                "all": _FindAllBenchmarks().keys(),
+               }
+
+
+def ParseBenchmarksOption(benchmarks_opt, legal_benchmarks):
+    """Parses and verifies the --benchmarks option.
+
+    Args:
+        benchmarks_opt: the string passed to the -b option on the command line.
+        legal_benchmarks: list of all legal benchmark names.
+
+    Returns:
+        A set() of the names of the benchmarks to run.
     """
-    benchmarks = options.benchmarks.split(",")
-    options.positive_benchmarks = set(
+    benchmarks = benchmarks_opt.split(",")
+    positive_benchmarks = set(
         bm.lower() for bm in benchmarks if bm and bm[0] != "-")
-    options.negative_benchmarks = set(
+    negative_benchmarks = set(
         bm[1:].lower() for bm in benchmarks if bm and bm[0] == "-")
 
-    legal_benchmarks = set(name.lower() for (name, func) in legal_benchmarks)
-    for bm in options.positive_benchmarks | options.negative_benchmarks:
-        if bm not in legal_benchmarks:
+    should_run = set()
+    if not positive_benchmarks:
+        should_run = set(BENCH_GROUPS["default"])
+
+    for bm in positive_benchmarks:
+        if bm in BENCH_GROUPS:
+            should_run.update(BENCH_GROUPS[bm])
+        elif bm not in legal_benchmarks:
             logging.warning("No benchmark named %s", bm)
-
-
-def ShouldRun(benchmark, options):
-    """Returns true if the options indicate that we should run 'benchmark'."""
-    benchmark = benchmark.lower()
-    if benchmark in options.negative_benchmarks:
-        return False
-    if options.positive_benchmarks:
-        return benchmark in options.positive_benchmarks
-    # pybench must be explicitly requested, such is its quality.
-    if benchmark == "pybench":
-        return False
-    return True
+        else:
+            should_run.add(bm)
+    for bm in negative_benchmarks:
+        if bm in BENCH_GROUPS:
+            raise ValueError("Negative groups not supported: -%s" % bm)
+        elif bm not in legal_benchmarks:
+            logging.warning("No benchmark named %s", bm)
+        else:
+            should_run.remove(bm)
+    return should_run
 
 
 if __name__ == "__main__":
-    benchmarks = [(name[3:], func)
-                  for name, func in sorted(globals().iteritems())
-                  if name.startswith("BM_")]
+    bench_funcs = _FindAllBenchmarks()
+    all_benchmarks = set(BENCH_GROUPS["all"])
 
     parser = optparse.OptionParser(
         usage="%prog [options] baseline_python changed_python",
@@ -625,8 +666,8 @@ if __name__ == "__main__":
                             " there are no positive arguments, we'll run all" +
                             " benchmarks except the negative arguments. " +
                             " Otherwise we run only the positive arguments. " +
-                            " Valid benchmarks are: " +
-                            ", ".join(name for (name, func) in benchmarks)))
+                            " Valid benchmarks are: default, all, " +
+                            ", ".join(all_benchmarks)))
 
     options, args = parser.parse_args()
     if len(args) != 2:
@@ -635,13 +676,13 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    ParseBenchmarksOption(options, benchmarks)
+    should_run = ParseBenchmarksOption(options.benchmarks, all_benchmarks)
 
     results = []
-    for name, func in benchmarks:
-        if ShouldRun(name, options):
-            print "Running %s..." % name
-            results.append((name, func(base, changed, options)))
+    for name in sorted(should_run):
+        func = bench_funcs[name]
+        print "Running %s..." % name
+        results.append((name, func(base, changed, options)))
 
     print
     print "Report on %s" % " ".join(platform.uname())

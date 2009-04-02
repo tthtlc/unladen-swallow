@@ -51,33 +51,40 @@ class TestStatsFunctions(unittest.TestCase):
 
 class TestMisc(unittest.TestCase):
 
-    def testShouldRun(self):
+    def testParseBenchmarksOption(self):
+        legal = ["2to3", "pybench", "spitfire", "django"]
+
         # perf.py, no -b option.
-        options = Object(negative_benchmarks=[], positive_benchmarks=[])
-        self.assertTrue(perf.ShouldRun("2to3", options))
-        self.assertTrue(perf.ShouldRun("spitfire", options))
-        self.assertFalse(perf.ShouldRun("pybench", options))
+        should_run = perf.ParseBenchmarksOption("", legal)
+        self.assertEqual(should_run, set(["2to3", "django", "slowspitfire",
+                                          "pickle", "unpickle"]))
 
         # perf.py -b 2to3
-        options.positive_benchmarks = ["2to3"]
-        self.assertTrue(perf.ShouldRun("2to3", options))
-        self.assertFalse(perf.ShouldRun("spitfire", options))
-        self.assertFalse(perf.ShouldRun("pybench", options))
+        should_run = perf.ParseBenchmarksOption("2to3", legal)
+        self.assertEqual(should_run, set(["2to3"]))
 
         # perf.py -b 2to3,pybench
-        options.positive_benchmarks = ["2to3", "pybench"]
-        options.negative_benchmarks = []
-        self.assertTrue(perf.ShouldRun("2to3", options))
-        self.assertFalse(perf.ShouldRun("spitfire", options))
-        self.assertTrue(perf.ShouldRun("pybench", options))
+        should_run = perf.ParseBenchmarksOption("2to3,pybench", legal)
+        self.assertEqual(should_run, set(["2to3", "pybench"]))
 
         # perf.py -b -2to3
-        options.positive_benchmarks = []
-        options.negative_benchmarks = ["2to3"]
-        self.assertFalse(perf.ShouldRun("2to3", options))
-        self.assertTrue(perf.ShouldRun("spitfire", options))
-        self.assertFalse(perf.ShouldRun("pybench", options))
+        should_run = perf.ParseBenchmarksOption("-2to3", legal)
+        self.assertEqual(should_run, set(["django", "slowspitfire",
+                                          "pickle", "unpickle"]))
 
+        # perf.py -b all
+        should_run = perf.ParseBenchmarksOption("all", legal)
+        self.assertTrue("django" in should_run, should_run)
+        self.assertTrue("pybench" in should_run, should_run)
+
+        # perf.py -b -2to3,all
+        should_run = perf.ParseBenchmarksOption("-2to3,all", legal)
+        self.assertTrue("django" in should_run, should_run)
+        self.assertTrue("pybench" in should_run, should_run)
+        self.assertFalse("2to3" in should_run, should_run)
+
+        # Error conditions
+        self.assertRaises(ValueError, perf.ParseBenchmarksOption, "-all", legal)
 
 if __name__ == "__main__":
     unittest.main()
