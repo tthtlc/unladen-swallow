@@ -291,6 +291,28 @@ def test_unpickle_list(pickle, options, loops):
         times.append(t1 - t0)
     return times
 
+
+MICRO_DICT = dict((key, dict.fromkeys(range(10))) for key in xrange(100))
+
+def test_pickle_dict(pickle, options, loops):
+    # Warm-up runs.
+    pickle.dumps(MICRO_DICT, options.protocol)
+
+    loops = max(1, loops / 10)
+    times = []
+    for _ in xrange(options.num_runs):
+        t0 = time.time()
+        for _ in xrange(loops):
+            pickle.dumps(MICRO_DICT, options.protocol)
+            pickle.dumps(MICRO_DICT, options.protocol)
+            pickle.dumps(MICRO_DICT, options.protocol)
+            pickle.dumps(MICRO_DICT, options.protocol)
+            pickle.dumps(MICRO_DICT, options.protocol)
+        t1 = time.time()
+        times.append(t1 - t0)
+    return times
+
+
 if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [pickle|unpickle] [options]",
@@ -303,7 +325,8 @@ if __name__ == "__main__":
                       help="Which protocol to use (0, 1, 2).")
     options, args = parser.parse_args()
 
-    benchmarks = ["pickle", "unpickle", "pickle_list", "unpickle_list"]
+    benchmarks = ["pickle", "unpickle", "pickle_list", "unpickle_list",
+                  "pickle_dict"]
     for bench_name in benchmarks:
         if bench_name in args:
             benchmark = globals()["test_" + bench_name]

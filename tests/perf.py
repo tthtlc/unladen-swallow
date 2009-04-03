@@ -591,6 +591,10 @@ def BM_Unpickle_List(base_python, changed_python, options):
     args = ["--use_cpickle", "unpickle_list"]
     return _PickleBenchmark(base_python, changed_python, options, args)
 
+def BM_Pickle_Dict(base_python, changed_python, options):
+    args = ["--use_cpickle", "pickle_dict"]
+    return _PickleBenchmark(base_python, changed_python, options, args)
+
 def BM_SlowPickle(base_python, changed_python, options):
     return _PickleBenchmark(base_python, changed_python, options, ["pickle"])
 
