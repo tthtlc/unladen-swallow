@@ -239,6 +239,58 @@ def test_unpickle(pickle, options, num_obj_copies):
     return times
 
 
+LIST = [[range(10), range(10)] for _ in xrange(10)]
+
+
+def test_pickle_list(pickle, options, loops):
+    # Warm-up runs.
+    pickle.dumps(LIST, options.protocol)
+
+    loops = loops / 5  # Scale to compensate for the workload.
+    times = []
+    for _ in xrange(options.num_runs):
+        t0 = time.time()
+        for _ in xrange(loops):
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+            pickle.dumps(LIST, options.protocol)
+        t1 = time.time()
+        times.append(t1 - t0)
+    return times
+
+
+def test_unpickle_list(pickle, options, loops):
+    pickled_list = pickle.dumps(LIST, options.protocol)
+
+    # Warm-up runs.
+    pickle.loads(pickled_list)
+
+    loops = loops / 5  # Scale to compensate for the workload.
+    times = []
+    for _ in xrange(options.num_runs):
+        t0 = time.time()
+        for _ in xrange(loops):
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+            pickle.loads(pickled_list)
+        t1 = time.time()
+        times.append(t1 - t0)
+    return times
+
 if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [pickle|unpickle] [options]",
@@ -251,12 +303,13 @@ if __name__ == "__main__":
                       help="Which protocol to use (0, 1, 2).")
     options, args = parser.parse_args()
 
-    if "pickle" in args:
-        benchmark = test_pickle
-    elif "unpickle" in args:
-        benchmark = test_unpickle
+    benchmarks = ["pickle", "unpickle", "pickle_list", "unpickle_list"]
+    for bench_name in benchmarks:
+        if bench_name in args:
+            benchmark = globals()["test_" + bench_name]
+            break
     else:
-        raise RuntimeError("Need to specify either 'pickle' or 'unpickle'")
+        raise RuntimeError("Need to specify one of %s" % benchmarks)
 
     if options.use_cpickle:
         num_obj_copies = 8000
