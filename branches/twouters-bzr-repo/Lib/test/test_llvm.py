@@ -365,7 +365,16 @@ class OperatorTests(unittest.TestCase):
 
         self.run_and_compare(testfunc, expected_num_ops=2,
                              expected_num_results=1)
-                             
+
+    def test_subscr_augassign(self):
+        def testfunc(x, results):
+            results['item'] = x
+            results['item'] += 1
+            x['item'] += 1
+        # expect __iadd__, __getitem__ and __setitem__ on x.
+        self.run_and_compare(testfunc, expected_num_ops=3,
+                             expected_num_results=1)
+
 class OpExc(Exception):
     def __cmp__(self, other):
         return cmp(self.args, other.args)
@@ -532,9 +541,9 @@ class OpRaiser(object):
         raise OpExc(1016)
 
 class OperatorRaisingTests(unittest.TestCase):
-    def run_and_compare(self, namespace):
+    def run_and_compare(self, namespace, argument_factory=OpRaiser):
         non_llvm_results = []
-        non_llvm_raiser = OpRaiser()
+        non_llvm_raiser = argument_factory()
         funcs = namespace.items()
         funcs.sort()
         for fname, func in funcs:
@@ -550,7 +559,7 @@ class OperatorRaisingTests(unittest.TestCase):
                           len(non_llvm_results))
 
         llvm_results = []
-        llvm_raiser = OpRaiser()
+        llvm_raiser = argument_factory()
         for fname, func in funcs:
             func.__code__.__use_llvm__ = True
             try:
@@ -601,6 +610,30 @@ class OperatorRaisingTests(unittest.TestCase):
 
         self.run_and_compare({'getitem': getitem, 'setitem': setitem})
 
+    def test_subscr_augassign(self):
+        def setitem(x): x['item'] += 1
+        # Test x.__getitem__ raising an exception
+        self.run_and_compare({'setitem': setitem})
+        # Test x.__setitem__ raising an exception
+        class HalfOpRaiser(OpRaiser):
+            def __getitem__(self, item):
+                # Not recording this operation, we care about __setitem__.
+                return 1
+        self.run_and_compare({'setitem': setitem},
+                             argument_factory=HalfOpRaiser)
+        # Test <item> += 1 raising an exception
+        class OpRaiserProvider(OpRaiser):
+            def __init__(self):
+                OpRaiser.__init__(self)
+                self.opraiser = None
+            def __cmp__(self, other):
+                return cmp((self.ops, self.opraiser), other)
+            def __getitem__(self, item):
+                self.ops.append('getitem')
+                self.opraiser = OpRaiser()
+                return self.opraiser
+        self.run_and_compare({'setitem': setitem},
+                             argument_factory=OpRaiserProvider)
 
 def test_main():
     run_unittest(LlvmTests, OperatorTests, OperatorRaisingTests)

@@ -809,6 +809,30 @@ LlvmFunctionBuilder::INPLACE_POWER()
     GenericPowOp("PyNumber_InPlacePower");
 }
 
+void
+LlvmFunctionBuilder::DUP_TOP_TWO()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    IncRef(first);
+    IncRef(second);
+    Push(second);
+    Push(first);
+    Push(second);
+    Push(first);
+}
+
+void
+LlvmFunctionBuilder::ROT_THREE()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    Value *third = Pop();
+    Push(first);
+    Push(third);
+    Push(second);
+}
+
 // Adds delta to *addr, and returns the new value.
 static Value *
 increment_and_get(llvm::IRBuilder<>& builder, Value *addr, int64_t delta)
