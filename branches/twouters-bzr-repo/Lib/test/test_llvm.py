@@ -410,6 +410,17 @@ class OperatorTests(unittest.TestCase):
         self.run_and_compare(testfunc, expected_num_ops=3,
                              expected_num_results=1)
 
+    def test_unary(self):
+        def testfunc(x, results):
+            results['not'] = not x
+            results['invert'] = ~x
+            results['pos'] = +x
+            results['neg'] = -x
+            results['convert'] = `x`
+
+        self.run_and_compare(testfunc, expected_num_ops=5,
+                             expected_num_results=5)
+
 class OpExc(Exception):
     def __cmp__(self, other):
         return cmp(self.args, other.args)
@@ -638,6 +649,15 @@ class OperatorRaisingTests(unittest.TestCase):
         exec co in namespace
         del namespace['__builtins__']
         self.run_and_compare(namespace)
+
+    def test_unary(self):
+        funcs = {'not': lambda x: not x,
+                 'invert': lambda x: ~x,
+                 'pos': lambda x: +x,
+                 'neg': lambda x: -x,
+                 'convert': lambda x: `x`}
+
+        self.run_and_compare(funcs)
 
     def test_subscr(self):
         def getitem(x): x['item']
