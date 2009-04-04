@@ -178,7 +178,13 @@ In order to ensure correctness of the implementation, Unladen Swallow uses both 
 
 As work on the JIT implementation moves forward, we will incorporate a fuzzer into our regular test run. We plan to reuse Victor Stinner's [http://fusil.hachoir.org/svn/trunk/ Fusil] Python fuzzer as much as possible, since it a) exists, and b) has been demonstrated to find real bugs in Python.
 
+Unladen Swallow will come with a `--jit` option that can be used to control when the JIT kicks in. For example, `--jit=never` would disable the JIT entirely, while `--jit=always` would skip the warm-up interpreted executions and jump straight into native code generation; `--jit=once` will disable recompilation. These options will be used to test the various execution strategies in isolation. Our goal is to avoid JIT bugs that are never encountered because the buggy function isn't hot enough, as have been observed in the JVM (likewise for the interpreted mode).
+
 Unladen Swallow maintains a [http://buildbot.net/trac BuildBot] instance that runs the above tests against every commit to trunk.
+
+== Complexity ==
+
+One of CPython's virtues is its simplicity: modifying CPython's VM and compiler is relatively simple and straight-forward. Our work with LLVM will inevitably introduce more complexity into CPython's implementation. In order to measure the productivity trade-offs that may result from this extra machinery, the Unladen Swallow team will periodically take ideas from the `python-dev` and `python-ideas` mailing lists and implement them. If implementation is significantly more difficult that the corresponding change to CPython, that's obviously something that we'll need to address before merger. We may also get non-team members to do the implementations so that we get a less biased perspective.
 
 
 = Risks =
