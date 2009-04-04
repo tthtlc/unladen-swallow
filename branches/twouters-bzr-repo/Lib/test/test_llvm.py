@@ -139,6 +139,41 @@ entry:
         loop.__code__.__use_llvm__ = True
         self.assertEquals(1, loop([1,2,3]))
 
+class LiteralsTests(unittest.TestCase):
+    def run_check_return(self, func):
+        non_llvm = func(2)
+        func.__code__.__use_llvm__ = True
+        self.assertEquals(func(2), non_llvm)
+
+    def run_check_exc(self, func):
+        try:
+            func(2)
+        except TypeError, non_llvm_exc:
+            pass
+        else:
+            self.fail("expected exception")
+        func.__code__.__use_llvm__ = True
+        try:
+            func(2)
+        except TypeError, llvm_exc:
+            pass
+        else:
+            self.fail("expected exception")
+        self.assertEquals(llvm_exc.__class__, non_llvm_exc.__class__)
+        self.assertEquals(llvm_exc.args, non_llvm_exc.args)
+
+    def test_build_tuple(self):
+        self.run_check_return(lambda x: (1, x, 3))
+        self.run_check_return(lambda x: (1, x, (3, 4, x), 1))
+        self.run_check_exc(lambda x: (1, x, x + ""))
+        self.run_check_exc(lambda x: (1, x, (3, 4, x + ""), 1))
+    
+    def test_build_list(self):
+        self.run_check_return(lambda x: [1, x, 3])
+        self.run_check_return(lambda x: [1, x, [3, 4, x], 1])
+        self.run_check_exc(lambda x: [1, x, x + ""])
+        self.run_check_exc(lambda x: [1, x, [3, 4, x + ""], 1])
+
 # dont_inherit will unfortunately not turn off true division when
 # running with -Qnew, so we can't test classic division in
 # test_basic_arithmetic when running with -Qnew.
@@ -636,7 +671,8 @@ class OperatorRaisingTests(unittest.TestCase):
                              argument_factory=OpRaiserProvider)
 
 def test_main():
-    run_unittest(LlvmTests, OperatorTests, OperatorRaisingTests)
+    run_unittest(LlvmTests, LiteralsTests, OperatorTests,
+                 OperatorRaisingTests)
 
 
 if __name__ == "__main__":

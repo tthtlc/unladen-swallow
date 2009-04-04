@@ -80,6 +80,9 @@ public:
     void INPLACE_FLOOR_DIVIDE();
     void STORE_SUBSCR();
 
+    void BUILD_TUPLE(int size);
+    void BUILD_LIST(int size);
+
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
         InsertAbort(#NAME); \
@@ -147,8 +150,6 @@ public:
     UNIMPLEMENTED_I(MAKE_CLOSURE)
     UNIMPLEMENTED_I(COMPARE_OP)
     UNIMPLEMENTED_I(UNPACK_SEQUENCE)
-    UNIMPLEMENTED_I(BUILD_TUPLE)
-    UNIMPLEMENTED_I(BUILD_LIST)
     UNIMPLEMENTED_I(BUILD_MAP)
 
     UNIMPLEMENTED_J(POP_JUMP_IF_FALSE);
@@ -220,6 +221,16 @@ private:
     void GenericBinOp(const char *apifunc);
     // GenericPowOp's is "PyObject *(*)PyObject *, PyObject *, PyObject *)"
     void GenericPowOp(const char *apifunc);
+
+    // LLVM IR version of PyList_SET_ITEM()
+    void List_SET_ITEM(llvm::Value *lst, llvm::Value *idx, llvm::Value *item);
+    // LLVM IR version of PyTuple_SET_ITEM()
+    void Tuple_SET_ITEM(llvm::Value *tup, llvm::Value *idx, llvm::Value *item);
+
+    // Helper method for building a new sequence from items on the stack
+    void SequenceBuilder(int size, const char *createname,
+        void (LlvmFunctionBuilder::*method)(llvm::Value *, llvm::Value *,
+                                            llvm::Value *));
 
     llvm::Module *const module_;
     llvm::Function *const function_;

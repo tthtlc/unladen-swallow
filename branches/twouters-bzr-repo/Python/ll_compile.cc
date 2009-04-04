@@ -12,6 +12,7 @@
 #include "llvm/Constants.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/Function.h"
+#include "llvm/Instructions.h"
 #include "llvm/Intrinsics.h"
 #include "llvm/Module.h"
 #include "llvm/Type.h"
@@ -25,6 +26,7 @@ using llvm::Function;
 using llvm::FunctionType;
 using llvm::IntegerType;
 using llvm::Module;
+using llvm::PHINode;
 using llvm::PointerType;
 using llvm::Type;
 using llvm::Value;
@@ -111,6 +113,40 @@ public:
     };
 };
 typedef TypeBuilder<PyTupleObject> TupleTy;
+
+template<> class TypeBuilder<PyListObject> {
+public:
+    static const Type *cache(Module *module) {
+        std::string pylistobject_name("__pylistobject");
+        const Type *result = module->getTypeByName(pylistobject_name);
+        if (result != NULL)
+            return result;
+
+        // Keep this in sync with code.h.
+        result = llvm::StructType::get(
+            // From PyObject_HEAD. In C these are directly nested
+            // fields, but the layout should be the same when it's
+            // represented as a nested struct.
+            TypeBuilder<PyObject>::cache(module),
+            // From PyObject_VAR_HEAD
+            TypeBuilder<ssize_t>::cache(module),
+            // From PyListObject
+            TypeBuilder<PyObject**>::cache(module),  // ob_item
+            TypeBuilder<Py_ssize_t>::cache(module),  // allocated
+            NULL);
+
+        module->addTypeName(pylistobject_name, result);
+        return result;
+    }
+
+    enum Fields {
+        FIELD_OBJECT,
+        FIELD_SIZE,
+        FIELD_ITEM,
+        FIELD_ALLOCATED,
+    };
+};
+typedef TypeBuilder<PyListObject> ListTy;
 
 template<> class TypeBuilder<PyTypeObject> {
 public:
@@ -831,6 +867,89 @@ LlvmFunctionBuilder::ROT_THREE()
     Push(first);
     Push(third);
     Push(second);
+}
+
+void
+LlvmFunctionBuilder::List_SET_ITEM(Value *lst, Value *idx, Value *item)
+{
+    Value *listobj = builder().CreateBitCast(
+        lst, TypeBuilder<PyListObject*>::cache(this->module_));
+    Value *list_items = builder().CreateLoad(
+        builder().CreateStructGEP(listobj, ListTy::FIELD_ITEM));
+    Value *itemslot = builder().CreateGEP(list_items, idx, "list_item_slot");
+    builder().CreateStore(item, itemslot);
+}
+
+void
+LlvmFunctionBuilder::Tuple_SET_ITEM(Value *tup, Value *idx, Value *item)
+{
+    Value *tupobj = builder().CreateBitCast(
+        tup, TypeBuilder<PyTupleObject*>::cache(this->module_));
+    Value *tup_item_indices[] = {
+        ConstantInt::get(Type::Int32Ty, 0), // deref the Value*
+        ConstantInt::get(Type::Int32Ty, TupleTy::FIELD_ITEM), // get ob_item
+        idx, // get the item we want
+    };
+    Value *itemslot = builder().CreateGEP(tupobj, tup_item_indices,
+                                          array_endof(tup_item_indices),
+                                          "tuple_item_slot");
+    builder().CreateStore(item, itemslot);
+}
+
+void
+LlvmFunctionBuilder::SequenceBuilder(int size, const char *createname,
+    void (LlvmFunctionBuilder::*method)(Value*, Value*, Value*))
+{
+    BasicBlock *failure = BasicBlock::Create("SeqBuild_failure", function());
+    BasicBlock *loop_start = BasicBlock::Create("SeqBuild_loop_start",
+                                                function());
+    BasicBlock *loop_body = BasicBlock::Create("SeqBuild_loop_body",
+                                               function());
+    BasicBlock *end = BasicBlock::Create("SeqBuild_end", function());
+
+    const Type *IntSsizeTy = TypeBuilder<Py_ssize_t>::cache(this->module_);
+    Value *seqsize = ConstantInt::get(IntSsizeTy, size, true /* signed */);
+    Value *zero = Constant::getNullValue(IntSsizeTy);
+    Value *one = ConstantInt::get(IntSsizeTy, 1, true /* signed */);
+
+    Function *create = GetGlobalFunction<PyObject *(Py_ssize_t)>(createname);
+    Value *seq = builder().CreateCall(create, seqsize, "SeqBuild_seq");
+    BasicBlock *preamble = builder().GetInsertBlock();
+    builder().CreateCondBr(IsNull(seq), failure, loop_start);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(loop_start);
+    PHINode *phi = builder().CreatePHI(IntSsizeTy, "SeqBuild_loop_var");
+    phi->addIncoming(seqsize, preamble);
+    Value *done = builder().CreateICmpSLE(phi, zero,
+                                          "SeqBuild_loop_check");
+    builder().CreateCondBr(done, end, loop_body);
+
+    builder().SetInsertPoint(loop_body);
+    Value *item = Pop();
+    Value *nextval = builder().CreateSub(phi, one, "SeqBuild_next_loop_var");
+    (this->*method)(seq, nextval, item);
+    phi->addIncoming(nextval, builder().GetInsertBlock()); 
+    builder().CreateBr(loop_start);
+
+    builder().SetInsertPoint(end);
+    Push(seq);
+}
+
+void
+LlvmFunctionBuilder::BUILD_LIST(int size)
+{
+   SequenceBuilder(size, "PyList_New",
+                   &LlvmFunctionBuilder::List_SET_ITEM);
+}
+
+void
+LlvmFunctionBuilder::BUILD_TUPLE(int size)
+{
+   SequenceBuilder(size, "PyTuple_New",
+                   &LlvmFunctionBuilder::Tuple_SET_ITEM);
 }
 
 // Adds delta to *addr, and returns the new value.
