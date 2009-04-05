@@ -488,11 +488,24 @@ LlvmFunctionBuilder::LlvmFunctionBuilder(
     this->varnames_ = builder().CreateLoad(
         builder().CreateStructGEP(code, CodeTy::FIELD_VARNAMES),
         "varnames");
-    this->names_ = builder().CreateBitCast(
+
+    Value *names_tuple = builder().CreateBitCast(
         builder().CreateLoad(
             builder().CreateStructGEP(code, CodeTy::FIELD_NAMES)),
         TypeBuilder<PyTupleObject*>::cache(module),
         "names");
+    // The next GEP-magic assigns this->names_ to &names_tuple[0].ob_item[0].
+    Value *names_item_indices[] = {
+        ConstantInt::get(Type::Int32Ty, 0),
+        ConstantInt::get(Type::Int32Ty, TupleTy::FIELD_ITEM),
+        ConstantInt::get(Type::Int32Ty, 0),
+    };
+    this->names_ =
+        builder().CreateGEP(
+            names_tuple,
+            names_item_indices, array_endof(names_item_indices),
+            "names");
+
     Value *consts_tuple =  // (PyTupleObject*)code->co_consts
         builder().CreateBitCast(
             builder().CreateLoad(
@@ -526,6 +539,20 @@ LlvmFunctionBuilder::LlvmFunctionBuilder(
 
     this->freevars_ =
         builder().CreateGEP(this->fastlocals_, nlocals, "freevars");
+
+    this->globals_ =
+        builder().CreateBitCast(
+            builder().CreateLoad(
+                builder().CreateStructGEP(this->frame_,
+                                          FrameTy::FIELD_GLOBALS)),
+            TypeBuilder<PyObject *>::cache(module));
+
+    this->builtins_ =
+        builder().CreateBitCast(
+            builder().CreateLoad(
+                builder().CreateStructGEP(this->frame_,
+                                          FrameTy::FIELD_BUILTINS)),
+            TypeBuilder<PyObject *>::cache(module));
 
     FillReturnBlock(this->return_block_);
 }
@@ -587,6 +614,95 @@ LlvmFunctionBuilder::LOAD_CONST(int index)
     IncRef(const_);
     Push(const_);
 }
+
+void
+LlvmFunctionBuilder::LOAD_GLOBAL(int names_index)
+{
+    BasicBlock *global_missing = BasicBlock::Create(
+        "GetGlobal_global_missing", function());
+    BasicBlock *global_success = BasicBlock::Create(
+        "GetGlobal_global_success", function());
+    BasicBlock *builtin_missing = BasicBlock::Create(
+        "GetGlobal_builtin_missing", function());
+    BasicBlock *builtin_success = BasicBlock::Create(
+        "GetGlobal_builtin_success", function());
+    BasicBlock *done = BasicBlock::Create("GetGlobal_done", function());
+    Value *name = LookupName(names_index);
+    Function *pydict_getitem = GetGlobalFunction<
+        PyObject *(PyObject *, PyObject *)>("PyDict_GetItem");
+    Value *global = builder().CreateCall2(
+        pydict_getitem, this->globals_, name, "global_value");
+    builder().CreateCondBr(IsNull(global), global_missing, global_success);
+
+    builder().SetInsertPoint(global_success);
+    IncRef(global);
+    Push(global);
+    builder().CreateBr(done);
+
+    builder().SetInsertPoint(global_missing);
+    Value *builtin = builder().CreateCall2(
+        pydict_getitem, this->builtins_, name, "builtin_value");
+    builder().CreateCondBr(IsNull(builtin), builtin_missing, builtin_success);
+
+    builder().SetInsertPoint(builtin_missing);
+    Function *do_raise = GetGlobalFunction<
+        void(PyFrameObject *, PyObject *)>("_PyEval_RaiseForGlobalNameError");
+    builder().CreateCall2(do_raise, this->frame_, name);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(builtin_success);
+    IncRef(builtin);
+    Push(builtin);
+    builder().CreateBr(done);
+
+    builder().SetInsertPoint(done);
+}
+
+void
+LlvmFunctionBuilder::STORE_GLOBAL(int names_index)
+{
+    BasicBlock *failure = BasicBlock::Create("STORE_GLOBAL_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("STORE_GLOBAL_success",
+                                             function());
+    Value *name = LookupName(names_index);
+    Value *value = Pop();
+    Function *pydict_setitem = GetGlobalFunction<
+        int(PyObject *, PyObject *, PyObject *)>("PyDict_SetItem");
+    Value *result = builder().CreateCall3(
+        pydict_setitem, this->globals_, name, value,
+        "pydict_setitem_result");
+    DecRef(value);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}    
+
+void
+LlvmFunctionBuilder::DELETE_GLOBAL(int names_index)
+{
+    BasicBlock *failure = BasicBlock::Create("DELETE_GLOBAL_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("DELETE_GLOBAL_success",
+                                             function());
+    Value *name = LookupName(names_index);
+    Function *pydict_setitem = GetGlobalFunction<
+        int(PyObject *, PyObject *)>("PyDict_DelItem");
+    Value *result = builder().CreateCall2(
+        pydict_setitem, this->globals_, name, "pydict_setitem_result");
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Function *do_raise = GetGlobalFunction<
+        void(PyFrameObject *, PyObject *)>("_PyEval_RaiseForGlobalNameError");
+    builder().CreateCall2(do_raise, this->frame_, name);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}    
 
 void
 LlvmFunctionBuilder::LOAD_FAST(int index)
@@ -1359,6 +1475,15 @@ LlvmFunctionBuilder::SetLocal(int locals_index, llvm::Value *new_value)
     XDecRef(orig_value);
 }
 
+Value *
+LlvmFunctionBuilder::LookupName(int names_index)
+{
+    Value *name = builder().CreateLoad(
+        builder().CreateGEP(
+            this->names_, ConstantInt::get(Type::Int32Ty, names_index),
+            "global_name"));
+    return name;
+}
 
 void
 LlvmFunctionBuilder::InsertAbort(const char *opcode_name)

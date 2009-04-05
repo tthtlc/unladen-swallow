@@ -105,6 +105,10 @@ public:
     void RAISE_VARARGS_TWO();
     void RAISE_VARARGS_THREE();
 
+    void LOAD_GLOBAL(int index);
+    void STORE_GLOBAL(int index);
+    void DELETE_GLOBAL(int index);
+
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
         InsertAbort(#NAME); \
@@ -142,9 +146,6 @@ public:
     UNIMPLEMENTED_I(DELETE_ATTR)
     UNIMPLEMENTED_I(LOAD_DEREF);
     UNIMPLEMENTED_I(STORE_DEREF);
-    UNIMPLEMENTED_I(LOAD_GLOBAL);
-    UNIMPLEMENTED_I(STORE_GLOBAL);
-    UNIMPLEMENTED_I(DELETE_GLOBAL);
     UNIMPLEMENTED_I(LOAD_NAME);
     UNIMPLEMENTED_I(STORE_NAME);
     UNIMPLEMENTED_I(DELETE_NAME);
@@ -189,6 +190,9 @@ private:
     // new_value.  Decrements the original value's refcount after
     // replacing it.
     void SetLocal(int locals_index, llvm::Value *new_value);
+
+    // Look up a name in the frame's names list
+    llvm::Value *LookupName(int names_index);
 
     /// Inserts a call that will print opcode_name and abort the
     /// program when it's reached. This is useful for not-yet-defined
@@ -254,6 +258,8 @@ private:
     llvm::Value *stack_pointer_addr_;
     llvm::Value *varnames_;
     llvm::Value *names_;
+    llvm::Value *globals_;
+    llvm::Value *builtins_;
     llvm::Value *consts_;
     llvm::Value *fastlocals_;
     llvm::Value *freevars_;

@@ -248,6 +248,41 @@ entry:
         else:
             self.fail("expected exception.")
 
+    def test_globals(self):
+        def loadglobal():
+            return sys
+        loadglobal.__code__.__use_llvm__ = True
+        self.assertEquals(loadglobal(), sys)
+        self.assertTrue(loadglobal() is sys)
+
+        def loadbuiltin():
+            return str
+        loadbuiltin.__code__.__use_llvm__ = True
+        self.assertEquals(loadbuiltin(), str)
+        self.assertTrue(loadbuiltin() is str)
+
+        def nosuchglobal():
+            return there_better_be_no_such_global
+        self.assertRaises(NameError, nosuchglobal)
+
+        def setglobal(x):
+            global _test_global
+            _test_global = x
+        setglobal.__code__.__use_llvm__ = True
+        testvalue = "test global value"
+        setglobal(testvalue)
+        self.assertTrue('_test_global' in globals())
+        self.assertEquals(_test_global, testvalue)
+        self.assertEquals(globals()['_test_global'], testvalue)
+
+        def deleteglobal():
+            global _test_global
+            del _test_global
+        deleteglobal.__code__.__use_llvm__ = True
+        deleteglobal()
+        self.assertTrue('_test_global' not in globals())
+        self.assertRaises(NameError, deleteglobal)
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)

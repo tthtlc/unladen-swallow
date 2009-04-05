@@ -2757,6 +2757,12 @@ _PyEval_RaiseForUnboundLocal(PyFrameObject *frame, int var_index)
 		PyTuple_GetItem(frame->f_code->co_varnames, var_index));
 }
 
+extern "C" void
+_PyEval_RaiseForGlobalNameError(PyFrameObject *frame, PyObject *obj)
+{
+	format_exc_check_arg(PyExc_NameError, UNBOUNDLOCAL_ERROR_MSG, obj);
+}
+
 static void
 format_exc_check_arg(PyObject *exc, char *format_str, PyObject *obj)
 {
