@@ -283,6 +283,13 @@ entry:
         self.assertTrue('_test_global' not in globals())
         self.assertRaises(NameError, deleteglobal)
 
+    def test_slice_objects(self):
+        def do_slice(x): return x[::]
+        non_llvm_result = do_slice([1, 2, 3])
+        do_slice.__code__.__use_llvm__ = True
+        self.assertEquals(do_slice([1, 2, 3]), non_llvm_result)
+        self.assertRaises(TypeError, do_slice, 1)
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)

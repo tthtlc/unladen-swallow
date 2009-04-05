@@ -96,6 +96,9 @@ public:
     void LIST_APPEND();
     void STORE_MAP();
 
+    void BUILD_SLICE_TWO();
+    void BUILD_SLICE_THREE();
+
     void BUILD_TUPLE(int size);
     void BUILD_LIST(int size);
     void BUILD_MAP(int size);
@@ -136,8 +139,6 @@ public:
     UNIMPLEMENTED(DELETE_SLICE_LEFT);
     UNIMPLEMENTED(DELETE_SLICE_RIGHT);
     UNIMPLEMENTED(DELETE_SLICE_BOTH);
-    UNIMPLEMENTED(BUILD_SLICE_TWO)
-    UNIMPLEMENTED(BUILD_SLICE_THREE)
     UNIMPLEMENTED(BREAK_LOOP)
     UNIMPLEMENTED(WITH_CLEANUP)
     UNIMPLEMENTED(END_FINALLY)
@@ -255,6 +256,10 @@ private:
     // Perform exception-matching, warning about use of strings or
     // non-exception classes. Returns an i1.
     llvm::Value *ExceptionMatches(llvm::Value *exc, llvm::Value *exc_type);
+
+    // Build a new slice object, by calling PySlice_New(), and push it onto
+    // the stack. Only the third argument may be a Value* representing NULL.
+    void BuildSlice(llvm::Value *start, llvm::Value *stop, llvm::Value *step);
 
     llvm::Module *const module_;
     llvm::Function *const function_;
