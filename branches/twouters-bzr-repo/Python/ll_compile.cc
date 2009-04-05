@@ -876,6 +876,30 @@ LlvmFunctionBuilder::ROT_THREE()
     Push(second);
 }
 
+
+void
+LlvmFunctionBuilder::DELETE_SUBSCR()
+{
+    BasicBlock *failure = BasicBlock::Create("DELETE_SUBSCR_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("DELETE_SUBSCR_success",
+                                             function());
+    Value *key = Pop();
+    Value *obj = Pop();
+    Function *delitem = GetGlobalFunction<
+          int(PyObject *, PyObject *)>("PyObject_DelItem");
+    Value *result = builder().CreateCall2(delitem, obj, key,
+                                          "DELETE_SUBSCR_result");
+    DecRef(obj);
+    DecRef(key);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
+}
+
 void
 LlvmFunctionBuilder::STORE_MAP()
 {

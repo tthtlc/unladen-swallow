@@ -420,8 +420,9 @@ class OperatorTests(unittest.TestCase):
         def testfunc(x, results):
             results['idx'] = x['item']
             x['item'] = 1
+            del x['item']
 
-        self.run_and_compare(testfunc, expected_num_ops=2,
+        self.run_and_compare(testfunc, expected_num_ops=3,
                              expected_num_results=1)
 
     def test_subscr_augassign(self):
@@ -685,8 +686,10 @@ class OperatorRaisingTests(unittest.TestCase):
     def test_subscr(self):
         def getitem(x): x['item']
         def setitem(x): x['item'] = 1
+        def delitem(x): del x['item']
 
-        self.run_and_compare({'getitem': getitem, 'setitem': setitem})
+        self.run_and_compare({'getitem': getitem, 'setitem': setitem,
+                              'delitem': delitem})
 
     def test_subscr_augassign(self):
         def setitem(x): x['item'] += 1
