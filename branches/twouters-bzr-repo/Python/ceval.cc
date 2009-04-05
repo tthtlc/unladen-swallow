@@ -1734,6 +1734,13 @@ do_raise(PyObject *type, PyObject *value, PyObject *tb)
 	return WHY_EXCEPTION;
 }
 
+/* Expose do_raise (without meaningful return value) for ll_compile.cc. */
+void
+_PyEval_DoRaise(PyObject *type, PyObject *value, PyObject *tb)
+{
+	do_raise(type, value, tb);
+}
+
 /* Iterate v argcnt times and store the results on the stack (via decreasing
    sp).  Return 1 for success, 0 if error. */
 

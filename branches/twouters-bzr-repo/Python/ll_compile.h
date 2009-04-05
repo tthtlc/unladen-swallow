@@ -100,6 +100,11 @@ public:
     void BUILD_LIST(int size);
     void BUILD_MAP(int size);
 
+    void RAISE_VARARGS_ZERO();
+    void RAISE_VARARGS_ONE();
+    void RAISE_VARARGS_TWO();
+    void RAISE_VARARGS_THREE();
+
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
         InsertAbort(#NAME); \
@@ -128,10 +133,6 @@ public:
     UNIMPLEMENTED(BUILD_SLICE_TWO)
     UNIMPLEMENTED(BUILD_SLICE_THREE)
     UNIMPLEMENTED(BREAK_LOOP)
-    UNIMPLEMENTED(RAISE_VARARGS_ZERO)
-    UNIMPLEMENTED(RAISE_VARARGS_ONE)
-    UNIMPLEMENTED(RAISE_VARARGS_TWO)
-    UNIMPLEMENTED(RAISE_VARARGS_THREE)
     UNIMPLEMENTED(WITH_CLEANUP)
     UNIMPLEMENTED(END_FINALLY)
     UNIMPLEMENTED(YIELD_VALUE)
@@ -216,6 +217,12 @@ private:
     // Only for use in the constructor: Fills in the return block. Has
     // no effect on the IRBuilder's current insertion block.
     void FillReturnBlock(llvm::BasicBlock *return_block);
+
+    // Set exception information; calls _PyEval_DoRaise(). The
+    // second and third argument can be Value*'s representing NULL.
+    // Eats references to any non-NULL arguments.
+    void DoRaise(llvm::Value *exc_type, llvm::Value *exc_inst,
+                 llvm::Value *exc_tb);
 
     // Helper methods for binary and unary operators, passing the name
     // of the Python/C API function that implements the operation.

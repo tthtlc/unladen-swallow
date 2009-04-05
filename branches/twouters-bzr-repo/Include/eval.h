@@ -19,6 +19,8 @@ PyAPI_FUNC(PyObject *) PyEval_EvalCodeEx(PyCodeObject *co,
 
 PyAPI_FUNC(PyObject *) _PyEval_CallTracing(PyObject *func, PyObject *args);
 
+PyAPI_FUNC(void) _PyEval_DoRaise(PyObject *type, PyObject *val, PyObject *tb);
+
 #ifdef __cplusplus
 }
 #endif

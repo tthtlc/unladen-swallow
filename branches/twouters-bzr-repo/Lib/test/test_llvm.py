@@ -1,6 +1,8 @@
 # Tests for our minimal LLVM wrappers
 
 from test.test_support import run_unittest, findfile
+import sys
+import traceback
 import unittest
 import _llvm
 import __future__
@@ -169,6 +171,83 @@ entry:
         pop_top.__code__.__use_llvm__ = True
         pop_top('pop me')
 
+    def test_delete_fast(self):
+        def delit(x):
+            y = 2
+            z = 3
+            del y
+            del x
+            return z
+        delit.__code__.__use_llvm__ = True
+        self.assertEquals(delit(1), 3)
+
+        def useit(x):
+            del x
+            return x
+        useit.__code__.__use_llvm__ = True
+        self.assertRaises(UnboundLocalError, useit, 1)
+
+    def test_raise(self):
+        def raisetest0(): raise
+        raisetest0.__code__.__use_llvm__ = True
+        class TestExc(Exception):
+            pass
+        exc = TestExc()
+        try:
+            raise exc
+        except TestExc:
+            orig_tb = sys.exc_info()[2]
+            try:
+                raisetest0()
+            except TestExc, e:
+                new_tb = sys.exc_info()[2]
+                self.assertEquals(e, exc)
+                self.assertTrue(e is exc)
+                self.assertEquals(new_tb.tb_next, orig_tb)
+                self.assertTrue(new_tb.tb_next is orig_tb)
+            else:
+                self.fail("expected exception.")
+
+        def raisetest1(x): raise x
+        raisetest1.__code__.__use_llvm__ = True
+        self.assertRaises(TestExc, raisetest1, TestExc);
+        self.assertRaises(TestExc, raisetest1, exc);
+        try:
+            raisetest1(exc)
+        except Exception, e:
+            self.assertEquals(e, exc)
+            self.assertTrue(e is exc)
+        else:
+            self.fail("expected exception.")
+
+        def raisetest2(x, y): raise x, y
+        raisetest2.__code__.__use_llvm__ = True
+        self.assertRaises(TestExc, raisetest2, TestExc, None);
+        self.assertRaises(TestExc, raisetest2, TestExc, exc);
+        try:
+            raisetest2(TestExc, exc)
+        except Exception, e:
+            self.assertEquals(e, exc)
+            self.assertTrue(e is exc)
+        else:
+            self.fail("expected exception.")
+
+        def raisetest3(x, y, z): raise x, y, z
+        raisetest3.__code__.__use_llvm__ = True
+        self.assertRaises(TestExc, raisetest3, TestExc, None, None);
+        self.assertRaises(TestExc, raisetest3, TestExc, exc, None);
+        self.assertRaises(TestExc, raisetest3, TestExc, exc, orig_tb)
+        try:
+            raisetest3(TestExc, exc, orig_tb)
+        except Exception, e:
+            new_tb = sys.exc_info()[2]
+            self.assertEquals(e, exc)
+            self.assertTrue(e is exc)
+            self.assertEquals(new_tb.tb_next, orig_tb)
+            self.assertTrue(new_tb.tb_next is orig_tb)
+        else:
+            self.fail("expected exception.")
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)
@@ -203,22 +282,6 @@ class LiteralsTests(unittest.TestCase):
         self.run_check_return(lambda x: [1, x, [3, 4, x], 1])
         self.run_check_exc(lambda x: [1, x, x + ""])
         self.run_check_exc(lambda x: [1, x, [3, 4, x + ""], 1])
-
-    def test_delete_fast(self):
-        def delit(x):
-            y = 2
-            z = 3
-            del y
-            del x
-            return z
-        delit.__code__.__use_llvm__ = True
-        self.assertEquals(delit(1), 3)
-
-        def useit(x):
-            del x
-            return x
-        useit.__code__.__use_llvm__ = True
-        self.assertRaises(UnboundLocalError, useit, 1)
 
     def test_build_map(self):
         self.run_check_return(lambda x: {1: x, 3: "4"})

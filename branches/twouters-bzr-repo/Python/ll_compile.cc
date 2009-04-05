@@ -728,6 +728,68 @@ LlvmFunctionBuilder::RETURN_VALUE()
 {
     Value *retval = Pop();
     Return(retval);
+} 
+
+void
+LlvmFunctionBuilder::DoRaise(Value *exc_type, Value *exc_inst, Value *exc_tb)
+{
+    BasicBlock *raise_block = BasicBlock::Create("raise_block", function());
+    BasicBlock *dead_code = BasicBlock::Create("dead_code", function());
+    // Accept code after a raise statement, even though it's never executed.
+    builder().CreateCondBr(
+        ConstantInt::get(Type::Int1Ty, 1), raise_block, dead_code);
+
+    // TODO(twouters): look for exception handling in this function.
+    builder().SetInsertPoint(raise_block);
+    Function *do_raise = GetGlobalFunction<
+        void(PyObject*, PyObject *, PyObject *)>("_PyEval_DoRaise");
+    // _PyEval_DoRaise eats references.
+    builder().CreateCall3(do_raise, exc_type, exc_inst, exc_tb);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(dead_code);
+}
+
+void
+LlvmFunctionBuilder::RAISE_VARARGS_ZERO()
+{
+    Value *exc_tb = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *exc_inst = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *exc_type = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    DoRaise(exc_type, exc_inst, exc_tb);
+}
+
+void
+LlvmFunctionBuilder::RAISE_VARARGS_ONE()
+{
+    Value *exc_tb = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *exc_inst = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *exc_type = Pop();
+    DoRaise(exc_type, exc_inst, exc_tb);
+}
+
+void
+LlvmFunctionBuilder::RAISE_VARARGS_TWO()
+{
+    Value *exc_tb = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *exc_inst = Pop();
+    Value *exc_type = Pop();
+    DoRaise(exc_type, exc_inst, exc_tb);
+}
+
+void
+LlvmFunctionBuilder::RAISE_VARARGS_THREE()
+{
+    Value *exc_tb = Pop();
+    Value *exc_inst = Pop();
+    Value *exc_type = Pop();
+    DoRaise(exc_type, exc_inst, exc_tb);
 }
 
 void
