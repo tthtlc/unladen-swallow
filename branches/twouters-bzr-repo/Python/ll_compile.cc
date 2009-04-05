@@ -901,6 +901,38 @@ LlvmFunctionBuilder::DELETE_SUBSCR()
 }
 
 void
+LlvmFunctionBuilder::DUP_TOP()
+{
+    Value *first = Pop();
+    IncRef(first);
+    Push(first);
+    Push(first);
+}
+
+void
+LlvmFunctionBuilder::LIST_APPEND()
+{
+    BasicBlock *failure = BasicBlock::Create("LIST_APPEND_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("LIST_APPEND_success",
+                                             function());
+    Value *item = Pop();
+    Value *listobj = Pop();
+    Function *list_append = GetGlobalFunction<
+        int(PyObject *, PyObject *)>("PyList_Append");
+    Value *result = builder().CreateCall2(list_append, listobj, item,
+                                          "LIST_APPEND_result");
+    DecRef(listobj);
+    DecRef(item);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
+}
+
+void
 LlvmFunctionBuilder::STORE_MAP()
 {
     BasicBlock *failure = BasicBlock::Create("STORE_MAP_failure", function());

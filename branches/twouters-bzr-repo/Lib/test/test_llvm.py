@@ -139,6 +139,26 @@ entry:
         loop.__code__.__use_llvm__ = True
         self.assertEquals(1, loop([1,2,3]))
 
+    def test_listcomp(self):
+        def listcomp(x):
+            return [ item+1 for item in x ]
+        non_llvm = listcomp([1, 2, 3])
+        listcomp.__code__.__use_llvm__ = True
+        self.assertEquals(listcomp([1, 2, 3]), non_llvm)
+        
+        def listcomp(x):
+            return [ [ i + j for j in x ] for i in x ]
+        non_llvm = listcomp([1, 2, 3])
+        listcomp.__code__.__use_llvm__ = True
+        self.assertEquals(listcomp([1, 2, 3]), non_llvm)
+
+        def listcomp(x):
+            return [ [ i + j for j in () ] for i in x ]
+        non_llvm = listcomp([1, 2, 3])
+        listcomp.__code__.__use_llvm__ = True
+        self.assertEquals(listcomp([1, 2, 3]), non_llvm)
+        # error cases tested in RaisingOperatorTests.
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)
@@ -720,6 +740,33 @@ def test_main():
     run_unittest(LlvmTests, LiteralsTests, OperatorTests,
                  OperatorRaisingTests)
 
+    def test_listcomp(self):
+        def listcomp(x): [ item + 5 for item in x ]
+        non_llvm_recorders = [OpRecorder(), OpRecorder(), OpRaiser(),
+                              OpRecorder()]
+        try:
+            listcomp(non_llvm_recorders)
+        except OpExc, non_llvm_exc:
+            pass
+        else:
+            self.fail('expected exception')
+        self.assertEquals([o.ops for o in non_llvm_recorders],
+                          [['add'], ['add'], ['add'], []])
+
+        listcomp.__code__.__use_llvm__ = True
+        llvm_recorders = [OpRecorder(), OpRecorder(), OpRaiser(),
+                          OpRecorder()]
+        try:
+            listcomp(llvm_recorders)
+        except OpExc, llvm_exc:
+            pass
+        else:
+            self.fail('expected exception')
+
+        for o in non_llvm_recorders + llvm_recorders:
+            o.recording = False
+        self.assertEquals(non_llvm_recorders, llvm_recorders)
+        self.assertEquals(non_llvm_exc, llvm_exc)
 
 if __name__ == "__main__":
     test_main()
