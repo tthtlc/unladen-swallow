@@ -109,6 +109,8 @@ public:
     void STORE_GLOBAL(int index);
     void DELETE_GLOBAL(int index);
 
+    void COMPARE_OP(int cmp_op);
+
 #define UNIMPLEMENTED(NAME) \
     void NAME() { \
         InsertAbort(#NAME); \
@@ -153,7 +155,6 @@ public:
     UNIMPLEMENTED_I(CALL_FUNCTION_VAR_KW)
     UNIMPLEMENTED_I(LOAD_CLOSURE)
     UNIMPLEMENTED_I(MAKE_CLOSURE)
-    UNIMPLEMENTED_I(COMPARE_OP)
     UNIMPLEMENTED_I(UNPACK_SEQUENCE)
 
     UNIMPLEMENTED_J(POP_JUMP_IF_FALSE);
@@ -246,6 +247,14 @@ private:
     void SequenceBuilder(int size, const char *createname,
         void (LlvmFunctionBuilder::*method)(llvm::Value *, llvm::Value *,
                                             llvm::Value *));
+
+    // Perform a PySequence_Contains() call, returning an i1.
+    llvm::Value *ContainerContains(llvm::Value *seq, llvm::Value *item);
+    // Perform rich comparison, pushing the result onto the stack.
+    void RichCompare(llvm::Value *lhs, llvm::Value *rhs, int);
+    // Perform exception-matching, warning about use of strings or
+    // non-exception classes. Returns an i1.
+    llvm::Value *ExceptionMatches(llvm::Value *exc, llvm::Value *exc_type);
 
     llvm::Module *const module_;
     llvm::Function *const function_;

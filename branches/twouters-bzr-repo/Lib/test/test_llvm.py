@@ -844,10 +844,6 @@ class OperatorRaisingTests(unittest.TestCase):
         self.run_and_compare({'setitem': setitem},
                              argument_factory=OpRaiserProvider)
 
-def test_main():
-    run_unittest(LlvmTests, LiteralsTests, OperatorTests,
-                 OperatorRaisingTests)
-
     def test_listcomp(self):
         def listcomp(x): [ item + 5 for item in x ]
         non_llvm_recorders = [OpRecorder(), OpRecorder(), OpRaiser(),
@@ -875,6 +871,235 @@ def test_main():
             o.recording = False
         self.assertEquals(non_llvm_recorders, llvm_recorders)
         self.assertEquals(non_llvm_exc, llvm_exc)
+
+class ComparisonReporter(object):
+    def __cmp__(self, other):
+        return 'cmp'
+    def __eq__(self, other):
+        return 'eq'
+    def __ne__(self, other):
+        return 'ne'
+    def __lt__(self, other):
+        return 'lt'
+    def __le__(self, other):
+        return 'le'
+    def __gt__(self, other):
+        return 'gt'
+    def __ge__(self, other):
+        return 'ge'
+
+class ComparisonRaiser(object):
+    def __cmp__(self, other):
+        raise RuntimeError, 'cmp should not be called'
+    def __eq__(self, other):
+        raise OpExc('eq')
+    def __ne__(self, other):
+        raise OpExc('ne')
+    def __lt__(self, other):
+        raise OpExc('lt')
+    def __le__(self, other):
+        raise OpExc('le')
+    def __gt__(self, other):
+        raise OpExc('gt')
+    def __ge__(self, other):
+        raise OpExc('ge')
+    def __contains__(self, other):
+        raise OpExc('contains')
+
+class ComparesToTypeError(TypeError):
+    def __eq__(self, other):
+        return isinstance(other, TypeError) and self.args == other.args
+
+class ComparisonTests(unittest.TestCase):
+    def compare_results(self, f, test_data):
+        for use_llvm in (False, True):
+            f.__code__.__use_llvm__ = use_llvm
+            for x, y, expected_result in test_data:
+                real_result = f(x, y)
+                msg = "%s(%r, %r) expecting %r, got %r" % (
+                    f.__name__, x, y, expected_result, real_result)
+                self.assertEquals(expected_result, real_result, msg)
+
+    def compare_exceptions(self, f, exc_data):
+        for use_llvm in (False, True):
+            f.__code__.__use_llvm__ = use_llvm
+            for x, y, expected_exception in exc_data:
+                try:
+                    f(x, y)
+                except Exception, real_exception:
+                    pass
+                else:
+                    self.fail("%s(%r, %r) expecting %r, got nothing" % (
+                        f.__name__, x, y, expected_exception))
+                msg = "%s(%r, %r) expecting %r, got %r" % (
+                    f.__name__, x, y, expected_exception, real_exception)
+                self.assertEquals(expected_exception, real_exception, msg)
+
+    def test_is(self):
+        def is_(x, y): return x is y
+        one = 1
+        reporter = ComparisonReporter()
+        test_data = [
+            (one, one, True),
+            (2, 3, False),
+            ([], [], False),
+            (reporter, reporter, True),
+            (7, reporter, False),
+        ]
+        self.compare_results(is_, test_data)
+
+    def test_is_not(self):
+        def is_not(x, y): return x is not y
+        one = 1
+        reporter = ComparisonReporter()
+        test_data = [
+            (one, one, False),
+            (2, 3, True),
+            ([], [], True),
+            (reporter, reporter, False),
+            (7, reporter, True),
+        ]
+        self.compare_results(is_not, test_data)
+
+    def test_eq(self):
+        def eq(x, y): return x == y
+        test_data = [
+            (1, 1, True),
+            (2, 3, False),
+            ([], [], True),
+            (ComparisonReporter(), 6, 'eq'),
+            (7, ComparisonReporter(), 'eq'),
+        ]
+        self.compare_results(eq, test_data)
+        exc_data = [
+            (ComparisonRaiser(), 1, OpExc('eq')),
+            (1, ComparisonRaiser(), OpExc('eq')),
+        ]
+        self.compare_exceptions(eq, exc_data)
+
+    def test_ne(self):
+        def ne(x, y): return x != y
+        test_data = [
+            (1, 1, False),
+            (2, 3, True),
+            ([], [], False),
+            (ComparisonReporter(), 6, 'ne'),
+            (7, ComparisonReporter(), 'ne'),
+        ]
+        self.compare_results(ne, test_data)
+        exc_data = [
+            (ComparisonRaiser(), 1, OpExc('ne')),
+            (1, ComparisonRaiser(), OpExc('ne')),
+        ]
+        self.compare_exceptions(ne, exc_data)
+
+    def test_lt(self):
+        def lt(x, y): return x < y
+        test_data = [
+            (1, 1, False),
+            (2, 3, True),
+            (5, 4, False),
+            ([], [], False),
+            (ComparisonReporter(), 6, 'lt'),
+            (7, ComparisonReporter(), 'gt'),
+        ]
+        self.compare_results(lt, test_data)
+        exc_data = [
+            (1, 1j, ComparesToTypeError(
+                'no ordering relation is defined for complex numbers')),
+            (ComparisonRaiser(), 1, OpExc('lt')),
+            (1, ComparisonRaiser(), OpExc('gt')),
+        ]
+        self.compare_exceptions(lt, exc_data)
+
+    def test_le(self):
+        def le(x, y): return x <= y
+        test_data = [
+            (1, 1, True),
+            (2, 3, True),
+            (5, 4, False),
+            ([], [], True),
+            (ComparisonReporter(), 6, 'le'),
+            (7, ComparisonReporter(), 'ge'),
+        ]
+        self.compare_results(le, test_data)
+        exc_data = [
+            (1, 1j, ComparesToTypeError(
+                'no ordering relation is defined for complex numbers')),
+            (ComparisonRaiser(), 1, OpExc('le')),
+            (1, ComparisonRaiser(), OpExc('ge')),
+        ]
+        self.compare_exceptions(le, exc_data)
+
+    def test_gt(self):
+        def gt(x, y): return x > y
+        test_data = [
+            (1, 1, False),
+            (2, 3, False),
+            (5, 4, True),
+            ([], [], False),
+            (ComparisonReporter(), 6, 'gt'),
+            (7, ComparisonReporter(), 'lt'),
+        ]
+        self.compare_results(gt, test_data)
+        exc_data = [
+            (1, 1j, ComparesToTypeError(
+                'no ordering relation is defined for complex numbers')),
+            (ComparisonRaiser(), 1, OpExc('gt')),
+            (1, ComparisonRaiser(), OpExc('lt')),
+        ]
+        self.compare_exceptions(gt, exc_data)
+
+    def test_ge(self):
+        def ge(x, y): return x >= y
+        test_data = [
+            (1, 1, True),
+            (2, 3, False),
+            (5, 4, True),
+            ([], [], True),
+            (ComparisonReporter(), 6, 'ge'),
+            (7, ComparisonReporter(), 'le'),
+        ]
+        self.compare_results(ge, test_data)
+        exc_data = [
+            (1, 1j, ComparesToTypeError(
+                'no ordering relation is defined for complex numbers')),
+            (ComparisonRaiser(), 1, OpExc('ge')),
+            (1, ComparisonRaiser(), OpExc('le')),
+        ]
+        self.compare_exceptions(ge, exc_data)
+
+    def test_in(self):
+        def in_(x, y): return x in y
+        test_data = [
+            (1, [1, 2], True),
+            (1, [0, 2], False),
+        ]
+        self.compare_results(in_, test_data)
+        exc_data = [
+            ([1, 2], 1, ComparesToTypeError(
+                "argument of type 'int' is not iterable")),
+            (1, ComparisonRaiser(), OpExc('contains')),
+        ]
+        self.compare_exceptions(in_, exc_data)
+
+    def test_not_in(self):
+        def not_in(x, y): return x not in y
+        test_data = [
+            (1, [1, 2], False),
+            (1, [0, 2], True),
+        ]
+        self.compare_results(not_in, test_data)
+        exc_data = [
+            ([1, 2], 1, ComparesToTypeError(
+                "argument of type 'int' is not iterable")),
+            (1, ComparisonRaiser(), OpExc('contains')),
+        ]
+        self.compare_exceptions(not_in, exc_data)
+        
+def test_main():
+    run_unittest(LlvmTests, LiteralsTests, OperatorTests,
+                 OperatorRaisingTests, ComparisonTests)
 
 if __name__ == "__main__":
     test_main()

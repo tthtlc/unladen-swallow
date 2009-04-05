@@ -2,6 +2,7 @@
 
 #include "Python.h"
 #include "code.h"
+#include "opcode.h"
 #include "frameobject.h"
 
 #include "Util/TypeBuilder.h"
@@ -1326,6 +1327,125 @@ LlvmFunctionBuilder::UNARY_NOT()
         "UNARY_NOT_result");
     IncRef(retval);
     Push(retval);
+}
+
+Value *
+LlvmFunctionBuilder::ContainerContains(Value *container, Value *item)
+{
+    BasicBlock *err = BasicBlock::Create("ContainerContains_err",
+                                         function());
+    BasicBlock *non_err = BasicBlock::Create("ContainerContains_non_err",
+                                             function());
+    Function *contains = GetGlobalFunction<
+        int(PyObject *, PyObject *)>("PySequence_Contains");
+    Value *zero = ConstantInt::get(TypeBuilder<int>::cache(this->module_), 0);
+    Value *result = builder().CreateCall2(
+        contains, container, item, "ContainerContains_result");
+    builder().CreateCondBr(
+        builder().CreateICmpSLT(result, zero), err, non_err);
+
+    builder().SetInsertPoint(err);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(non_err);
+    Value *bool_result = builder().CreateICmpSGT(result, zero,
+                                                 "COMPARE_OP_IN");
+    return bool_result;
+}
+
+void
+LlvmFunctionBuilder::RichCompare(Value *lhs, Value *rhs, int cmp_op)
+{
+    BasicBlock *failure = BasicBlock::Create("RichCompare_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("RichCompare_success",
+                                             function());
+    Function *pyobject_richcompare = GetGlobalFunction<
+        PyObject *(PyObject *, PyObject *, int)>("PyObject_RichCompare");
+    Value *result = builder().CreateCall3(
+        pyobject_richcompare, lhs, rhs,
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_), cmp_op),
+        "RichCompare_result");
+    builder().CreateCondBr(IsNull(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+    Push(result);
+}
+
+// Untested (used in exception handling.)
+Value *
+LlvmFunctionBuilder::ExceptionMatches(Value *exc, Value *exc_type)
+{
+    BasicBlock *err = BasicBlock::Create("ExceptionMatches_err",
+                                         function());
+    BasicBlock *no_err = BasicBlock::Create("ExceptionMatches_no_err",
+                                            function());
+    Value *zero = ConstantInt::get(
+        TypeBuilder<int>::cache(this->module_), 0);
+    Function *exc_matches = GetGlobalFunction<
+        int(PyObject *, PyObject *)>("_PyEval_CheckedExceptionMatches");
+    Value *result = builder().CreateCall2(
+        exc_matches, exc, exc_type);
+    builder().CreateCondBr(IsNull(result), err, no_err);
+    
+    builder().SetInsertPoint(err);
+    Return(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(no_err);
+    Value *bool_result = builder().CreateICmpSGT(result, zero,
+                                                 "COMPARE_OP_EXC_MATCH");
+    return bool_result;
+}
+
+void
+LlvmFunctionBuilder::COMPARE_OP(int cmp_op)
+{
+    Value *rhs = Pop();
+    Value *lhs = Pop();
+    Value *result;
+    switch (cmp_op) {
+    case PyCmp_IS:
+        result = builder().CreateICmpEQ(lhs, rhs, "COMPARE_OP_IS");
+        break;
+    case PyCmp_IS_NOT:
+        result = builder().CreateICmpNE(lhs, rhs, "COMPARE_OP_IS_NOT");
+        break;
+    case PyCmp_IN:
+        // item in seq -> ContainerContains(seq, item)
+        result = ContainerContains(rhs, lhs);
+        break;
+    case PyCmp_NOT_IN:
+    {
+        Value *inverted_result = ContainerContains(rhs, lhs);
+        result = builder().CreateICmpEQ(
+            inverted_result, ConstantInt::get(Type::Int1Ty, 0),
+            "COMPARE_OP_NOT_IN");
+        break;
+    }
+    case PyCmp_EXC_MATCH:
+        result = ExceptionMatches(lhs, rhs);
+        break;
+    case PyCmp_EQ:
+    case PyCmp_NE:
+    case PyCmp_LT:
+    case PyCmp_LE:
+    case PyCmp_GT:
+    case PyCmp_GE:
+        RichCompare(lhs, rhs, cmp_op);
+        return;
+    default:
+        Py_FatalError("unknown COMPARE_OP oparg");;
+    }
+    Value *value = builder().CreateSelect(
+        result,
+        GetGlobalVariable<PyObject>("_Py_TrueStruct"),
+        GetGlobalVariable<PyObject>("_Py_ZeroStruct"),
+        "COMPARE_OP_result");
+    IncRef(value);
+    Push(value);
 }
 
 void
