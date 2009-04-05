@@ -723,7 +723,6 @@ LlvmFunctionBuilder::POP_BLOCK()
     //InsertAbort("POP_BLOCK");
 }
 
-
 void
 LlvmFunctionBuilder::RETURN_VALUE()
 {
@@ -853,31 +852,6 @@ LlvmFunctionBuilder::INPLACE_POWER()
 }
 
 void
-LlvmFunctionBuilder::DUP_TOP_TWO()
-{
-    Value *first = Pop();
-    Value *second = Pop();
-    IncRef(first);
-    IncRef(second);
-    Push(second);
-    Push(first);
-    Push(second);
-    Push(first);
-}
-
-void
-LlvmFunctionBuilder::ROT_THREE()
-{
-    Value *first = Pop();
-    Value *second = Pop();
-    Value *third = Pop();
-    Push(first);
-    Push(third);
-    Push(second);
-}
-
-
-void
 LlvmFunctionBuilder::DELETE_SUBSCR()
 {
     BasicBlock *failure = BasicBlock::Create("DELETE_SUBSCR_failure",
@@ -901,12 +875,85 @@ LlvmFunctionBuilder::DELETE_SUBSCR()
 }
 
 void
+LlvmFunctionBuilder::POP_TOP()
+{
+    Value *top = Pop();
+    DecRef(top);
+}
+
+void
 LlvmFunctionBuilder::DUP_TOP()
 {
     Value *first = Pop();
     IncRef(first);
     Push(first);
     Push(first);
+}
+
+void
+LlvmFunctionBuilder::DUP_TOP_TWO()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    IncRef(first);
+    IncRef(second);
+    Push(second);
+    Push(first);
+    Push(second);
+    Push(first);
+}
+
+// untested; only used in augmented slice assignment.
+void
+LlvmFunctionBuilder::DUP_TOP_THREE()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    Value *third = Pop();
+    IncRef(first);
+    IncRef(second);;
+    IncRef(third);
+    Push(third);
+    Push(second);
+    Push(first);
+    Push(third);
+    Push(second);
+    Push(first);
+}
+
+// untested; used in comparisons, with stmt, attribute access, slicing
+void
+LlvmFunctionBuilder::ROT_TWO()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    Push(first);
+    Push(second);
+}
+
+void
+LlvmFunctionBuilder::ROT_THREE()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    Value *third = Pop();
+    Push(first);
+    Push(third);
+    Push(second);
+}
+
+// untested; only used in slice assignment.
+void
+LlvmFunctionBuilder::ROT_FOUR()
+{
+    Value *first = Pop();
+    Value *second = Pop();
+    Value *third = Pop();
+    Value *fourth = Pop();
+    Push(first);
+    Push(fourth);
+    Push(third);
+    Push(second);
 }
 
 void

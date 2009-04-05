@@ -159,6 +159,16 @@ entry:
         self.assertEquals(listcomp([1, 2, 3]), non_llvm)
         # error cases tested in RaisingOperatorTests.
 
+    def test_opcodes(self):
+        # Test some specific opcodes
+        def pop_top(x):
+            x
+            x
+            x
+            
+        pop_top.__code__.__use_llvm__ = True
+        pop_top('pop me')
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)

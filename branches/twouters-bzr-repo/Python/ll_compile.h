@@ -48,8 +48,13 @@ public:
 
     void RETURN_VALUE();
 
+    void POP_TOP();
+    void DUP_TOP();
     void DUP_TOP_TWO();
+    void DUP_TOP_THREE();
+    void ROT_TWO();
     void ROT_THREE();
+    void ROT_FOUR();
 
     void BINARY_ADD();
     void BINARY_SUBTRACT();
@@ -88,7 +93,6 @@ public:
 
     void STORE_SUBSCR();
     void DELETE_SUBSCR();
-    void DUP_TOP();
     void LIST_APPEND();
     void STORE_MAP();
 
@@ -109,10 +113,6 @@ public:
         InsertAbort(#NAME); \
     }
 
-    UNIMPLEMENTED(POP_TOP)
-    UNIMPLEMENTED(DUP_TOP_THREE)
-    UNIMPLEMENTED(ROT_TWO)
-    UNIMPLEMENTED(ROT_FOUR)
     UNIMPLEMENTED(SLICE_NONE);
     UNIMPLEMENTED(SLICE_LEFT);
     UNIMPLEMENTED(SLICE_RIGHT);
