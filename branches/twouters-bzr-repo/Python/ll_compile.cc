@@ -1341,6 +1341,8 @@ LlvmFunctionBuilder::ContainerContains(Value *container, Value *item)
     Value *zero = ConstantInt::get(TypeBuilder<int>::cache(this->module_), 0);
     Value *result = builder().CreateCall2(
         contains, container, item, "ContainerContains_result");
+    DecRef(item);
+    DecRef(container);
     builder().CreateCondBr(
         builder().CreateICmpSLT(result, zero), err, non_err);
 
@@ -1366,6 +1368,8 @@ LlvmFunctionBuilder::RichCompare(Value *lhs, Value *rhs, int cmp_op)
         pyobject_richcompare, lhs, rhs,
         ConstantInt::get(TypeBuilder<int>::cache(this->module_), cmp_op),
         "RichCompare_result");
+    DecRef(lhs);
+    DecRef(rhs);
     builder().CreateCondBr(IsNull(result), failure, success);
     
     builder().SetInsertPoint(failure);
@@ -1389,6 +1393,8 @@ LlvmFunctionBuilder::ExceptionMatches(Value *exc, Value *exc_type)
         int(PyObject *, PyObject *)>("_PyEval_CheckedExceptionMatches");
     Value *result = builder().CreateCall2(
         exc_matches, exc, exc_type);
+    DecRef(exc_type);
+    DecRef(exc);
     builder().CreateCondBr(IsNull(result), err, no_err);
     
     builder().SetInsertPoint(err);
@@ -1409,9 +1415,13 @@ LlvmFunctionBuilder::COMPARE_OP(int cmp_op)
     switch (cmp_op) {
     case PyCmp_IS:
         result = builder().CreateICmpEQ(lhs, rhs, "COMPARE_OP_IS");
+        DecRef(lhs);
+        DecRef(rhs);
         break;
     case PyCmp_IS_NOT:
         result = builder().CreateICmpNE(lhs, rhs, "COMPARE_OP_IS_NOT");
+        DecRef(lhs);
+        DecRef(rhs);
         break;
     case PyCmp_IN:
         // item in seq -> ContainerContains(seq, item)
@@ -1471,14 +1481,17 @@ LlvmFunctionBuilder::BUILD_MAP(int size)
 void
 LlvmFunctionBuilder::BuildSlice(Value *start, Value *stop, Value *step)
 {
-    BasicBlock *failure = BasicBlock::Create("BUILD_SLICE_TWO_failure",
+    BasicBlock *failure = BasicBlock::Create("BuildSlice_failure",
                                              function());
-    BasicBlock *success = BasicBlock::Create("BUILD_SLICE_TWO_success",
+    BasicBlock *success = BasicBlock::Create("BuildSlice_success",
                                              function());
     Function *build_slice = GetGlobalFunction<
         PyObject *(PyObject *, PyObject *, PyObject *)>("PySlice_New");
     Value *result = builder().CreateCall3(
         build_slice, start, stop, step, "BUILD_SLICE_result");
+    DecRef(start);
+    DecRef(stop);
+    XDecRef(step);
     builder().CreateCondBr(IsNull(result), failure, success);
 
     builder().SetInsertPoint(failure);
