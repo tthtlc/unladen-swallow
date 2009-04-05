@@ -631,6 +631,13 @@ LlvmFunctionBuilder::STORE_FAST(int index)
 }
 
 void
+LlvmFunctionBuilder::DELETE_FAST(int index)
+{
+    SetLocal(index, Constant::getNullValue(
+                   TypeBuilder<PyObject *>::cache(this->module_)));
+}
+
+void
 LlvmFunctionBuilder::SETUP_LOOP(llvm::BasicBlock *target,
                                 llvm::BasicBlock *fallthrough)
 {

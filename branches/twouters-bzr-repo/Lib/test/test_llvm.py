@@ -174,6 +174,22 @@ class LiteralsTests(unittest.TestCase):
         self.run_check_exc(lambda x: [1, x, x + ""])
         self.run_check_exc(lambda x: [1, x, [3, 4, x + ""], 1])
 
+    def test_delete_fast(self):
+        def delit(x):
+            y = 2
+            z = 3
+            del y
+            del x
+            return z
+        delit.__code__.__use_llvm__ = True
+        self.assertEquals(delit(1), 3)
+
+        def useit(x):
+            del x
+            return x
+        useit.__code__.__use_llvm__ = True
+        self.assertRaises(UnboundLocalError, useit, 1)
+
 # dont_inherit will unfortunately not turn off true division when
 # running with -Qnew, so we can't test classic division in
 # test_basic_arithmetic when running with -Qnew.

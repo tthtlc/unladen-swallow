@@ -34,6 +34,7 @@ public:
     void LOAD_CONST(int index);
     void LOAD_FAST(int index);
     void STORE_FAST(int index);
+    void DELETE_FAST(int index);
 
     void SETUP_LOOP(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
     void GET_ITER();
@@ -136,7 +137,6 @@ public:
 
     UNIMPLEMENTED_I(LOAD_ATTR)
     UNIMPLEMENTED_I(STORE_ATTR)
-    UNIMPLEMENTED_I(DELETE_FAST)
     UNIMPLEMENTED_I(DELETE_ATTR)
     UNIMPLEMENTED_I(LOAD_DEREF);
     UNIMPLEMENTED_I(STORE_DEREF);
