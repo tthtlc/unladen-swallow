@@ -877,6 +877,30 @@ LlvmFunctionBuilder::ROT_THREE()
 }
 
 void
+LlvmFunctionBuilder::STORE_MAP()
+{
+    BasicBlock *failure = BasicBlock::Create("STORE_MAP_failure", function());
+    BasicBlock *success = BasicBlock::Create("STORE_MAP_success", function());
+    Value *key = Pop();
+    Value *value = Pop();
+    Value *dict = Pop();
+    Push(dict);
+    // old ceval loop does assert(PyDict_CheckExact()), should we?
+    Function *setitem = GetGlobalFunction<
+        int(PyObject *, PyObject *, PyObject *)>("PyDict_SetItem");
+    Value *result = builder().CreateCall3(setitem, dict, key, value,
+                                          "STORE_MAP_result");
+    DecRef(value);
+    DecRef(key);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+    
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
+}
+
+void
 LlvmFunctionBuilder::List_SET_ITEM(Value *lst, Value *idx, Value *item)
 {
     Value *listobj = builder().CreateBitCast(
@@ -1021,6 +1045,26 @@ LlvmFunctionBuilder::UNARY_NOT()
         "UNARY_NOT_result");
     IncRef(retval);
     Push(retval);
+}
+
+void
+LlvmFunctionBuilder::BUILD_MAP(int size)
+{
+    BasicBlock *failure = BasicBlock::Create("BUILD_MAP_failure", function());
+    BasicBlock *success = BasicBlock::Create("BUILD_MAP_success", function());
+    Value *sizehint = ConstantInt::get(
+        TypeBuilder<Py_ssize_t>::cache(this->module_), size, true);
+    Function *create_dict = GetGlobalFunction<
+        PyObject *(Py_ssize_t)>("_PyDict_NewPresized");
+    Value *result = builder().CreateCall(create_dict, sizehint,
+                                         "BULD_MAP_result");
+    builder().CreateCondBr(IsNull(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+    Push(result);
 }
 
 // Adds delta to *addr, and returns the new value.
