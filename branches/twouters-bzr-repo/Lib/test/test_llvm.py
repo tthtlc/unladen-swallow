@@ -290,6 +290,57 @@ entry:
         self.assertEquals(do_slice([1, 2, 3]), non_llvm_result)
         self.assertRaises(TypeError, do_slice, 1)
 
+    def test_slicing(self):
+        def get_slice(x): return (x[:], x[1:], x[:3], x[:], x[1:3])
+        non_llvm_result = get_slice(range(5))
+        get_slice.__code__.__use_llvm__ = True
+        self.assertEquals(get_slice(range(5)), non_llvm_result)
+
+    def test_set_slice_none(self):
+        def set_slice_none(x, y): x[:] = y
+        source = ['a', 'b', 'c']
+        non_llvm_result = range(5)
+        set_slice_none(non_llvm_result, source)
+        self.assertEquals(non_llvm_result, source)
+        llvm_result = range(5)
+        set_slice_none.__code__.__use_llvm__ = True
+        set_slice_none(llvm_result, source)
+        self.assertEquals(non_llvm_result, llvm_result)
+
+    def test_set_slice_left(self):
+        def set_slice_left(x, start, y): x[start:] = y
+        source = ['a', 'b', 'c']
+        non_llvm_result = range(5)
+        set_slice_left(non_llvm_result, 1, source)
+        self.assertEquals(non_llvm_result, [0, 'a', 'b', 'c'])
+        llvm_result = range(5)
+        set_slice_left.__code__.__use_llvm__ = True
+        set_slice_left(llvm_result, 1, source)
+        self.assertEquals(non_llvm_result, llvm_result)
+
+    def test_set_slice_right(self):
+        def set_slice_right(x, stop, y): x[:stop] = y
+        source = ['a', 'b', 'c']
+        non_llvm_result = range(5)
+        set_slice_right(non_llvm_result, 3, source)
+        self.assertEquals(non_llvm_result, ['a', 'b', 'c', 3, 4])
+        llvm_result = range(5)
+        set_slice_right.__code__.__use_llvm__ = True
+        set_slice_right(llvm_result, 3, source)
+        self.assertEquals(non_llvm_result, llvm_result)
+
+    def test_set_slice_both(self):
+        def set_slice_both(x, start, stop, y): x[start:stop] = y
+        source = ['a', 'b', 'c']
+        non_llvm_result = range(5)
+        set_slice_both(non_llvm_result, 1, 3, source)
+        self.assertEquals(non_llvm_result, [0, 'a', 'b', 'c', 3, 4])
+        llvm_result = range(5)
+        set_slice_both.__code__.__use_llvm__ = True
+        set_slice_both(llvm_result, 1, 3, source)
+        self.assertEquals(non_llvm_result, llvm_result)
+        
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)

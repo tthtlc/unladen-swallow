@@ -1520,6 +1520,188 @@ LlvmFunctionBuilder::BUILD_SLICE_THREE()
     BuildSlice(start, stop, step);
 }
 
+// Implement seq[start:stop]
+void
+LlvmFunctionBuilder::ApplySlice(Value *seq, Value *start, Value *stop)
+{
+    BasicBlock *failure = BasicBlock::Create("ApplySlice_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("ApplySlice_success",
+                                             function());
+    Function *build_slice = GetGlobalFunction<
+        PyObject *(PyObject *, PyObject *, PyObject *)>("_PyEval_ApplySlice");
+    Value *result = builder().CreateCall3(
+        build_slice, seq, start, stop, "ApplySlice_result");
+    XDecRef(stop);
+    XDecRef(start);
+    DecRef(seq);
+    builder().CreateCondBr(IsNull(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+    Push(result);
+}
+
+void
+LlvmFunctionBuilder::SLICE_BOTH()
+{
+    Value *stop = Pop();
+    Value *start = Pop();
+    Value *seq = Pop();
+    ApplySlice(seq, start, stop);
+}
+
+void
+LlvmFunctionBuilder::SLICE_LEFT()
+{
+    Value *stop = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *start = Pop();
+    Value *seq = Pop();
+    ApplySlice(seq, start, stop);
+}
+
+void
+LlvmFunctionBuilder::SLICE_RIGHT()
+{
+    Value *stop = Pop();
+    Value *start = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *seq = Pop();
+    ApplySlice(seq, start, stop);
+}
+
+void
+LlvmFunctionBuilder::SLICE_NONE()
+{
+    Value *stop = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *start = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *seq = Pop();
+    ApplySlice(seq, start, stop);
+}
+
+// Implement seq[start:stop] = source, and del seq[start:stop]
+void
+LlvmFunctionBuilder::AssignSlice(Value *seq, Value *start, Value *stop,
+                                 Value *source)
+{
+    BasicBlock *failure = BasicBlock::Create("AssignSlice_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("AssignSlice_success",
+                                             function());
+    Function *assign_slice = GetGlobalFunction<
+        int (PyObject *, PyObject *, PyObject *, PyObject *)>(
+            "_PyEval_AssignSlice");
+    Value *result = builder().CreateCall4(
+        assign_slice, seq, start, stop, source, "ApplySlice_result");
+    XDecRef(source);
+    XDecRef(stop);
+    XDecRef(start);
+    DecRef(seq);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}
+
+void
+LlvmFunctionBuilder::STORE_SLICE_BOTH()
+{
+    Value *stop = Pop();
+    Value *start = Pop();
+    Value *seq = Pop();
+    Value *source = Pop();
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::STORE_SLICE_LEFT()
+{
+    Value *stop = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *start = Pop();
+    Value *seq = Pop();
+    Value *source = Pop();
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::STORE_SLICE_RIGHT()
+{
+    Value *stop = Pop();
+    Value *start = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *seq = Pop();
+    Value *source = Pop();
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::STORE_SLICE_NONE()
+{
+    Value *stop = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *start = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *seq = Pop();
+    Value *source = Pop();
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::DELETE_SLICE_BOTH()
+{
+    Value *stop = Pop();
+    Value *start = Pop();
+    Value *seq = Pop();
+    Value *source = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::DELETE_SLICE_LEFT()
+{
+    Value *stop = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *start = Pop();
+    Value *seq = Pop();
+    Value *source = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::DELETE_SLICE_RIGHT()
+{
+    Value *stop = Pop();
+    Value *start = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *seq = Pop();
+    Value *source = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    AssignSlice(seq, start, stop, source);
+}
+
+void
+LlvmFunctionBuilder::DELETE_SLICE_NONE()
+{
+    Value *stop = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *start = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Value *seq = Pop();
+    Value *source = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    AssignSlice(seq, start, stop, source);
+}
+
 // Adds delta to *addr, and returns the new value.
 static Value *
 increment_and_get(llvm::IRBuilder<>& builder, Value *addr, int64_t delta)

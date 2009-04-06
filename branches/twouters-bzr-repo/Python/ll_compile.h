@@ -96,6 +96,18 @@ public:
     void LIST_APPEND();
     void STORE_MAP();
 
+    void SLICE_NONE();
+    void SLICE_LEFT();
+    void SLICE_RIGHT();
+    void SLICE_BOTH();
+    void STORE_SLICE_NONE();
+    void STORE_SLICE_LEFT();
+    void STORE_SLICE_RIGHT();
+    void STORE_SLICE_BOTH();
+    void DELETE_SLICE_NONE();
+    void DELETE_SLICE_LEFT();
+    void DELETE_SLICE_RIGHT();
+    void DELETE_SLICE_BOTH();
     void BUILD_SLICE_TWO();
     void BUILD_SLICE_THREE();
 
@@ -127,18 +139,6 @@ public:
         InsertAbort(#NAME); \
     }
 
-    UNIMPLEMENTED(SLICE_NONE);
-    UNIMPLEMENTED(SLICE_LEFT);
-    UNIMPLEMENTED(SLICE_RIGHT);
-    UNIMPLEMENTED(SLICE_BOTH);
-    UNIMPLEMENTED(STORE_SLICE_NONE);
-    UNIMPLEMENTED(STORE_SLICE_LEFT);
-    UNIMPLEMENTED(STORE_SLICE_RIGHT);
-    UNIMPLEMENTED(STORE_SLICE_BOTH);
-    UNIMPLEMENTED(DELETE_SLICE_NONE);
-    UNIMPLEMENTED(DELETE_SLICE_LEFT);
-    UNIMPLEMENTED(DELETE_SLICE_RIGHT);
-    UNIMPLEMENTED(DELETE_SLICE_BOTH);
     UNIMPLEMENTED(BREAK_LOOP)
     UNIMPLEMENTED(WITH_CLEANUP)
     UNIMPLEMENTED(END_FINALLY)
@@ -260,6 +260,13 @@ private:
     // Build a new slice object, by calling PySlice_New(), and push it onto
     // the stack. Only the third argument may be a Value* representing NULL.
     void BuildSlice(llvm::Value *start, llvm::Value *stop, llvm::Value *step);
+
+    // Apply a classic slice to a sequence, pushing the result onto the stack.
+    void ApplySlice(llvm::Value *seq, llvm::Value *start, llvm::Value *stop);
+    // Assign to or delete a slice of a sequence. source can be a Value*
+    // representing NULL to indicate slice deletion.
+    void AssignSlice(llvm::Value *seq, llvm::Value *start, llvm::Value *stop,
+                     llvm::Value *source);
 
     llvm::Module *const module_;
     llvm::Function *const function_;
