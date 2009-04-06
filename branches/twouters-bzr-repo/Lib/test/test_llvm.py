@@ -353,6 +353,25 @@ entry:
         f1.__code__.__use_llvm__ = True
         self.assertEquals(f1((1, 2, (3, 4, 5))), (1, 2, 3, 4, 5))
 
+    def test_call_function(self):
+        def f1(x):
+            return x()
+        f1.__code__.__use_llvm__ = True
+        self.assertEquals(f1(lambda: 5), 5)
+
+        def f2(x, y, z):
+            return x(1, 2, y, 4, z)
+        f2.__code__.__use_llvm__ = True
+        self.assertEquals(f2(lambda *args: args, 3, 5),
+                          (1, 2, 3, 4, 5))
+
+        def f3():
+            raise_exc()
+        f3.__code__.__use_llvm__ = True
+        def raise_exc():
+            raise ValueError
+        self.assertRaises(ValueError, f3)
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)

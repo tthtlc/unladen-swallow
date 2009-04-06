@@ -807,6 +807,38 @@ LlvmFunctionBuilder::STORE_DEREF(int index)
 }
 
 void
+LlvmFunctionBuilder::CALL_FUNCTION(int num_args)
+{
+    BasicBlock *failure =
+        BasicBlock::Create("CALL_FUNCTION_failure", function());
+    BasicBlock *success =
+        BasicBlock::Create("CALL_FUNCTION_success", function());
+    Function *call_function = GetGlobalFunction<
+        PyObject *(PyObject ***, int)>("_PyEval_CallFunction");
+    Value *temp_stack_pointer_addr = builder().CreateAlloca(
+        TypeBuilder<PyObject**>::cache(this->module_),
+        0, "CALL_FUNCTION_stack_pointer_addr");
+    builder().CreateStore(
+        builder().CreateLoad(this->stack_pointer_addr_),
+        temp_stack_pointer_addr);
+    Value *result = builder().CreateCall2(
+        call_function,
+        temp_stack_pointer_addr,
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_), num_args),
+        "CALL_FUNCTION_result");
+    builder().CreateStore(
+        builder().CreateLoad(temp_stack_pointer_addr),
+        this->stack_pointer_addr_);
+    builder().CreateCondBr(IsNull(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+    Push(result);
+}  
+
+void
 LlvmFunctionBuilder::JUMP_ABSOLUTE(llvm::BasicBlock *target,
                                    llvm::BasicBlock *fallthrough)
 {

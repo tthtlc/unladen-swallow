@@ -27,6 +27,13 @@ PyAPI_FUNC(int) _PyEval_AssignSlice(PyObject *, PyObject *,
 
 PyAPI_FUNC(int) _PyEval_UnpackIterable(PyObject *, int, PyObject **);
 
+#ifdef WITH_TSC
+PyAPI_FUNC(PyObject *) _PyEval_CallFunction(PyObject ***, int,
+                                            uint64*, uint64*);
+#else
+PyAPI_FUNC(PyObject *) _PyEval_CallFunction(PyObject ***, int);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
