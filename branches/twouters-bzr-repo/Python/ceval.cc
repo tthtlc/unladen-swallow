@@ -501,7 +501,6 @@ enum why_code {
 };
 
 static enum why_code do_raise(PyObject *, PyObject *, PyObject *);
-static int unpack_iterable(PyObject *, int, PyObject **);
 
 /* Records whether tracing is on for any thread.  Counts the number of
    threads for which tstate->c_tracefunc is non-NULL, so if the value
@@ -1741,8 +1740,8 @@ _PyEval_DoRaise(PyObject *type, PyObject *value, PyObject *tb)
 /* Iterate v argcnt times and store the results on the stack (via decreasing
    sp).  Return 1 for success, 0 if error. */
 
-static int
-unpack_iterable(PyObject *v, int argcnt, PyObject **sp)
+int
+_PyEval_UnpackIterable(PyObject *v, int argcnt, PyObject **sp)
 {
 	int i = 0;
 	PyObject *it;  /* iter(v) */

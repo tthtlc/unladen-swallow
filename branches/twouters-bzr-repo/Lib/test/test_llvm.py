@@ -346,6 +346,13 @@ entry:
         self.assertEquals(f(), self)
         self.assertTrue(f() is self)
 
+    def test_unpacking(self):
+        def f1(x):
+            a, b, (c, d, e) = x
+            return (a, b, c, d, e)
+        f1.__code__.__use_llvm__ = True
+        self.assertEquals(f1((1, 2, (3, 4, 5))), (1, 2, 3, 4, 5))
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)

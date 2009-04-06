@@ -1775,6 +1775,46 @@ LlvmFunctionBuilder::DELETE_SLICE_NONE()
     AssignSlice(seq, start, stop, source);
 }
 
+void
+LlvmFunctionBuilder::UNPACK_SEQUENCE(int size)
+{
+    BasicBlock *failure =
+        BasicBlock::Create("UNPACK_SEQUENCE_failure", function());
+    BasicBlock *success =
+        BasicBlock::Create("UNPACK_SEQUENCE_success", function());
+
+    Value *iterable = Pop();
+    // We could speed up the common case quite a bit by doing the unpacking
+    // inline, like ceval.c does; that would allow LLVM to optimize the heck
+    // out of it as well. Then again, we could do even better by combining
+    // this opcode and STORE_* ones that follow into a single block of code
+    // circumventing the stack altogether. And omitting the horrible
+    // external stack munging that UnpackIterable does.
+    Function *unpack_iterable = GetGlobalFunction<
+        int(PyObject *, int, PyObject **)>("_PyEval_UnpackIterable");
+    Value *stack_pointer = builder().CreateLoad(this->stack_pointer_addr_);
+    Value *result = builder().CreateCall3(
+        unpack_iterable, iterable,
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_), size, true),
+        builder().CreateGEP(
+            stack_pointer,
+            ConstantInt::get(
+                TypeBuilder<Py_ssize_t>::cache(this->module_), size, true)));
+    DecRef(iterable);
+    // Absurdly, _PyEval_UnpackIterable returns 1/0 for success/failure,
+    // instead of the 0/-1 that all other int-returning calls use.
+    builder().CreateCondBr(IsNonZero(result), success, failure);
+    
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
+    Value *new_stack_pointer = builder().CreateGEP(
+        stack_pointer, ConstantInt::get(
+            TypeBuilder<Py_ssize_t>::cache(this->module_), size, true));
+    builder().CreateStore(new_stack_pointer, this->stack_pointer_addr_);
+}
+
 // Adds delta to *addr, and returns the new value.
 static Value *
 increment_and_get(llvm::IRBuilder<>& builder, Value *addr, int64_t delta)

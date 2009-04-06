@@ -25,6 +25,8 @@ PyAPI_FUNC(PyObject *) _PyEval_ApplySlice(PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(int) _PyEval_AssignSlice(PyObject *, PyObject *,
                                     PyObject *, PyObject *);
 
+PyAPI_FUNC(int) _PyEval_UnpackIterable(PyObject *, int, PyObject **);
+
 #ifdef __cplusplus
 }
 #endif
