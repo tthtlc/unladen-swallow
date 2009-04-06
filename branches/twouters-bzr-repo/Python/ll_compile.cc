@@ -776,7 +776,6 @@ LlvmFunctionBuilder::LOAD_DEREF(int index)
     Return(Constant::getNullValue(function()->getReturnType()));
 
     builder().SetInsertPoint(success);
-    IncRef(value);
     Push(value);
 }
 
