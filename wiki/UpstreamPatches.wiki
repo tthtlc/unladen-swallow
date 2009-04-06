@@ -5,6 +5,9 @@
 == Patches reviewed, submitted ==
   * [http://bugs.python.org/issue5588 Issue 5588]. Add --randseed to regrtest.py.
   * [http://bugs.python.org/issue5176 Issue 5176]. Special-case string formatting in BINARY_MODULO implementation.
+  * [http://bugs.python.org/issue4884 Issue 4884]. Work around gethostbyaddr_r bug.
+  * [http://bugs.python.org/issue4597 Issue 4597]. EvalFrameEx fails to set 'why' for some exceptions.
+  * [http://bugs.python.org/issue4477 Issue 4477]. Speed up PyEval_EvalFrameEx when tracing is off.
 
 == Patches under review ==
   * [http://bugs.python.org/issue5683 Issue 5683]. Speed up cPickle's pickling generally via a simplified buffering scheme.
