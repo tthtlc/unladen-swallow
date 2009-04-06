@@ -735,6 +735,79 @@ LlvmFunctionBuilder::LOAD_FAST(int index)
 }
 
 void
+LlvmFunctionBuilder::LOAD_DEREF(int index)
+{
+    BasicBlock *failed_load =
+        BasicBlock::Create("LOAD_DEREF_failed_load", function());
+    BasicBlock *unbound_local =
+        BasicBlock::Create("LOAD_DEREF_unbound_local", function());
+    BasicBlock *error =
+        BasicBlock::Create("LOAD_DEREF_error", function());
+    BasicBlock *success =
+        BasicBlock::Create("LOAD_DEREF_success", function());
+
+    Value *cell = builder().CreateLoad(
+        builder().CreateGEP(this->freevars_,
+                            ConstantInt::get(Type::Int32Ty, index, true)));
+    Function *pycell_get = GetGlobalFunction<
+        PyObject *(PyObject *)>("PyCell_Get");
+    Value *value = builder().CreateCall(
+        pycell_get, cell, "LOAD_DEREF_cell_contents");
+    builder().CreateCondBr(IsNull(value), failed_load, success);
+
+    builder().SetInsertPoint(failed_load);
+    Function *pyerr_occurred =
+        GetGlobalFunction<PyObject *()>("PyErr_Occurred");
+    Value *was_err =
+        builder().CreateCall(pyerr_occurred, "LOAD_DEREF_err_occurred");
+    builder().CreateCondBr(IsNull(was_err), unbound_local, error);
+
+    builder().SetInsertPoint(unbound_local);
+    Function *do_raise =
+        GetGlobalFunction<void(PyFrameObject*, int)>(
+            "_PyEval_RaiseForUnboundLocal");
+    builder().CreateCall2(
+        do_raise, this->frame_,
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_),
+                         index, true /* signed */));
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(error);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+    IncRef(value);
+    Push(value);
+}
+
+void
+LlvmFunctionBuilder::STORE_DEREF(int index)
+{
+    BasicBlock *failure =
+        BasicBlock::Create("STORE_DEREF_failure", function());
+    BasicBlock *success =
+        BasicBlock::Create("STORE_DEREF_success", function());
+
+    Value *value = Pop();
+    Value *cell = builder().CreateLoad(
+        builder().CreateGEP(
+            this->freevars_, ConstantInt::get(Type::Int32Ty, index, true)));
+    Function *pycell_set = GetGlobalFunction<
+        int(PyObject *, PyObject *)>("PyCell_Set");
+    Value *result = builder().CreateCall2(
+        pycell_set, cell, value, "STORE_DEREF_result");
+    DecRef(value);
+    // ceval.c doesn't actually check the return value of this, I guess
+    // we are a little more likely to do things wrong.
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}
+
+void
 LlvmFunctionBuilder::JUMP_ABSOLUTE(llvm::BasicBlock *target,
                                    llvm::BasicBlock *fallthrough)
 {

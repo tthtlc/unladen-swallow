@@ -36,6 +36,9 @@ public:
     void STORE_FAST(int index);
     void DELETE_FAST(int index);
 
+    void LOAD_DEREF(int index);
+    void STORE_DEREF(int index);
+
     void SETUP_LOOP(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
     void GET_ITER();
     void FOR_ITER(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
@@ -147,8 +150,6 @@ public:
     UNIMPLEMENTED_I(LOAD_ATTR)
     UNIMPLEMENTED_I(STORE_ATTR)
     UNIMPLEMENTED_I(DELETE_ATTR)
-    UNIMPLEMENTED_I(LOAD_DEREF);
-    UNIMPLEMENTED_I(STORE_DEREF);
     UNIMPLEMENTED_I(LOAD_NAME);
     UNIMPLEMENTED_I(STORE_NAME);
     UNIMPLEMENTED_I(DELETE_NAME);

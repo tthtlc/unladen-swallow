@@ -339,7 +339,12 @@ entry:
         set_slice_both.__code__.__use_llvm__ = True
         set_slice_both(llvm_result, 1, 3, source)
         self.assertEquals(non_llvm_result, llvm_result)
-        
+
+    def test_load_deref(self):
+        def f(): return self
+        f.__code__.__use_llvm__ = True
+        self.assertEquals(f(), self)
+        self.assertTrue(f() is self)
 
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
