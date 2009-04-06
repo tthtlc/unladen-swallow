@@ -40,7 +40,11 @@ def TestCheetah():
                                env={"PATH": path})
 
 def TestDjango():
-    pass
+    py_path = os.path.join("..", "..", "correctness")
+    test_runner = os.path.join("tests", "runtests.py")
+    return subprocess.call([sys.executable, test_runner, "-v1",
+                            "--settings=django_data.settings"],
+                            env={"PYTHONPATH": py_path})
 
 def TestMercurial():
     with ChangeDir("tests"):
