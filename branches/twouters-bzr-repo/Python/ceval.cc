@@ -2261,6 +2261,51 @@ _PyEval_CallFunction(PyObject ***pp_stack, int oparg
 	return x;
 }
 
+/* In spite of the  name, not like _PyEval_CallFunction, since it 
+   pushes the result of the call onto the stack, and it expects to modify
+   the stack_pointer argument directly. */
+int
+_PyEval_CallFunctionVarKw(PyObject ***stack_pointer, int i)
+{
+	int var_kw = i & 0x0000FFFF;
+	int oparg  = i>>16;
+	int na     = oparg & 0xff;
+	int nk     = (oparg>>8) & 0xff;
+	int flags  = var_kw & 3;
+	int n      = na + 2 * nk;
+	PyObject **pfunc, *func, **sp, *a1, *x;
+	if (flags & CALL_FLAG_VAR)
+		n++;
+	if (flags & CALL_FLAG_KW)
+		n++;
+	pfunc = *stack_pointer - n - 1;
+	func  = *pfunc;
+	if (PyMethod_Check(func) && PyMethod_GET_SELF(func) != NULL) {
+		PyObject *self = PyMethod_GET_SELF(func);
+		Py_INCREF(self);
+		func = PyMethod_GET_FUNCTION(func);
+		Py_INCREF(func);
+		Py_DECREF(*pfunc);
+		*pfunc = self;
+		na++;
+		n++;
+	} else
+		Py_INCREF(func);
+	sp = *stack_pointer;
+	x = ext_do_call(func, &sp, flags, na, nk);
+	*stack_pointer = sp;
+	Py_DECREF(func);
+	while (*stack_pointer > pfunc) {
+		a1 = *(--*stack_pointer);
+		Py_DECREF(a1);
+	}
+	*((*stack_pointer)++) = x;
+	if (x == NULL)
+		return -1;
+	else
+		return 0;
+}
+
 /* The fast_function() function optimize calls for which no argument
    tuple is necessary; the objects are passed directly from the stack.
    For the simplest case -- a function that takes only positional

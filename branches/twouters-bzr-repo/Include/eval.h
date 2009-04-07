@@ -34,6 +34,8 @@ PyAPI_FUNC(PyObject *) _PyEval_CallFunction(PyObject ***, int,
 PyAPI_FUNC(PyObject *) _PyEval_CallFunction(PyObject ***, int);
 #endif
 
+PyAPI_FUNC(int) _PyEval_CallFunctionVarKw(PyObject ***, int);
+
 #ifdef __cplusplus
 }
 #endif
