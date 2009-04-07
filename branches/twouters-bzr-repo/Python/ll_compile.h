@@ -128,6 +128,9 @@ public:
     void LOAD_GLOBAL(int index);
     void STORE_GLOBAL(int index);
     void DELETE_GLOBAL(int index);
+    void LOAD_ATTR(int index);
+    void STORE_ATTR(int index);
+    void DELETE_ATTR(int index);
 
     void COMPARE_OP(int cmp_op);
     void CALL_FUNCTION(int num_args);
@@ -151,9 +154,6 @@ public:
     UNIMPLEMENTED(END_FINALLY)
     UNIMPLEMENTED(YIELD_VALUE)
 
-    UNIMPLEMENTED_I(LOAD_ATTR)
-    UNIMPLEMENTED_I(STORE_ATTR)
-    UNIMPLEMENTED_I(DELETE_ATTR)
     UNIMPLEMENTED_I(LOAD_NAME);
     UNIMPLEMENTED_I(STORE_NAME);
     UNIMPLEMENTED_I(DELETE_NAME);

@@ -807,6 +807,79 @@ LlvmFunctionBuilder::STORE_DEREF(int index)
 }
 
 void
+LlvmFunctionBuilder::LOAD_ATTR(int names_index)
+{
+    BasicBlock *failure = BasicBlock::Create(
+        "LOAD_ATTR_failure", function());
+    BasicBlock *success = BasicBlock::Create(
+        "LOAD_ATTR_success", function());
+    Value *attr_name = LookupName(names_index);
+    Value *obj = Pop();
+    Function *pyobject_getattr = GetGlobalFunction<
+        PyObject *(PyObject *, PyObject *)>("PyObject_GetAttr");
+    Value *result = builder().CreateCall2(
+        pyobject_getattr, obj, attr_name, "LOAD_ATTR_result");
+    DecRef(obj);
+    builder().CreateCondBr(IsNull(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+    Push(result);
+}
+
+void
+LlvmFunctionBuilder::STORE_ATTR(int names_index)
+{
+    BasicBlock *failure = BasicBlock::Create("STORE_ATTR_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("STORE_ATTR_success",
+                                             function());
+    Value *attr_name = LookupName(names_index);
+    Value *obj = Pop();
+    Value *value = Pop();
+    Function *pyobject_setattr = GetGlobalFunction<
+        int(PyObject *, PyObject *, PyObject *)>("PyObject_SetAttr");
+    Value *result = builder().CreateCall3(
+        pyobject_setattr, obj, attr_name, value,
+        "STORE_ATTR_result");
+    DecRef(value);
+    DecRef(obj);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}    
+
+void
+LlvmFunctionBuilder::DELETE_ATTR(int names_index)
+{
+    BasicBlock *failure = BasicBlock::Create("DELETE_ATTR_failure",
+                                             function());
+    BasicBlock *success = BasicBlock::Create("DELETE_ATTR_success",
+                                             function());
+    Value *attr_name = LookupName(names_index);
+    Value *obj = Pop();
+    Value *value = Constant::getNullValue(
+        TypeBuilder<PyObject *>::cache(this->module_));
+    Function *pyobject_setattr = GetGlobalFunction<
+        int(PyObject *, PyObject *, PyObject *)>("PyObject_SetAttr");
+    Value *result = builder().CreateCall3(
+        pyobject_setattr, obj, attr_name, value,
+        "DELETE_ATTR_result");
+    DecRef(obj);
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}    
+
+void
 LlvmFunctionBuilder::CALL_FUNCTION(int num_args)
 {
     BasicBlock *failure =

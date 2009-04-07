@@ -398,6 +398,30 @@ entry:
         self.assertEquals(f(receiver, (2, 3), {'e': 5, 'f': 6}),
                           ((1, 2, 3), {'d': 4, 'e': 5, 'f': 6}))
 
+    def test_load_attr(self):
+        def f(x):
+             return (x.attr1, x.attr2)
+        f.__code__.__use_llvm__ = True
+        f.attr1 = "Attribute 1"
+        f.attr2 = "Attribute 2"
+        self.assertEquals(f(f), (f.attr1, f.attr2))
+
+    def test_store_attr(self):
+        def f(x, y):
+            x.f = y
+        f.__code__.__use_llvm__ = True
+        f(f, f)
+        self.assertEquals(f.f, f)
+
+    def test_delete_attr(self):
+        def f(x):
+            del x.attr
+        f.__code__.__use_llvm__ = True
+        f.attr = True
+        f(f)
+        self.assertFalse(hasattr(f, 'attr'))
+
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)
