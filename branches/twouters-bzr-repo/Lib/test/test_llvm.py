@@ -421,6 +421,109 @@ entry:
         f(f)
         self.assertFalse(hasattr(f, 'attr'))
 
+    def test_if_stmt(self):
+        def f1(x):
+            if x:
+                return "true"
+        f1.__code__.__use_llvm__ = True
+        self.assertEquals(f1(True), "true")
+        self.assertEquals(f1(False), None)
+
+        def f2(x):
+            if x:
+                return "true"
+            else:
+                return "false"
+        f2.__code__.__use_llvm__ = True
+        self.assertEquals(f2("not false"), "true")
+        self.assertEquals(f2(""), "false")
+
+        def f3(x):
+            if x:
+                raise IOError
+            else:
+                raise ValueError
+        f3.__code__.__use_llvm__ = True
+        self.assertRaises(IOError, f3, True)
+        self.assertRaises(ValueError, f3, False)
+
+    def test_if_expr(self):
+        def f1(x, y, z):
+            return y if x else z
+        f1.__code__.__use_llvm__ = True
+        self.assertEquals(f1([1], "y", "z"), "y")
+        self.assertEquals(f1([], "y", "z"), "z")
+
+        def f2(x, y, z):
+            return y() if x else z()
+        f2.__code__.__use_llvm__ = True
+        def ok():
+            return "ok"
+        def bad():
+            raise ValueError
+        self.assertEquals(f2(True, ok, bad), "ok")
+        self.assertEquals(f2(False, bad, ok), "ok")
+        self.assertRaises(ValueError, f2, True, bad, ok)
+        self.assertRaises(ValueError, f2, False, ok, bad)
+
+    def test_assert(self):
+        def f(x):
+            assert x
+        f.__code__.__use_llvm__ = True
+        self.assertEquals(f(1), None)
+        self.assertRaises(AssertionError, f, 0)
+
+    def test_and(self):
+        def f1(x, y):
+            return x and y
+        f1.__code__.__use_llvm__ = True
+        self.assertEquals(f1("x", "y"), "y")
+        self.assertEquals(f1((), "y"), ())
+        self.assertEquals(f1((), ""), ())
+
+        def f2(x, y):
+            return x() and y()
+        f2.__code__.__use_llvm__ = True
+        def true():
+            return "true"
+        def false():
+            return ""
+        def bad():
+            raise ValueError
+        self.assertEquals(f2(true, false), "")
+        self.assertEquals(f2(false, true), "")
+        self.assertEquals(f2(true, true), "true")
+        self.assertEquals(f2(false, false), "")
+        self.assertEquals(f2(false, bad), "")
+        self.assertRaises(ValueError, f2, bad, true)
+        self.assertRaises(ValueError, f2, bad, false)
+        self.assertRaises(ValueError, f2, true, bad)
+
+    def test_or(self):
+        def f1(x, y):
+            return x or y
+        f1.__code__.__use_llvm__ = True
+        self.assertEquals(f1("x", "y"), "x")
+        self.assertEquals(f1((), "y"), "y")
+        self.assertEquals(f1((), ""), "")
+
+        def f2(x, y):
+            return x() or y()
+        f2.__code__.__use_llvm__ = True
+        def true():
+            return "true"
+        def false():
+            return ""
+        def bad():
+            raise ValueError
+        self.assertEquals(f2(true, false), "true")
+        self.assertEquals(f2(false, true), "true")
+        self.assertEquals(f2(true, true), "true")
+        self.assertEquals(f2(false, false), "")
+        self.assertEquals(f2(true, bad), "true")
+        self.assertRaises(ValueError, f2, bad, true)
+        self.assertRaises(ValueError, f2, bad, false)
+        self.assertRaises(ValueError, f2, false, bad)
 
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):

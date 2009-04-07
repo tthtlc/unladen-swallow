@@ -49,6 +49,15 @@ public:
     }
     void JUMP_ABSOLUTE(llvm::BasicBlock *target, llvm::BasicBlock *fallthrough);
 
+    void POP_JUMP_IF_FALSE(llvm::BasicBlock *target,
+                           llvm::BasicBlock *fallthrough);
+    void POP_JUMP_IF_TRUE(llvm::BasicBlock *target,
+                          llvm::BasicBlock *fallthrough);
+    void JUMP_IF_FALSE_OR_POP(llvm::BasicBlock *target,
+                             llvm::BasicBlock *fallthrough);
+    void JUMP_IF_TRUE_OR_POP(llvm::BasicBlock *target,
+                             llvm::BasicBlock *fallthrough);
+
     void RETURN_VALUE();
 
     void POP_TOP();
@@ -160,10 +169,6 @@ public:
     UNIMPLEMENTED_I(LOAD_CLOSURE)
     UNIMPLEMENTED_I(MAKE_CLOSURE)
 
-    UNIMPLEMENTED_J(POP_JUMP_IF_FALSE);
-    UNIMPLEMENTED_J(POP_JUMP_IF_TRUE);
-    UNIMPLEMENTED_J(JUMP_IF_FALSE_OR_POP);
-    UNIMPLEMENTED_J(JUMP_IF_TRUE_OR_POP);
     UNIMPLEMENTED_J(CONTINUE_LOOP);
     UNIMPLEMENTED_J(SETUP_EXCEPT);
     UNIMPLEMENTED_J(SETUP_FINALLY);
@@ -216,6 +221,7 @@ private:
     llvm::Value *IsNull(llvm::Value *value);
     // Returns an i1, true if value is a non-zero integer.
     llvm::Value *IsNonZero(llvm::Value *value);
+    llvm::Value *IsTrue(llvm::Value *value);
 
     // Inserts a jump to the return block, returning retval.  You
     // should _never_ call CreateRet directly from one of the opcode

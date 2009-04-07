@@ -941,6 +941,59 @@ LlvmFunctionBuilder::JUMP_ABSOLUTE(llvm::BasicBlock *target,
 }
 
 void
+LlvmFunctionBuilder::POP_JUMP_IF_FALSE(llvm::BasicBlock *target,
+                                       llvm::BasicBlock *fallthrough)
+{
+    Value *test_value = Pop();
+    Value *is_true = IsTrue(test_value);
+    DecRef(test_value);
+    builder().CreateCondBr(is_true, fallthrough, target);
+}
+
+void
+LlvmFunctionBuilder::POP_JUMP_IF_TRUE(llvm::BasicBlock *target,
+                                      llvm::BasicBlock *fallthrough)
+{
+    Value *test_value = Pop();
+    Value *is_true = IsTrue(test_value);
+    DecRef(test_value);
+    builder().CreateCondBr(is_true, target, fallthrough);
+}
+
+void
+LlvmFunctionBuilder::JUMP_IF_FALSE_OR_POP(llvm::BasicBlock *target,
+                                          llvm::BasicBlock *fallthrough)
+{
+    BasicBlock *true_path =
+        BasicBlock::Create("JUMP_IF_FALSE_OR_POP_pop", function());
+    Value *test_value = Pop();
+    Push(test_value);
+    Value *is_true = IsTrue(test_value);
+    builder().CreateCondBr(is_true, true_path, target);
+    builder().SetInsertPoint(true_path);
+    test_value = Pop();
+    DecRef(test_value);
+    builder().CreateBr(fallthrough);
+    
+}
+
+void
+LlvmFunctionBuilder::JUMP_IF_TRUE_OR_POP(llvm::BasicBlock *target,
+                                         llvm::BasicBlock *fallthrough)
+{
+    BasicBlock *false_path =
+        BasicBlock::Create("JUMP_IF_TRUE_OR_POP_pop", function());
+    Value *test_value = Pop();
+    Push(test_value);
+    Value *is_true = IsTrue(test_value);
+    builder().CreateCondBr(is_true, target, false_path);
+    builder().SetInsertPoint(false_path);
+    test_value = Pop();
+    DecRef(test_value);
+    builder().CreateBr(fallthrough);
+}
+
+void
 LlvmFunctionBuilder::STORE_FAST(int index)
 {
     SetLocal(index, Pop());
@@ -2116,6 +2169,63 @@ LlvmFunctionBuilder::IsNonZero(Value *value)
 {
     return builder().CreateICmpNE(
         value, Constant::getNullValue(value->getType()));
+}
+
+llvm::Value *
+LlvmFunctionBuilder::IsTrue(Value *value)
+{
+    BasicBlock *not_py_true =
+        BasicBlock::Create("IsTrue_is_not_PyTrue", function());
+    BasicBlock *not_py_false =
+        BasicBlock::Create("IsTrue_is_not_PyFalse", function());
+    BasicBlock *failure =
+        BasicBlock::Create("IsTrue_failure", function());
+    BasicBlock *success =
+        BasicBlock::Create("IsTrue_success", function());
+    BasicBlock *done =
+        BasicBlock::Create("IsTrue_done", function());
+    BasicBlock *entry = builder().GetInsertBlock();
+    
+    Value *py_false = GetGlobalVariable<PyObject>("_Py_ZeroStruct");
+    Value *py_true = GetGlobalVariable<PyObject>("_Py_TrueStruct");
+    Value *zero = ConstantInt::get(
+        TypeBuilder<int>::cache(this->module_), 0, true /* signed */);
+
+    Value *is_PyTrue = builder().CreateICmpEQ(
+        py_true, value, "IsTrue_is_PyTrue");
+    builder().CreateCondBr(is_PyTrue, done, not_py_true);
+
+    builder().SetInsertPoint(not_py_true);
+    Value *is_PyFalse = builder().CreateICmpEQ(
+        py_false, value, "IsTrue_is_PyFalse");
+    builder().CreateCondBr(is_PyFalse, done, not_py_false);
+
+    builder().SetInsertPoint(not_py_false);
+    Function *pyobject_istrue =
+        GetGlobalFunction<int(PyObject *)>("PyObject_IsTrue");
+    Value *istrue_result = builder().CreateCall(
+        pyobject_istrue, value, "PyObject_IsTrue_result");
+    Value *is_error = builder().CreateICmpSLT(
+        istrue_result, zero, "PyObject_IsTrue_is_error");
+    builder().CreateCondBr(is_error, failure, success);
+    
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+    
+    builder().SetInsertPoint(success);
+    Value *is_nonzero = builder().CreateICmpSGT(
+        istrue_result, zero, "PyObject_IsTrue_is_true");
+    builder().CreateBr(done);
+
+    builder().SetInsertPoint(done);    
+    PHINode *phi = builder().CreatePHI(Type::Int1Ty, "IsTrue_bool_result");
+    phi->addIncoming(is_PyTrue, entry);
+    // If we come from not_py_true, we want to return the i1 for false,
+    // and is_PyTrue will conveniently be that.
+    phi->addIncoming(is_PyTrue, not_py_true);
+    phi->addIncoming(is_nonzero, success);
+    return phi;
+
 }
 
 }  // namespace py
