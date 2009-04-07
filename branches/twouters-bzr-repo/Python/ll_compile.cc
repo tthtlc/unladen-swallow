@@ -839,6 +839,28 @@ LlvmFunctionBuilder::CALL_FUNCTION(int num_args)
 }  
 
 void
+LlvmFunctionBuilder::CALL_FUNCTION_VAR_KW(int num_args)
+{
+    BasicBlock *failure =
+        BasicBlock::Create("CALL_FUNCTION_VAR_KW_failure", function());
+    BasicBlock *success =
+        BasicBlock::Create("CALL_FUNCTION_VAR_KW_success", function());
+    Function *call_function = GetGlobalFunction<
+        PyObject *(PyObject ***, int)>("_PyEval_CallFunctionVarKw");
+    Value *result = builder().CreateCall2(
+        call_function,
+        this->stack_pointer_addr_,
+        ConstantInt::get(TypeBuilder<int>::cache(this->module_), num_args),
+        "CALL_FUNCTION_VAR_KW_result");
+    builder().CreateCondBr(IsNonZero(result), failure, success);
+
+    builder().SetInsertPoint(failure);
+    Return(Constant::getNullValue(function()->getReturnType()));
+
+    builder().SetInsertPoint(success);
+}  
+
+void
 LlvmFunctionBuilder::JUMP_ABSOLUTE(llvm::BasicBlock *target,
                                    llvm::BasicBlock *fallthrough)
 {

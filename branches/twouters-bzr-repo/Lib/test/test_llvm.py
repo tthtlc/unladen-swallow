@@ -372,6 +372,32 @@ entry:
             raise ValueError
         self.assertRaises(ValueError, f3)
 
+    def test_call_varargs(self):
+        def f(x, args):
+            return x(1, 2, *args)
+        f.__code__.__use_llvm__ = True
+        def receiver(a, *args):
+            return a, args
+        self.assertEquals(f(receiver, (3, 4, 5)), (1, (2, 3, 4, 5)))
+
+    def test_call_kwargs(self):
+        def f(x, kwargs):
+            return x(a=1, **kwargs)
+        f.__code__.__use_llvm__ = True
+        def receiver(**kwargs):
+            return kwargs
+        self.assertEquals(f(receiver, {'b': 2, 'c': 3}),
+                          {'a': 1, 'b': 2, 'c': 3})
+
+    def test_call_args_kwargs(self):
+        def f(x, args, kwargs):
+            return x(1, d=4, *args, **kwargs)
+        f.__code__.__use_llvm__ = True
+        def receiver(*args, **kwargs):
+            return args, kwargs
+        self.assertEquals(f(receiver, (2, 3), {'e': 5, 'f': 6}),
+                          ((1, 2, 3), {'d': 4, 'e': 5, 'f': 6}))
+
 class LiteralsTests(unittest.TestCase):
     def run_check_return(self, func):
         non_llvm = func(2)
