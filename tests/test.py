@@ -50,6 +50,15 @@ def TestMercurial():
     with ChangeDir("tests"):
         return subprocess.call([sys.executable] + ["run-tests.py"])
 
+def TestNose():
+    return subprocess.call([sys.executable, "-E", "selftest.py"])
+
+def TestNumpy():
+    # Numpy refuses to be imported from the source directory.
+    with ChangeDir(".."):
+        return subprocess.call([sys.executable, "-E", "-c",
+                                "import numpy;numpy.test()"])
+
 def TestPyxml():
     with ChangeDir("test"):
         return subprocess.call([sys.executable] + ["regrtest.py"])
