@@ -31,12 +31,12 @@ def ChangeDir(new_cwd):
 ### Wrappers for the third-party modules we don't want to break go here. ###
 
 def Test2to3():
-    return subprocess.call([sys.executable] + ["test.py"])
+    return subprocess.call([sys.executable, "-E", "test.py"])
 
 def TestCheetah():
     path = ":".join([os.environ["PATH"], os.path.dirname(sys.executable)])
     with ChangeDir(os.path.join("src", "Tests")):
-        return subprocess.call([sys.executable] + ["Test.py"],
+        return subprocess.call([sys.executable, "-E", "Test.py"],
                                env={"PATH": path})
 
 def TestDjango():
@@ -48,7 +48,7 @@ def TestDjango():
 
 def TestMercurial():
     with ChangeDir("tests"):
-        return subprocess.call([sys.executable] + ["run-tests.py"])
+        return subprocess.call([sys.executable, "-E", "run-tests.py"])
 
 def TestNose():
     return subprocess.call([sys.executable, "-E", "selftest.py"])
@@ -61,7 +61,7 @@ def TestNumpy():
 
 def TestPyxml():
     with ChangeDir("test"):
-        return subprocess.call([sys.executable] + ["regrtest.py"])
+        return subprocess.call([sys.executable, "-E", "regrtest.py"])
 
 def TestSpitfire():
     pass
