@@ -381,7 +381,7 @@ def CallAndCaptureOutput(command, env={}):
 
 def MeasureDjango(python, options):
     DJANGO_DIR = Relative("lib/django")
-    TEST_PROG = Relative("performance/macro_django.py")
+    TEST_PROG = Relative("performance/bm_django.py")
 
     django_env = {"PYTHONPATH": DJANGO_DIR}
 
@@ -461,7 +461,7 @@ def MeasureSpitfire(python, options, env={}, extra_args=[]):
     Returns:
         List of floats, each the time it took to run the Spitfire test once.
     """
-    TEST_PROG = Relative("performance/macro_spitfire.py")
+    TEST_PROG = Relative("performance/bm_spitfire.py")
 
     trials = 50
     if options.rigorous:
@@ -538,7 +538,7 @@ def MeasurePickle(python, options, extra_args):
     Returns:
         List of floats, each the time it took to run the pickle test once.
     """
-    TEST_PROG = Relative("performance/macro_pickle.py")
+    TEST_PROG = Relative("performance/bm_pickle.py")
     CLEAN_ENV = {"PYTHONPATH": ""}
 
     trials = 50
@@ -601,6 +601,40 @@ def BM_SlowPickle(base_python, changed_python, options):
 
 def BM_SlowUnpickle(base_python, changed_python, options):
     return _PickleBenchmark(base_python, changed_python, options, ["unpickle"])
+
+
+def MeasureAi(python, options):
+    """Test the performance of some small AI problem solvers.
+
+    Args:
+        python: path to the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        List of floats, each the time it took to run the ai routine once.
+    """
+    TEST_PROG = Relative("performance/bm_ai.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = [python, "-E", "-O", TEST_PROG, "-n", trials]
+    result = CallAndCaptureOutput(command, env=CLEAN_ENV)
+    return [float(line) for line in result.splitlines()]
+
+
+def BM_Ai(base_python, changed_python, options):
+    try:
+        changed_times = MeasureAi(changed_python, options)
+        base_times = MeasureAi(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+    return CompareMultipleRuns(base_times, changed_times, options)
 
 
 def _FindAllBenchmarks():

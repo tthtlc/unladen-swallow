@@ -2,7 +2,7 @@
 
 """Wrapper script for testing the performance of simple AI systems.
 
-micro_ai.py runs the following little solvers:
+bm_ai.py runs the following little solvers:
     - N-Queens
     - alphametics (e.g., "SEND + MORE = MONEY")
 """
