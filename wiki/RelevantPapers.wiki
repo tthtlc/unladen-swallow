@@ -37,6 +37,12 @@ Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers
 
 
 ==Regular Expressions:==
-  * *[http://blog.chromium.org/2009/02/irregexp-google-chromes-new-regexp.html Overview of Chrome's new regex engine]*
-  * *[http://webkit.org/blog/214/introducing-squirrelfish-extreme/ Pointer to Squirrelfish Extreme's regex JIT]*
-  * *[http://209.85.173.132/search?q=cache:XQrcPV-4kngJ:swtch.com/~rsc/regexp/regexp1.html+thompson+NFA&cd=1&hl=en&ct=clnk&gl=us Article advocating the use of Thompson NFAs for regex implementations]*
+  * [http://blog.chromium.org/2009/02/irregexp-google-chromes-new-regexp.html Overview of Chrome's new regex engine]
+  * [http://webkit.org/blog/214/introducing-squirrelfish-extreme/ Pointer to Squirrelfish Extreme's regex JIT]
+  * [http://209.85.173.132/search?q=cache:XQrcPV-4kngJ:swtch.com/~rsc/regexp/regexp1.html+thompson+NFA&cd=1&hl=en&ct=clnk&gl=us Article advocating the use of Thompson NFAs for regex implementations]
+
+
+==Related Work, Related Results:==
+  * [http://weblogs.mozillazine.org/roadmap/archives/2008/08/tracemonkey_javascript_lightsp.html Results from the TraceMonkey JIT]. Includes comparison with the previous non-JIT version.
+  * [http://webkit.org/blog/214/introducing-squirrelfish-extreme/ Results from the SquirrelFish JIT]. Includes comparison with the previous non-JIT version.
+  * [http://chrome.blogspot.com/2009/03/google-chrome-has-new-beta_17.html Recent work to improve V8 performance]. Only JIT/JIT comparisons, no non-JIT/JIT comparison.
