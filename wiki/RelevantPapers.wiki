@@ -20,8 +20,11 @@ Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers
   * *[http://research.sun.com/self/papers/urs-thesis.html Adaptive optimization for Self: Reconciling High Performance with Exploratory Programming] (Hölzle, 1994)*
     * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.41.4430 Optimizing Dynamically-Typed Object-Oriented Languages With Polymorphic Inline Caches] (Hölzle, Chambers & Ungar, 1991)* Long-form paper that originally introduced the type feedback system in Hölzle, 1994.
     * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.49.1810 Debugging Optimized Code with Dynamic Deoptimization] (Hölzle, Chambers & Ungar, 1992)* Long-form paper of the section of Hölzle, 1994 that deals with dynamically deoptimizing SELF code for debugging purposes.
+    * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.34.1419 Type Feedback vs. Concrete Type Inference - A Comparison of Optimization Techniques for Object-Oriented Languages] (Agesen & Hölzle, 1995)* A comparison of type inference and type feedback, and analyzing how they can be mutually beneficial.
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.30.4066 Measurement and Application of Dynamic Receiver Class Distributions] (Garrett et al, 1994)* "We apply dynamic proﬁle information to determine the dynamic execution frequency distributions of the classes of receivers at call sites. We show that these distributions are heavily skewed towards the most commonly occurring receiver class across several different languages. Moreover, we show that the distributions are stable across program inputs, from one version of a program to another, and even to some extent across programs that share library code."
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.50.1043 Towards Better Inlining Decisions Using Inlining Trials] (Dean & Chambers, 1994)* Improving compile time by keeping a database of which inlining operations actually produced a benefit.
+  * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.51.4406 Strongtalk: Typechecking Smalltalk for a Production Environment] (Bracha & Griswold, 1993)*
+  * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.47.7437 Optimization of Object-Oriented Programs Using Static Class Hierarchy Analysis] (Dean, Grove & Chambers, 1994)*
 
 
 ==Garbage Collection:==
