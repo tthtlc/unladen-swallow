@@ -16,6 +16,7 @@ This will run the 2to3 and Django template benchmarks in rigorous mode (lots of 
 
 ==Benchmarks==
 
+  * *ai* - small "AI" solvers for the N-Queens problem and for alphametics.
   * *2to3* - have [http://svn.python.org/view/sandbox/trunk/2to3/ the 2to3 tool] translate itself.
   * *django* - use the [http://www.djangoproject.com/ Django template system] to build a 150x150-cell HTML table.
   * *pickle* - use the `cPickle` module to pickle a variety of datasets.
@@ -26,6 +27,7 @@ This will run the 2to3 and Django template benchmarks in rigorous mode (lots of 
   * *slowspitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table. Unlike the `spitfire` benchmark listed below, `slowspitfire` does not use Pysco.
   * *slowunpickle* - use the pure-Python `pickle` module to unpickle a variety of datasets.
   * *spitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table, taking advantage of Psyco for acceleration.
+  * *startup* - collection of microbenchmarks focused on Python interpreter start-up time.
   * *unpickle* - use the `cPickle` module to unpickle a variety of datasets.
 
 ==Benchmarks we don't use==
