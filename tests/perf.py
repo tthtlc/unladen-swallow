@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 
 info = logging.info
@@ -637,6 +638,62 @@ def BM_Ai(base_python, changed_python, options):
     return CompareMultipleRuns(base_times, changed_times, options)
 
 
+def MeasureStartup(changed_python, base_python, cmd_opts, num_loops):
+    changed_times = []
+    base_times = []
+    config = [(changed_python, changed_times), (base_python, base_times)]
+    for python, times in config:
+        command = " ".join([python, cmd_opts, "-c ''"])
+        info("Running `%s` %d times", command, num_loops * 20)
+        for _ in xrange(num_loops):
+            t0 = time.time()
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            os.system(command)
+            t1 = time.time()
+            times.append(t1 - t0)
+    return CompareMultipleRuns(base_times, changed_times, options)
+
+
+def BM_normal_startup(base_python, changed_python, options):
+    if options.rigorous:
+        num_loops = 100
+    elif options.fast:
+        num_loops = 5
+    else:
+        num_loops = 50
+
+    return MeasureStartup(base_python, changed_python, "-E -O", num_loops)
+
+
+def BM_startup_nosite(base_python, changed_python, options):
+    if options.rigorous:
+        num_loops = 200
+    elif options.fast:
+        num_loops = 10
+    else:
+        num_loops = 100
+
+    return MeasureStartup(base_python, changed_python, "-E -O -S", num_loops)
+
+
 def _FindAllBenchmarks():
     return dict((name[3:].lower(), func)
                 for (name, func) in sorted(globals().iteritems())
@@ -648,6 +705,7 @@ def _FindAllBenchmarks():
 # If you update the default group, be sure to update the module docstring, too.
 BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "pickle",
                             "unpickle"],
+                "startup": ["normal_startup", "startup_nosite"],
                 "all": _FindAllBenchmarks().keys(),
                }
 
@@ -691,7 +749,7 @@ def ParseBenchmarksOption(benchmarks_opt, legal_benchmarks):
 
 if __name__ == "__main__":
     bench_funcs = _FindAllBenchmarks()
-    all_benchmarks = set(BENCH_GROUPS["all"])
+    all_benchmarks = BENCH_GROUPS["all"]
 
     parser = optparse.OptionParser(
         usage="%prog [options] baseline_python changed_python",
@@ -711,8 +769,8 @@ if __name__ == "__main__":
                             " there are no positive arguments, we'll run all" +
                             " benchmarks except the negative arguments. " +
                             " Otherwise we run only the positive arguments. " +
-                            " Valid benchmarks are: default, all, " +
-                            ", ".join(all_benchmarks)))
+                            " Valid benchmarks are: " +
+                            ", ".join(BENCH_GROUPS.keys() + all_benchmarks)))
 
     options, args = parser.parse_args()
     if len(args) != 2:
