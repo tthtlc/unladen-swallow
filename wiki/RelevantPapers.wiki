@@ -25,6 +25,7 @@ Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.50.1043 Towards Better Inlining Decisions Using Inlining Trials] (Dean & Chambers, 1994)* Improving compile time by keeping a database of which inlining operations actually produced a benefit.
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.51.4406 Strongtalk: Typechecking Smalltalk for a Production Environment] (Bracha & Griswold, 1993)*
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.47.7437 Optimization of Object-Oriented Programs Using Static Class Hierarchy Analysis] (Dean, Grove & Chambers, 1994)*
+  * *[http://www.ocf.berkeley.edu/~bac/thesis.pdf Localized Type Inference of Atomic Types in Python] (Cannon, 2005)* A cautionary tale of an attempt at type inference in Python. Things to think about once/if we start looking at type inference.
 
 
 ==Garbage Collection:==
