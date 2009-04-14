@@ -24,3 +24,13 @@
 
 == Patches reviewed, submitted ==
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=68277 r68277]. Fix overflow checks in SmallVector.
+
+
+= [http://codereview.appspot.com/ Rietveld] =
+
+== Patches reviewed, submitted ==
+  * [http://codereview.appspot.com/40053 Issue 40053]. Make editing a branch actually edit, rather than creating a new branch
+
+== Patches under review ==
+  * [http://codereview.appspot.com/40054 Issue 40054]. Add the ability to edit and delete repositories.
+  * [http://codereview.appspot.com/40050 Issue 40050]. Make upload.py send svn cp'd and svn mv'd files correctly.
