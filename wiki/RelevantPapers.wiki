@@ -41,6 +41,7 @@ Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers
   * [http://blog.chromium.org/2009/02/irregexp-google-chromes-new-regexp.html Overview of Chrome's new regex engine]
   * [http://webkit.org/blog/214/introducing-squirrelfish-extreme/ Pointer to Squirrelfish Extreme's regex JIT]
   * [http://209.85.173.132/search?q=cache:XQrcPV-4kngJ:swtch.com/~rsc/regexp/regexp1.html+thompson+NFA&cd=1&hl=en&ct=clnk&gl=us Article advocating the use of Thompson NFAs for regex implementations]
+  * *[http://www.usenix.org/event/woot08/tech/full_papers/drewry/drewry.pdf Insecure Context Switching: Inoculating Regular Expressions for Survivability] (Drewry & Ormandy, 2008)*
 
 
 ==Related Work, Related Results:==
