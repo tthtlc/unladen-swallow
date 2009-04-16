@@ -1,0 +1,16 @@
+#summary Also known as PEP 7++
+
+C code continues to follow [http://www.python.org/dev/peps/pep-0007/ PEP 7]. C++ should follow PEP 7 as much as possible. For things PEP 7 doesn't cover, try to follow [http://llvm.org/docs/CodingStandards.html the LLVM style guide]. We also have a few rules below for things they don't cover.
+
+= Always use `this`. =
+
+In C++, inside a class, you're allowed to call member functions and access member variables without explicitly using the `this` keyword. We prefer to keep things explicit for three reasons.
+
+   # Python requires `self`, so requiring `this` is consistent.
+   # It's easier to know where to look for a function when the prefix tells you where it lives.
+   # There are [http://www.parashift.com/c++-faq-lite/templates.html#faq-35.19 certain cases in C++ where `this` is required], and always requiring it avoids confusion when you run into those cases.
+
+
+= Don't throw exceptions. =
+
+We don't throw exceptions because so much CPython code isn't exception safe. However, we _may_ start catching particular exceptions thrown by the standard library like std::bad_alloc in order to convert them to a form Python can deal with inside the language.
