@@ -16,8 +16,10 @@ import os.path
 import subprocess
 import sys
 
-# We skip psyco because Unladen Swallow's stdlib includes it (for now).
-SKIP_LIBS = set(["psyco", ".svn"])
+# We skip psyco because it doesn't build against Unladen Swallow trunk.
+# It's still useful for testing against vanilla builds, though.
+# TODO(collinwinter): add test integration for Spitfire.
+SKIP_LIBS = set(["psyco", ".svn", "spitfire"])
 
 
 @contextlib.contextmanager
@@ -28,43 +30,87 @@ def ChangeDir(new_cwd):
     os.chdir(former_cwd)
 
 
+def CallAndCaptureOutput(command, env=None):
+    """Run the given command, capturing stdout and stderr.
+
+    Args:
+        command: the command to run as a list, one argument per element.
+        env: optional; dict of environment variables to set.
+
+    Returns:
+        The captured stdout + stderr as a string.
+
+    Raises:
+        RuntimeError: if the command failed. The value of the exception will
+        be the error message from the command.
+    """
+    subproc = subprocess.Popen(command,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,
+                               env=env)
+    result, err = subproc.communicate()
+    print result + err,
+    return result + err
+
+
+def DefaultPassCheck(command, env=None):
+    """Run a test command and check whether it passed.
+
+    This works for most test suites we run, but not all. Pass/fail is
+    determined by whether the final line of output starts with OK.
+
+    Args:
+        command: the command to run as a list, one argument per element.
+        env: optional; dict of environment variables to set.
+
+    Returns:
+        True if the test passed, False otherwise.
+    """
+    output = CallAndCaptureOutput(command, env)
+    lines = output.splitlines()
+    if not lines:
+        return False
+    return lines[-1].startswith("OK")
+
+
 ### Wrappers for the third-party modules we don't want to break go here. ###
 
 def Test2to3():
-    return subprocess.call([sys.executable, "-E", "test.py"])
+    return DefaultPassCheck([sys.executable, "-E", "test.py"])
 
 def TestCheetah():
     path = ":".join([os.environ["PATH"], os.path.dirname(sys.executable)])
     with ChangeDir(os.path.join("src", "Tests")):
-        return subprocess.call([sys.executable, "-E", "Test.py"],
-                               env={"PATH": path})
+        return DefaultPassCheck([sys.executable, "-E", "Test.py"],
+                                env={"PATH": path})
 
 def TestDjango():
     py_path = os.path.join("..", "..", "correctness")
     test_runner = os.path.join("tests", "runtests.py")
-    return subprocess.call([sys.executable, test_runner, "-v1",
-                            "--settings=django_data.settings"],
+    return DefaultPassCheck([sys.executable, test_runner, "-v1",
+                             "--settings=django_data.settings"],
                             env={"PYTHONPATH": py_path})
 
 def TestMercurial():
     with ChangeDir("tests"):
-        return subprocess.call([sys.executable, "-E", "run-tests.py"])
+        output = CallAndCaptureOutput([sys.executable, "-E", "run-tests.py"])
+        lines = output.splitlines()
+        return lines[-1].endswith(" 0 failed.")
 
 def TestNose():
-    return subprocess.call([sys.executable, "-E", "selftest.py"])
+    return DefaultPassCheck([sys.executable, "-E", "selftest.py"])
 
 def TestNumpy():
     # Numpy refuses to be imported from the source directory.
     with ChangeDir(".."):
-        return subprocess.call([sys.executable, "-E", "-c",
-                                "import numpy;numpy.test()"])
+        return DefaultPassCheck([sys.executable, "-E", "-c",
+                                 "import numpy; numpy.test()"])
 
 def TestPyxml():
     with ChangeDir("test"):
-        return subprocess.call([sys.executable, "-E", "regrtest.py"])
-
-def TestSpitfire():
-    pass
+        output = CallAndCaptureOutput([sys.executable, "-E", "regrtest.py"])
+        lines = output.splitlines()
+        return lines[-1].endswith("OK.")
 
 
 ### Utility code ###
@@ -90,13 +136,22 @@ def FindThirdPartyLibs(basedir):
 
 if __name__ == "__main__":
     basedir = os.path.join(os.path.split(__file__)[0], "lib")
+    tests_passed = {}
     for dirname, subdir in FindThirdPartyLibs(basedir):
-        test_func = globals()["Test" + dirname.capitalize()]
+        test_name = dirname.capitalize()
+        test_func = globals()["Test" + test_name]
 
-        print "Testing", dirname.capitalize()
+        print "Testing", test_name
         current_dir = os.getcwd()
         os.chdir(subdir)
         try:
-            test_func()
+            tests_passed[test_name] = test_func()
         finally:
             os.chdir(current_dir)
+
+    if all(tests_passed.values()):
+        print "All OK"
+    else:
+        failed = [test for (test, passed) in tests_passed.items() if not passed]
+        print "FAILED:", failed
+        sys.exit(1)
