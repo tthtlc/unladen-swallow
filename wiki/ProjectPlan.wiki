@@ -129,9 +129,9 @@ Several Python constructs may give us trouble here:
 </ul>
 </li>
 
-<li>Replace the Python-bytecode compiler with the new LLVM compiler, possibly under a flag. Talin suggests having both run and select the one to execute based on a flag in the code/function object. The flag will let us run regrtest over all the tests in both modes.</li>
+<li>Probably separate the LLVM IR generation back out of the CPython compiler. Generating IR for every function appears to be quite expensive in terms of memory and time. If we compile only hot functions (like every other JITted system does) we'll probably get better performance. We'll need to measure both options before doing this.</li>
 
-<li>Figure out the simplest possible version of [PersistentIr .pyc persistence]. I'm hoping the obvious thing -- dump the python module as an LLVM Module in bitcode to disk -- just works. We can add the fancy profiling data and pre-optimized code later (step 12).</li>
+<li>Figure out the simplest possible version of [PersistentIr .pyc persistence]. I'm hoping the obvious thing -- dump the python module as an LLVM Module in bitcode to disk -- just works. We can add the fancy profiling data and pre-optimized code later (step 11).</li>
 
 <li>Teach Python how to decide whether to fast-JIT or slow-JIT a particular function (pass fast==true to [http://llvm.org/doxygen/classllvm_1_1JIT.html#fd0a3b0d55489b96760121e3e25b7de6 JIT::create]). nlewycky says, "The codegen is roughly 3x faster in fast mode (note: measured in debug mode not release mode, so who knows).". I imagine that we'll have to tune a bit to find the right balance. At this point I expect Python to get faster than our original release.</li>
 
@@ -143,15 +143,13 @@ Talin points out that it'll be hard to apply most of the pre-defined optimizatio
 8+ can be tried in parallel, probably starting toward the end of 2009Q2.
 
 <ol start="8">
-<li>[DirectLlvmIrGeneration Generate better LLVM IR] than a direct translation from CPython bytecode would imply.</li>
+<li>Depending on the outcome of step 4, either consider re-doing the CPython bytecode to facilitate better profiling and compilation to llvm IR, or [DirectLlvmIrGeneration optimize the direct compilation to LLVM IR] using AST information.</li>
 
 <li>Figure out how to specialize functions for particular types, which allows better inlining. We should be able to do as well as psyco pretty easily since we can steal their algorithms.
 <ol type="a">
 <li>Allow users to annotate functions to tell the interpreter which specializations to use.</li>
 <li>Profile calls and [TypeInference infer common argument types].</li>
 </ol></li>
-
-<li>If the optimizations become expensive enough that the JIT hurts our startup time, we can profile for expensive functions and [GradualOptimization only optimize them]. This resembles how HotSpot works.</li>
 
 <li>9b and 10 require us to be able to keep multiple versions of code around for any given function and backpatch existing callers. We'll probably want to [GarbageCollectingCode GC the multiple versions], which should be interesting.</li>
 
