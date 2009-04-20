@@ -228,4 +228,4 @@ One of CPython's virtues is its simplicity: modifying CPython's VM and compiler 
 
 = Communication =
 
-All communication about Unladen Swallow should take place on the [http://groups.google.com/group/unladen-swallow Unladen Swallow list]. This is where design issues will be discussed, as well as notifications of continuous build results, performance numbers, code reviews, and all the other details of an open-source project.
+All communication about Unladen Swallow should take place on the [http://groups.google.com/group/unladen-swallow Unladen Swallow list]. This is where design issues will be discussed, as well as notifications of continuous build results, performance numbers, code reviews, and all the other details of an open-source project. If you add a comment below, on this page, we'll probably miss it. Sorry. Please mail our list instead.
