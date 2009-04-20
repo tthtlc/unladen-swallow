@@ -1,0 +1,11 @@
+#summary The lifecycle of various kinds of code, including compiled Python functions.
+
+= Introduction =
+
+LLVM assumes certain things about when it can destroy or change Values, especially Functions, and other things about when users can destroy Values, and Unladen Swallow needs to be compatible with that.
+
+Python functions are compiled to LLVM IR in a single call, which assumes the Module doesn't change at all during the call. (This will eventually be a bottleneck to threaded compilation, but we'll deal with that when we get there.) The output IR will refer to Module globals, including constants, CPython-controlled variables, and eventually inlinable Functions. Once a Function is emitted, its semantics never change.
+
+Llvm Functions are referenced by a PyLlvmFunctionObject, which is referenced by a PyCodeObject, which is referenced by one or more PyFunctionObjects. A referenced llvm::Function has external linkage to prevent module-level optimizations from deleting it or changing its signature. While a function is executing, its thread keeps a reference to the PyFunctionObject which keeps the PyLlvmFunctionObject alive. When the PyLlvmFunctionObject loses its last reference, we currently 1) set the llvm::Function to internal and 2) if the use-list is empty, free the JITted code if any and erase the Function.
+
+== Clang-compiled code ==
