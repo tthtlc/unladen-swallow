@@ -113,21 +113,21 @@ Once we get the quick improvements out of the way and convince some people to ad
 
 
 <ol>
-<li>Add `llvmmodule` and `llvmfunction` types in Python, which interface to the LLVM [http://llvm.org/docs/ProgrammersManual.html#Module Module] and [http://llvm.org/docs/ProgrammersManual.html#Function Function] types. Teach `llvmmodule` to [http://llvm.org/doxygen/ReaderWriter_8h.html read bitcode files] and [http://llvm.org/doxygen/PrintModulePass_8h.html pretty-print them]. (Reading the bitcode files isn't really necessary for the next step, but it'll help with testing this one.)
+<li>(Finished) Add `llvmmodule` and `llvmfunction` types in Python, which interface to the LLVM [http://llvm.org/docs/ProgrammersManual.html#Module Module] and [http://llvm.org/docs/ProgrammersManual.html#Function Function] types. Teach `llvmmodule` to [http://llvm.org/doxygen/ReaderWriter_8h.html read bitcode files] and [http://llvm.org/doxygen/PrintModulePass_8h.html pretty-print them]. (Reading the bitcode files isn't really necessary for the next step, but it'll help with testing this one.)
 
 [http://code.google.com/p/llvm-py/ llvm-py] has such wrapper types, but using Python-defined types in the core interpreter is very difficult, so we'll write our own. These won't be full wrappers (leave that to llvm-py). Just what's convenient and useful for debugging.</li>
 
-<li>Add a `compile_llvm` builtin that uses most of the same code as the `compile` builtin but generates LLVM IR (as the `llvmmodule` or `llvmfunction` type) instead. We can get this working incrementally and keep a working Python interpreter the whole time. Along the way, we'll probably take each opcode and translate its ceval implementation into an IRBuilder implementation, but for difficult opcodes we could just emit calls to an interpretation function. We may want to/have to mix this step with the next one.
+<li>(Finished) Add a way to run Python functions that are backed by LLVM IR. We used the LLVM JIT to compile and run these functions. This got things working really quickly, but there seem to be some [CodeLifecycle lifetime issues] which we need to work out.</li>
+
+<li>(In progress) Make the `compile` builtin generate LLVM IR (as the `llvmmodule` or `llvmfunction` type) in addition to CPython bytecode. We can get this working incrementally and keep a working Python interpreter the whole time. Our progress is visible in the list of UNIMPLEMENTED opcodes in [http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/ll_compile.h Python/ll_compile.h]. We've been translating each opcode into LLVM IR mostly manually, although where we can factor functions out and just call them, we do that.
 Several Python constructs may give us trouble here:
 <ul>
-<li>Generators: I don't have a plan for generators yet. We'd have to save the PC, registers, and locals, except that LLVM doesn't expose a PC, just labels, so we'd probably give each yield an index and switch on the current index to get back to it. And we could require that all registers have been spilled at that point, maybe. But I don't know the details of doing most of that. I'm hoping to figure it out when I get there.</li>
 <li>Closures: A closure is just a function with a pre-bound parameter representing the environment.</li>
-<li>ExceptionHandling</li>
-<li>The FunctionCallingConvention</li>
+<li>ExceptionHandling -- literally transcribing the ceval exception handling mechanism is working fine so far. CPython saves bytecode indices as jump targets sometimes. Since LLVM doesn't let us save instruction addresses, we instead number the basic blocks that are used as exception handlers and emit a switch statement to jump to the appropriate one.</li>
+<li>The FunctionCallingConvention -- We pass a PyFrameObject containing all the arguments. Besides being more expensive to create than we'd like, the PyFrameObject makes things like the stack and local variables escape when the function returns, which prevents LLVM from optimizing as much as it should.</li>
+<li>Generators: We intend to number yield statements much like we numbered exception handlers and emit a switch statement in the function's entry block to resume where a yield left off. We need to save all registers and local variables across a yield call. Fortunately, with the current literal translation from CPython bytecode, the stack and local variables are all saved into the FrameObject at a return, which should make it really easy to resume the yield.  This will get much harder when/if we stop saving locals into the frame all the time. We'd have to save and restore all the live pseudo-registers at each yield, but LLVM doesn't currently have an intrinsic to do that.</li>
 </ul>
 </li>
-
-<li>Add a way to call `llvmfunction`s. The plain LLVM interpreter may not be able to call external functions by the time we get here. JITting may be slightly more difficult. We'll do whatever's easier. All we want is to run stuff. Write lots of tests.</li>
 
 <li>Replace the Python-bytecode compiler with the new LLVM compiler, possibly under a flag. Talin suggests having both run and select the one to execute based on a flag in the code/function object. The flag will let us run regrtest over all the tests in both modes.</li>
 
