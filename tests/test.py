@@ -15,6 +15,8 @@ import os
 import os.path
 import subprocess
 import sys
+import threading
+import time
 
 # We skip psyco because it doesn't build against Unladen Swallow trunk.
 # It's still useful for testing against vanilla builds, though.
@@ -28,6 +30,44 @@ def ChangeDir(new_cwd):
     os.chdir(new_cwd)
     yield
     os.chdir(former_cwd)
+
+
+class BuildBotMollifier(threading.Thread):
+
+    """Separate thread that periodically prints "Working..." to stdout.
+
+    This is done to prevent scripts (like BuildBot) from assuming that we've
+    hung and killing us because long-running tests (I'm looking at you,
+    Mercurial) exceed BuildBot's threshold.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(BuildBotMollifier, self).__init__(*args, **kwargs)
+        self._still_working = False
+
+    def start(self):
+        self._still_working = True
+        super(BuildBotMollifier, self).start()
+
+    def run(self):
+        while True:
+            print "Working..."
+            # Recover from KeyboardInterrupt and test completion faster than
+            # if we just did time.sleep(30).
+            for _ in range(6):
+                if not self._still_working:
+                    return
+                time.sleep(5)
+
+    def stop(self):
+        self._still_working = False
+        self.join()
+
+    def __enter__(self, *args, **kwargs):
+        self.start()
+
+    def __exit__(self, *args, **kwargs):
+        self.stop()
 
 
 def CallAndCaptureOutput(command, env=None):
@@ -48,7 +88,8 @@ def CallAndCaptureOutput(command, env=None):
                                stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE,
                                env=env)
-    result, err = subproc.communicate()
+    with BuildBotMollifier():
+        result, err = subproc.communicate()
     print result + err,
     return result + err
 
