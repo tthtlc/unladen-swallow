@@ -25,6 +25,7 @@
 == Patches reviewed, submitted ==
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=68768 r68768]. Add a CreatePtrDiff() method to IRBuilder.
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=68277 r68277]. Fix overflow checks in SmallVector.
+  * [http://llvm.org/viewvc/llvm-project?view=rev&revision=69958 r69958]. Add ConstantInt::getSigned().
 
 
 = Rietveld =
