@@ -20,8 +20,9 @@ import time
 
 # We skip psyco because it doesn't build against Unladen Swallow trunk.
 # It's still useful for testing against vanilla builds, though.
+# Mercurial is disabled due to general flakiness.
 # TODO(collinwinter): add test integration for Spitfire.
-SKIP_LIBS = set(["psyco", ".svn", "spitfire"])
+SKIP_LIBS = set(["psyco", ".svn", "spitfire", "mercurial"])
 
 
 @contextlib.contextmanager
@@ -132,11 +133,13 @@ def TestDjango():
                              "--settings=django_data.settings"],
                             env={"PYTHONPATH": py_path})
 
-def TestMercurial():
-    with ChangeDir("tests"):
-        output = CallAndCaptureOutput([sys.executable, "-E", "run-tests.py"])
-        lines = output.splitlines()
-        return lines[-1].endswith(" 0 failed.")
+# Mercurial's test are disabled. They fail on Ubuntu Hardy, are flaky on
+# Dapper and OS X and take forever to run.
+# def TestMercurial():
+#     with ChangeDir("tests"):
+#         output = CallAndCaptureOutput([sys.executable, "-E", "run-tests.py"])
+#         lines = output.splitlines()
+#         return lines[-1].endswith(" 0 failed.")
 
 def TestNose():
     return DefaultPassCheck([sys.executable, "-E", "selftest.py"])
