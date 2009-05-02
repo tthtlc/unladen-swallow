@@ -19,6 +19,14 @@
   * [http://bugs.python.org/issue5372 Issue 5372]. Fix distutils to not inappropriately reuse .o files between extension modules.
   * [http://bugs.python.org/issue5362 Issue 5362]. Add configure option to disable Py3k warnings.
 
+== Yet to be extracted ==
+
+Note that the listed revisions are necessary, but might not be sufficient; later revisions may have addressed style issues, etc.
+  * r194, r196. Simpler, faster buffering structure for unpickling.
+  * r195, r199. A pickle optimizer: trade pickling speed for unpickling speed.
+  * r200, r229, r230. Replace the pickler's memo dict with a custom hashtable.
+  * r207. Replace the unpickler's memo dict with a custom hashtable.
+
 
 = LLVM =
 
