@@ -23,6 +23,7 @@
 = LLVM =
 
 == Patches reviewed, submitted ==
+  * [http://llvm.org/viewvc/llvm-project?view=rev&revision=70610 r70610]. Fix an issue where llc -march=cpp fails on input containing the x86_fp80 type.
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=70084 r70084]. Add a new TypeBuilder helper class, which eases making LLVM IR types.
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=69958 r69958]. Add ConstantInt::getSigned().
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=68768 r68768]. Add a CreatePtrDiff() method to IRBuilder.
