@@ -25,6 +25,7 @@ namespace llvm {
 class Instruction;
 class Pass;
 class AliasAnalysis;
+class ValueDeletionListener;
 
 /// DeleteDeadBlock - Delete the specified block, which must have no
 /// predecessors.
@@ -36,8 +37,14 @@ void DeleteDeadBlock(BasicBlock *BB);
 /// when all entries to the PHI nodes in a block are guaranteed equal, such as
 /// when the block has exactly one predecessor.
 void FoldSingleEntryPHINodes(BasicBlock *BB);
-  
-  
+
+/// DeleteDeadPHIs - Examine each PHI in the given block and delete it if it
+/// is dead. Also recursively delete any operands that become dead as
+/// a result. This includes tracing the def-use list from the PHI to see if
+/// it is ultimately unused or if it reaches an unused cycle.  If a
+/// ValueDeletionListener is specified, it is notified of the deletions.
+void DeleteDeadPHIs(BasicBlock *BB, ValueDeletionListener *VDL = 0);
+
 /// MergeBlockIntoPredecessor - Attempts to merge a block into its predecessor,
 /// if possible.  The return value indicates success or failure.
 bool MergeBlockIntoPredecessor(BasicBlock* BB, Pass* P = 0);
@@ -60,6 +67,11 @@ void ReplaceInstWithInst(BasicBlock::InstListType &BIL,
 //
 void ReplaceInstWithInst(Instruction *From, Instruction *To);
 
+/// CopyPrecedingStopPoint - If I is immediately preceded by a StopPoint,
+/// make a copy of the stoppoint before InsertPos (presumably before copying
+/// or moving I).
+void CopyPrecedingStopPoint(Instruction *I, BasicBlock::iterator InsertPos);
+
 /// FindAvailableLoadedValue - Scan the ScanBB block backwards (starting at the
 /// instruction before ScanFrom) checking to see if we have the value at the
 /// memory address *Ptr locally available within a small number of instructions.
@@ -77,7 +89,14 @@ Value *FindAvailableLoadedValue(Value *Ptr, BasicBlock *ScanBB,
                                 BasicBlock::iterator &ScanFrom,
                                 unsigned MaxInstsToScan = 6,
                                 AliasAnalysis *AA = 0);
-    
+
+/// FindFunctionBackedges - Analyze the specified function to find all of the
+/// loop backedges in the function and return them.  This is a relatively cheap
+/// (compared to computing dominators and loop info) analysis.
+///
+/// The output is added to Result, as pairs of <from,to> edge info.
+void FindFunctionBackedges(const Function &F,
+      SmallVectorImpl<std::pair<const BasicBlock*,const BasicBlock*> > &Result);
   
 
 // RemoveSuccessor - Change the specified terminator instruction such that its

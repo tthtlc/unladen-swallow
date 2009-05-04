@@ -123,6 +123,16 @@ MachineBasicBlock::iterator MachineBasicBlock::getFirstTerminator() {
   return I;
 }
 
+bool
+MachineBasicBlock::isOnlyReachableByFallthrough() const {
+  return !isLandingPad() &&
+         !pred_empty() &&
+         next(pred_begin()) == pred_end() &&
+         (*pred_begin())->isLayoutSuccessor(this) &&
+         ((*pred_begin())->empty() ||
+          !(*pred_begin())->back().getDesc().isBarrier());
+}
+
 void MachineBasicBlock::dump() const {
   print(*cerr.stream());
 }
@@ -248,13 +258,13 @@ void MachineBasicBlock::transferSuccessors(MachineBasicBlock *fromMBB)
     fromMBB->removeSuccessor(fromMBB->succ_begin());
 }
 
-bool MachineBasicBlock::isSuccessor(MachineBasicBlock *MBB) const {
+bool MachineBasicBlock::isSuccessor(const MachineBasicBlock *MBB) const {
   std::vector<MachineBasicBlock *>::const_iterator I =
     std::find(Successors.begin(), Successors.end(), MBB);
   return I != Successors.end();
 }
 
-bool MachineBasicBlock::isLayoutSuccessor(MachineBasicBlock *MBB) const {
+bool MachineBasicBlock::isLayoutSuccessor(const MachineBasicBlock *MBB) const {
   MachineFunction::const_iterator I(this);
   return next(I) == MachineFunction::const_iterator(MBB);
 }
