@@ -253,8 +253,6 @@ void LoopStrengthReduce::DeleteTriviallyDeadInstructions() {
     if (I == 0 || !isInstructionTriviallyDead(I))
       continue;
 
-    SE->deleteValueFromRecords(I);
-
     for (User::op_iterator OI = I->op_begin(), E = I->op_end(); OI != E; ++OI) {
       if (Instruction *U = dyn_cast<Instruction>(*OI)) {
         *OI = 0;
@@ -321,7 +319,7 @@ static bool getSCEVStartAndStride(const SCEVHandle &SH, Loop *L,
   // for a nested AddRecExpr.
   if (const SCEVAddExpr *AE = dyn_cast<SCEVAddExpr>(SH)) {
     for (unsigned i = 0, e = AE->getNumOperands(); i != e; ++i)
-      if (SCEVAddRecExpr *AddRec =
+      if (const SCEVAddRecExpr *AddRec =
              dyn_cast<SCEVAddRecExpr>(AE->getOperand(i))) {
         if (AddRec->getLoop() == L)
           TheAddRec = SE->getAddExpr(AddRec, TheAddRec);
@@ -1400,8 +1398,8 @@ bool LoopStrengthReduce::ShouldUseFullStrengthReductionMode(
   // Iterate through the uses to find conditions that automatically rule out
   // full-lsr mode.
   for (unsigned i = 0, e = UsersToProcess.size(); i != e; ) {
-    SCEV *Base = UsersToProcess[i].Base;
-    SCEV *Imm = UsersToProcess[i].Imm;
+    const SCEV *Base = UsersToProcess[i].Base;
+    const SCEV *Imm = UsersToProcess[i].Imm;
     // If any users have a loop-variant component, they can't be fully
     // strength-reduced.
     if (Imm && !Imm->isLoopInvariant(L))
@@ -1410,7 +1408,7 @@ bool LoopStrengthReduce::ShouldUseFullStrengthReductionMode(
     // the two Imm values can't be folded into the address, full
     // strength reduction would increase register pressure.
     do {
-      SCEV *CurImm = UsersToProcess[i].Imm;
+      const SCEV *CurImm = UsersToProcess[i].Imm;
       if ((CurImm || Imm) && CurImm != Imm) {
         if (!CurImm) CurImm = SE->getIntegerSCEV(0, Stride->getType());
         if (!Imm)       Imm = SE->getIntegerSCEV(0, Stride->getType());
@@ -2130,7 +2128,6 @@ ICmpInst *LoopStrengthReduce::ChangeCompareStride(Loop *L, ICmpInst *Cond,
 
     // Remove the old compare instruction. The old indvar is probably dead too.
     DeadInsts.push_back(cast<Instruction>(CondUse->OperandValToReplace));
-    SE->deleteValueFromRecords(OldCond);
     OldCond->replaceAllUsesWith(Cond);
     OldCond->eraseFromParent();
 
@@ -2214,7 +2211,7 @@ ICmpInst *LoopStrengthReduce::OptimizeSMax(Loop *L, ICmpInst *Cond,
   SCEVHandle IterationCount = SE->getAddExpr(BackedgeTakenCount, One);
 
   // Check for a max calculation that matches the pattern.
-  SCEVSMaxExpr *SMax = dyn_cast<SCEVSMaxExpr>(IterationCount);
+  const SCEVSMaxExpr *SMax = dyn_cast<SCEVSMaxExpr>(IterationCount);
   if (!SMax || SMax != SE->getSCEV(Sel)) return Cond;
 
   SCEVHandle SMaxLHS = SMax->getOperand(0);
@@ -2251,16 +2248,12 @@ ICmpInst *LoopStrengthReduce::OptimizeSMax(Loop *L, ICmpInst *Cond,
                  Cond->getOperand(0), NewRHS, "scmp", Cond);
 
   // Delete the max calculation instructions.
-  SE->deleteValueFromRecords(Cond);
   Cond->replaceAllUsesWith(NewCond);
   Cond->eraseFromParent();
   Instruction *Cmp = cast<Instruction>(Sel->getOperand(0));
-  SE->deleteValueFromRecords(Sel);
   Sel->eraseFromParent();
-  if (Cmp->use_empty()) {
-    SE->deleteValueFromRecords(Cmp);
+  if (Cmp->use_empty())
     Cmp->eraseFromParent();
-  }
   CondUse->User = NewCond;
   return NewCond;
 }
@@ -2367,7 +2360,6 @@ void LoopStrengthReduce::OptimizeShadowIV(Loop *L) {
       NewPH->addIncoming(NewIncr, PH->getIncomingBlock(Latch));
 
       /* Remove cast operation */
-      SE->deleteValueFromRecords(ShadowUse);
       ShadowUse->replaceAllUsesWith(NewPH);
       ShadowUse->eraseFromParent();
       SI->second.Users.erase(CandidateUI);
@@ -2472,8 +2464,9 @@ bool LoopStrengthReduce::runOnLoop(Loop *L, LPPassManager &LPM) {
     // computation of some other indvar to decide when to terminate the loop.
     OptimizeIndvars(L);
 
-    // FIXME: We can widen subreg IV's here for RISC targets.  e.g. instead of
-    // doing computation in byte values, promote to 32-bit values if safe.
+    // FIXME: We can shrink overlarge IV's here.  e.g. if the code has
+    // computation in i64 values and the target doesn't support i64, demote
+    // the computation to 32-bit if safe.
 
     // FIXME: Attempt to reuse values across multiple IV's.  In particular, we
     // could have something like "for(i) { foo(i*8); bar(i*16) }", which should
@@ -2507,17 +2500,8 @@ bool LoopStrengthReduce::runOnLoop(Loop *L, LPPassManager &LPM) {
     DeleteTriviallyDeadInstructions();
 
   // At this point, it is worth checking to see if any recurrence PHIs are also
-  // dead, so that we can remove them as well. To keep ScalarEvolution
-  // current, use a ValueDeletionListener class.
-  struct LSRListener : public ValueDeletionListener {
-    ScalarEvolution &SE;
-    explicit LSRListener(ScalarEvolution &se) : SE(se) {}
-
-    virtual void ValueWillBeDeleted(Value *V) {
-      SE.deleteValueFromRecords(V);
-    }
-  } VDL(*SE);
-  DeleteDeadPHIs(L->getHeader(), &VDL);
+  // dead, so that we can remove them as well.
+  DeleteDeadPHIs(L->getHeader());
 
   return Changed;
 }

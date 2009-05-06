@@ -37,19 +37,22 @@ DisableSharing("no-stack-slot-sharing",
              cl::desc("Suppress slot sharing during stack coloring"));
 
 static cl::opt<bool>
-ColorWithRegs("color-ss-with-regs",
-             cl::init(false), cl::Hidden,
-             cl::desc("Color stack slots with free registers"));
+ColorWithRegsOpt("color-ss-with-regs",
+                 cl::init(false), cl::Hidden,
+                 cl::desc("Color stack slots with free registers"));
 
 
 static cl::opt<int> DCELimit("ssc-dce-limit", cl::init(-1), cl::Hidden);
 
 STATISTIC(NumEliminated, "Number of stack slots eliminated due to coloring");
-STATISTIC(NumDead,       "Number of trivially dead stack accesses eliminated");
 STATISTIC(NumRegRepl,    "Number of stack slot refs replaced with reg refs");
+STATISTIC(NumLoadElim,   "Number of loads eliminated");
+STATISTIC(NumStoreElim,  "Number of stores eliminated");
+STATISTIC(NumDead,       "Number of trivially dead stack accesses eliminated");
 
 namespace {
   class VISIBILITY_HIDDEN StackSlotColoring : public MachineFunctionPass {
+    bool ColorWithRegs;
     LiveStacks* LS;
     VirtRegMap* VRM;
     MachineFrameInfo *MFI;
@@ -87,7 +90,10 @@ namespace {
 
   public:
     static char ID; // Pass identification
-    StackSlotColoring() : MachineFunctionPass(&ID), NextColor(-1) {}
+    StackSlotColoring() :
+      MachineFunctionPass(&ID), ColorWithRegs(false), NextColor(-1) {}
+    StackSlotColoring(bool RegColor) :
+      MachineFunctionPass(&ID), ColorWithRegs(RegColor), NextColor(-1) {}
     
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.addRequired<LiveStacks>();
@@ -115,8 +121,15 @@ namespace {
                                 BitVector &SlotIsReg);
     void RewriteInstruction(MachineInstr *MI, int OldFI, int NewFI,
                             MachineFunction &MF);
+    bool PropagateBackward(MachineBasicBlock::iterator MII,
+                           MachineBasicBlock *MBB,
+                           unsigned OldReg, unsigned NewReg);
+    bool PropagateForward(MachineBasicBlock::iterator MII,
+                          MachineBasicBlock *MBB,
+                          unsigned OldReg, unsigned NewReg);
     void UnfoldAndRewriteInstruction(MachineInstr *MI, int OldFI,
-                                     unsigned Reg, MachineFunction &MF);
+                                    unsigned Reg, const TargetRegisterClass *RC,
+                                    MachineFunction &MF);
     bool AllMemRefsCanBeUnfolded(int SS);
     bool RemoveDeadStores(MachineBasicBlock* MBB);
   };
@@ -127,8 +140,8 @@ char StackSlotColoring::ID = 0;
 static RegisterPass<StackSlotColoring>
 X("stack-slot-coloring", "Stack Slot Coloring");
 
-FunctionPass *llvm::createStackSlotColoringPass() {
-  return new StackSlotColoring();
+FunctionPass *llvm::createStackSlotColoringPass(bool RegColor) {
+  return new StackSlotColoring(RegColor);
 }
 
 namespace {
@@ -222,7 +235,7 @@ bool
 StackSlotColoring::ColorSlotsWithFreeRegs(SmallVector<int, 16> &SlotMapping,
                                    SmallVector<SmallVector<int, 4>, 16> &RevMap,
                                    BitVector &SlotIsReg) {
-  if (!ColorWithRegs || !VRM->HasUnusedRegisters())
+  if (!(ColorWithRegs || ColorWithRegsOpt) || !VRM->HasUnusedRegisters())
     return false;
 
   bool Changed = false;
@@ -230,7 +243,9 @@ StackSlotColoring::ColorSlotsWithFreeRegs(SmallVector<int, 16> &SlotMapping,
   for (unsigned i = 0, e = SSIntervals.size(); i != e; ++i) {
     LiveInterval *li = SSIntervals[i];
     int SS = li->getStackSlotIndex();
-    if (!UsedColors[SS])
+    if (!UsedColors[SS] || li->weight < 20)
+      // If the weight is < 20, i.e. two references in a loop with depth 1,
+      // don't bother with it.
       continue;
 
     // These slots allow to share the same registers.
@@ -384,11 +399,13 @@ bool StackSlotColoring::ColorSlots(MachineFunction &MF) {
 
     SmallVector<MachineInstr*, 8> &RefMIs = SSRefs[SS];
     for (unsigned i = 0, e = RefMIs.size(); i != e; ++i)
-      if (isReg)
-        // Rewrite to use a register instead.
-        UnfoldAndRewriteInstruction(RefMIs[i], SS, NewFI, MF);
-      else
+      if (!isReg)
         RewriteInstruction(RefMIs[i], SS, NewFI, MF);
+      else {
+        // Rewrite to use a register instead.
+        const TargetRegisterClass *RC = LS->getIntervalRegClass(SS);
+        UnfoldAndRewriteInstruction(RefMIs[i], SS, NewFI, RC, MF);
+      }
   }
 
   // Delete unused stack slots.
@@ -407,6 +424,10 @@ bool StackSlotColoring::AllMemRefsCanBeUnfolded(int SS) {
   SmallVector<MachineInstr*, 8> &RefMIs = SSRefs[SS];
   for (unsigned i = 0, e = RefMIs.size(); i != e; ++i) {
     MachineInstr *MI = RefMIs[i];
+    if (TII->isLoadFromStackSlot(MI, SS) ||
+        TII->isStoreToStackSlot(MI, SS))
+      // Restore and spill will become copies.
+      return true;
     if (!TII->getOpcodeAfterMemoryUnfold(MI->getOpcode(), false, false))
       return false;
     for (unsigned j = 0, ee = MI->getNumOperands(); j != ee; ++j) {
@@ -451,19 +472,138 @@ void StackSlotColoring::RewriteInstruction(MachineInstr *MI, int OldFI,
   }
 }
 
+/// PropagateBackward - Traverse backward and look for the definition of
+/// OldReg. If it can successfully update all of the references with NewReg,
+/// do so and return true.
+bool StackSlotColoring::PropagateBackward(MachineBasicBlock::iterator MII,
+                                          MachineBasicBlock *MBB,
+                                          unsigned OldReg, unsigned NewReg) {
+  if (MII == MBB->begin())
+    return false;
+
+  SmallVector<MachineOperand*, 4> Refs;
+  while (--MII != MBB->begin()) {
+    bool FoundDef = false;  // Not counting 2address def.
+    bool FoundUse = false;
+    bool FoundKill = false;
+    const TargetInstrDesc &TID = MII->getDesc();
+    for (unsigned i = 0, e = MII->getNumOperands(); i != e; ++i) {
+      MachineOperand &MO = MII->getOperand(i);
+      if (!MO.isReg())
+        continue;
+      unsigned Reg = MO.getReg();
+      if (Reg == 0)
+        continue;
+      if (Reg == OldReg) {
+        const TargetRegisterClass *RC = getInstrOperandRegClass(TRI, TID, i);
+        if (RC && !RC->contains(NewReg))
+          return false;
+
+        if (MO.isUse()) {
+          FoundUse = true;
+          if (MO.isKill())
+            FoundKill = true;
+          Refs.push_back(&MO);
+        } else {
+          Refs.push_back(&MO);
+          if (!MII->isRegTiedToUseOperand(i))
+            FoundDef = true;
+        }
+      } else if (TRI->regsOverlap(Reg, NewReg)) {
+        return false;
+      } else if (TRI->regsOverlap(Reg, OldReg)) {
+        if (!MO.isUse() || !MO.isKill())
+          return false;
+      }
+    }
+    if (FoundDef) {
+      for (unsigned i = 0, e = Refs.size(); i != e; ++i)
+        Refs[i]->setReg(NewReg);
+      return true;
+    }
+  }
+  return false;
+}
+
+/// PropagateForward - Traverse forward and look for the kill of OldReg. If
+/// it can successfully update all of the uses with NewReg, do so and
+/// return true.
+bool StackSlotColoring::PropagateForward(MachineBasicBlock::iterator MII,
+                                         MachineBasicBlock *MBB,
+                                         unsigned OldReg, unsigned NewReg) {
+  if (MII == MBB->end())
+    return false;
+
+  SmallVector<MachineOperand*, 4> Uses;
+  while (++MII != MBB->end()) {
+    bool FoundUse = false;
+    bool FoundKill = false;
+    const TargetInstrDesc &TID = MII->getDesc();
+    for (unsigned i = 0, e = MII->getNumOperands(); i != e; ++i) {
+      MachineOperand &MO = MII->getOperand(i);
+      if (!MO.isReg())
+        continue;
+      unsigned Reg = MO.getReg();
+      if (Reg == 0)
+        continue;
+      if (Reg == OldReg) {
+        if (MO.isDef())
+          return false;
+
+        const TargetRegisterClass *RC = getInstrOperandRegClass(TRI, TID, i);
+        if (RC && !RC->contains(NewReg))
+          return false;
+        FoundUse = true;
+        if (MO.isKill())
+          FoundKill = true;
+        Uses.push_back(&MO);
+      } else if (TRI->regsOverlap(Reg, NewReg) ||
+                 TRI->regsOverlap(Reg, OldReg))
+        return false;
+    }
+    if (FoundKill) {
+      for (unsigned i = 0, e = Uses.size(); i != e; ++i)
+        Uses[i]->setReg(NewReg);
+      return true;
+    }
+  }
+  return false;
+}
+
 /// UnfoldAndRewriteInstruction - Rewrite specified instruction by unfolding
 /// folded memory references and replacing those references with register
 /// references instead.
 void StackSlotColoring::UnfoldAndRewriteInstruction(MachineInstr *MI, int OldFI,
-                                                    unsigned Reg,
-                                                    MachineFunction &MF) {
+                                                  unsigned Reg,
+                                                  const TargetRegisterClass *RC,
+                                                  MachineFunction &MF) {
   MachineBasicBlock *MBB = MI->getParent();
-  SmallVector<MachineInstr*, 4> NewMIs;
-  bool Success = TII->unfoldMemoryOperand(MF, MI, Reg, false, false, NewMIs);
-  assert(Success && "Failed to unfold!");
-  MBB->insert(MI, NewMIs[0]);
+  if (unsigned DstReg = TII->isLoadFromStackSlot(MI, OldFI)) {
+    if (PropagateForward(MI, MBB, DstReg, Reg)) {
+      DOUT << "Eliminated load: ";
+      DEBUG(MI->dump());
+      ++NumLoadElim;
+    } else {
+      TII->copyRegToReg(*MBB, MI, DstReg, Reg, RC, RC);
+      ++NumRegRepl;
+    }
+  } else if (unsigned SrcReg = TII->isStoreToStackSlot(MI, OldFI)) {
+    if (MI->killsRegister(SrcReg) && PropagateBackward(MI, MBB, SrcReg, Reg)) {
+      DOUT << "Eliminated store: ";
+      DEBUG(MI->dump());
+      ++NumStoreElim;
+    } else {
+      TII->copyRegToReg(*MBB, MI, Reg, SrcReg, RC, RC);
+      ++NumRegRepl;
+    }
+  } else {
+    SmallVector<MachineInstr*, 4> NewMIs;
+    bool Success = TII->unfoldMemoryOperand(MF, MI, Reg, false, false, NewMIs);
+    assert(Success && "Failed to unfold!");
+    MBB->insert(MI, NewMIs[0]);
+    ++NumRegRepl;
+  }
   MBB->erase(MI);
-  ++NumRegRepl;
 }
 
 /// RemoveDeadStores - Scan through a basic block and look for loads followed

@@ -295,7 +295,7 @@ bool DIGlobalVariable::Verify() const {
     return false;
 
   DICompileUnit CU = getCompileUnit();
-  if (!CU.Verify()) 
+  if (!CU.isNull() && !CU.Verify()) 
     return false;
 
   DIType Ty = getType();
@@ -319,7 +319,6 @@ bool DIVariable::Verify() const {
   DIType Ty = getType();
   if (!Ty.Verify())
     return false;
-
 
   return true;
 }
@@ -982,6 +981,11 @@ namespace llvm {
   }
 }
 
+/// dump - print descriptor.
+void DIDescriptor::dump() const {
+  cerr << " [" << dwarf::TagString(getTag()) << "]\n";
+}
+
 /// dump - print compile unit.
 void DICompileUnit::dump() const {
   if (getLanguage())
@@ -1036,7 +1040,6 @@ void DIType::dump() const {
 /// dump - print basic type.
 void DIBasicType::dump() const {
   cerr << " [" << dwarf::AttributeEncodingString(getEncoding()) << "] ";
-
 }
 
 /// dump - print derived type.
