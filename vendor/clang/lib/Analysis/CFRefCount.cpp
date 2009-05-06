@@ -779,8 +779,8 @@ public:
   RetainSummary* getCommonMethodSummary(const ObjCMethodDecl* MD,
                                         Selector S, QualType RetTy);
 
-  void updateSummaryArgEffFromAnnotations(RetainSummary &Summ, unsigned i,
-                                          const ParmVarDecl *PD);
+  void updateSummaryArgEffFromAnnotations(RetainSummary &Summ, const Decl *D,
+                                          unsigned argIdx = 0);
 
   void updateSummaryFromAnnotations(RetainSummary &Summ,
                                     const ObjCMethodDecl *MD);
@@ -1097,24 +1097,32 @@ RetainSummaryManager::getInitMethodSummary(QualType RetTy) {
   // 'init' methods only return an alias if the return type is a location type.
   return getPersistentSummary(Loc::IsLocType(RetTy)
                               ? RetEffect::MakeReceiverAlias()
-                              : RetEffect::MakeNoRet());  
+                              : RetEffect::MakeNoRet());
 }
-
 
 void
 RetainSummaryManager::updateSummaryArgEffFromAnnotations(RetainSummary &Summ,
-                                                         unsigned i,
-                                                         const ParmVarDecl *PD){
-  if (PD->getAttr<NSOwnershipRetainAttr>())
-    Summ.setArgEffect(AF, i, IncRefMsg);
-  else if (PD->getAttr<CFOwnershipRetainAttr>())
-    Summ.setArgEffect(AF, i, IncRef);
-  else if (PD->getAttr<NSOwnershipReleaseAttr>())
-    Summ.setArgEffect(AF, i, DecRefMsg);
-  else if (PD->getAttr<CFOwnershipReleaseAttr>())
-    Summ.setArgEffect(AF, i, DecRef);
-  else if (PD->getAttr<NSOwnershipMakeCollectableAttr>())
-    Summ.setArgEffect(AF, i, MakeCollectable);  
+                                                         const Decl *D,
+                                                         unsigned i) {
+  ArgEffect E = DoNothing;
+  
+  if (D->getAttr<NSOwnershipRetainAttr>())
+    E = IncRefMsg;
+  else if (D->getAttr<CFOwnershipRetainAttr>())
+    E = IncRef;
+  else if (D->getAttr<NSOwnershipReleaseAttr>())
+    E = DecRefMsg;
+  else if (D->getAttr<CFOwnershipReleaseAttr>())
+    E = DecRef;
+  else if (D->getAttr<NSOwnershipAutoreleaseAttr>())
+    E = Autorelease;
+  else
+    return;
+  
+  if (isa<ParmVarDecl>(D))
+    Summ.setArgEffect(AF, i, E);
+  else
+    Summ.setReceiverEffect(E);
 }
 
 void
@@ -1130,13 +1138,16 @@ RetainSummaryManager::updateSummaryFromAnnotations(RetainSummary &Summ,
                         ? RetEffect::MakeGCNotOwned()
                         : RetEffect::MakeOwned(RetEffect::ObjC, true));
     }
+    else if (FD->getAttr<CFOwnershipReturnsAttr>()) {
+      Summ.setRetEffect(RetEffect::MakeOwned(RetEffect::CF, true));
+    }
   }
   
   // Determine if there are any arguments with a specific ArgEffect.
   unsigned i = 0;
   for (FunctionDecl::param_const_iterator I = FD->param_begin(),
        E = FD->param_end(); I != E; ++I, ++i)
-    updateSummaryArgEffFromAnnotations(Summ, i, *I);
+    updateSummaryArgEffFromAnnotations(Summ, *I, i);
 }
   
 void
@@ -1152,19 +1163,19 @@ RetainSummaryManager::updateSummaryFromAnnotations(RetainSummary &Summ,
                         ? RetEffect::MakeGCNotOwned()
                         : RetEffect::MakeOwned(RetEffect::ObjC, true));
     }
+    else if (MD->getAttr<CFOwnershipReturnsAttr>()) {
+      Summ.setRetEffect(RetEffect::MakeOwned(RetEffect::CF, true));
+    }    
   }
   
   // Determine if there are any arguments with a specific ArgEffect.
   unsigned i = 0;
   for (ObjCMethodDecl::param_iterator I = MD->param_begin(),
        E = MD->param_end(); I != E; ++I, ++i)
-    updateSummaryArgEffFromAnnotations(Summ, i, *I);
+    updateSummaryArgEffFromAnnotations(Summ, *I, i);
   
   // Determine any effects on the receiver.
-  if (MD->getAttr<NSOwnershipRetainAttr>())
-    Summ.setReceiverEffect(IncRefMsg);
-  else if (MD->getAttr<NSOwnershipReleaseAttr>())
-    Summ.setReceiverEffect(DecRefMsg);
+  updateSummaryArgEffFromAnnotations(Summ, MD);
 }
 
 RetainSummary*

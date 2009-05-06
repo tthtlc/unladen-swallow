@@ -275,9 +275,13 @@ llvm::DIType CGDebugInfo::CreateType(const RecordType *Ty,
   // Get overall information about the record type for the debug info.
   std::string Name = Decl->getNameAsString();
 
-  llvm::DICompileUnit DefUnit = getOrCreateCompileUnit(Decl->getLocation());
   PresumedLoc PLoc = SM.getPresumedLoc(Decl->getLocation());
-  unsigned Line = PLoc.isInvalid() ? 0 : PLoc.getLine();  
+  llvm::DICompileUnit DefUnit;
+  unsigned Line = 0;
+  if (!PLoc.isInvalid()) {
+    DefUnit = getOrCreateCompileUnit(Decl->getLocation());
+    Line = PLoc.getLine();
+  }
   
   // Records and classes and unions can all be recursive.  To handle them, we
   // first generate a debug descriptor for the struct as a forward declaration.
@@ -317,10 +321,14 @@ llvm::DIType CGDebugInfo::CreateType(const RecordType *Ty,
 
     // Get the location for the field.
     SourceLocation FieldDefLoc = Field->getLocation();
-    llvm::DICompileUnit FieldDefUnit = getOrCreateCompileUnit(FieldDefLoc);
     PresumedLoc PLoc = SM.getPresumedLoc(FieldDefLoc);
-    unsigned FieldLine = PLoc.isInvalid() ? 0 : PLoc.getLine();
-
+    llvm::DICompileUnit FieldDefUnit;
+    unsigned FieldLine = 0;
+    
+    if (!PLoc.isInvalid()) {
+      FieldDefUnit = getOrCreateCompileUnit(FieldDefLoc);
+      FieldLine = PLoc.getLine();
+    }
 
     QualType FType = Field->getType();
     uint64_t FieldSize = 0;
@@ -413,7 +421,7 @@ llvm::DIType CGDebugInfo::CreateType(const ObjCInterfaceType *Ty,
       getOrCreateType(M->getContext().getObjCInterfaceType(SClass), Unit);
     llvm::DIType InhTag = 
       DebugFactory.CreateDerivedType(llvm::dwarf::DW_TAG_inheritance,
-                                     Unit, "", Unit, 0, 0, 0,
+                                     Unit, "", llvm::DICompileUnit(), 0, 0, 0,
                                      0 /* offset */, 0, SClassTy);
     EltTys.push_back(InhTag);
   }
@@ -734,17 +742,23 @@ void CGDebugInfo::EmitDeclare(const VarDecl *Decl, unsigned Tag,
   if (CO.OptimizationLevel)
     return;
 
+  llvm::DICompileUnit Unit = getOrCreateCompileUnit(Decl->getLocation());
+  llvm::DIType Ty = getOrCreateType(Decl->getType(), Unit);
+
   // Get location information.
   SourceManager &SM = M->getContext().getSourceManager();
   PresumedLoc PLoc = SM.getPresumedLoc(Decl->getLocation());
-  unsigned Line = PLoc.isInvalid() ? 0 : PLoc.getLine();
-  llvm::DICompileUnit Unit = getOrCreateCompileUnit(Decl->getLocation());
+  unsigned Line = 0;
+  if (!PLoc.isInvalid())
+    Line = PLoc.getLine();
+  else
+    Unit = llvm::DICompileUnit();
+
   
   // Create the descriptor for the variable.
   llvm::DIVariable D = 
     DebugFactory.CreateVariable(Tag, RegionStack.back(),Decl->getNameAsString(),
-                                Unit, Line,
-                                getOrCreateType(Decl->getType(), Unit));
+                                Unit, Line, Ty);
   // Insert an llvm.dbg.declare into the current block.
   DebugFactory.InsertDeclare(Storage, D, Builder.GetInsertBlock());
 }

@@ -76,14 +76,15 @@ public:
     AT_nothrow,
     AT_nsobject,
     AT_objc_exception,
-    AT_cf_ownership_release,        // Clang-specific.
-    AT_cf_ownership_retain,         // Clang-specific.
-    AT_ns_ownership_make_collectable, // Clang-specific.
-    AT_ns_ownership_release,          // Clang-specific.
-    AT_ns_ownership_retain,           // Clang-specific.
-    AT_ns_ownership_returns,          // Clang-specific.
+    AT_cf_releases,        // Clang-specific.
+    AT_cf_retains,         // Clang-specific.
+    AT_cf_returns_owned,   // Clang-specific.
+    AT_ns_autoreleases,    // Clang-specific.
+    AT_ns_releases,        // Clang-specific.
+    AT_ns_retains,         // Clang-specific.
+    AT_ns_returns_owned,   // Clang-specific.
     AT_objc_gc,
-    AT_overloadable,            // Clang-specific.
+    AT_overloadable,       // Clang-specific.
     AT_packed,
     AT_pure,
     AT_regparm,

@@ -43,8 +43,6 @@ static const ObjCInterfaceDecl *FindIvarInterface(ASTContext &Context,
                                                   const ObjCInterfaceDecl *OID,
                                                   const ObjCIvarDecl *OIVD,
                                                   unsigned &Index) {
-  const ObjCInterfaceDecl *Super = OID->getSuperClass();
-
   // FIXME: The index here is closely tied to how
   // ASTContext::getObjCLayout is implemented. This should be fixed to
   // get the information from the layout directly.
@@ -65,7 +63,7 @@ static const ObjCInterfaceDecl *FindIvarInterface(ASTContext &Context,
   }
 
   // Otherwise check in the super class.
-  if (Super)
+  if (const ObjCInterfaceDecl *Super = OID->getSuperClass())
     return FindIvarInterface(Context, Super, OIVD, Index);
     
   return 0;
@@ -1018,7 +1016,8 @@ private:
                                               Selector Sel,
                                               llvm::Value *Receiver,
                                               bool IsClassMessage,
-                                              const CallArgList &CallArgs);
+                                              const CallArgList &CallArgs,
+                                              const ObjCMethodDecl *Method);
 
   virtual CodeGen::RValue 
   GenerateMessageSendSuper(CodeGen::CodeGenFunction &CGF,
@@ -1034,7 +1033,12 @@ private:
                                 const ObjCInterfaceDecl *ID);
 
   virtual llvm::Value *GetSelector(CGBuilderTy &Builder, Selector Sel);
-  
+
+  /// The NeXT/Apple runtimes do not support typed selectors; just emit an
+  /// untyped one.
+  virtual llvm::Value *GetSelector(CGBuilderTy &Builder,
+                                   const ObjCMethodDecl *Method);
+
   virtual void GenerateCategory(const ObjCCategoryImplDecl *CMD);
 
   virtual void GenerateClass(const ObjCImplementationDecl *ClassDecl);
@@ -1202,7 +1206,8 @@ public:
                                               Selector Sel,
                                               llvm::Value *Receiver,
                                               bool IsClassMessage,
-                                              const CallArgList &CallArgs);
+                                              const CallArgList &CallArgs,
+                                              const ObjCMethodDecl *Method);
   
   virtual CodeGen::RValue 
   GenerateMessageSendSuper(CodeGen::CodeGenFunction &CGF,
@@ -1219,6 +1224,12 @@ public:
   
   virtual llvm::Value *GetSelector(CGBuilderTy &Builder, Selector Sel)
     { return EmitSelector(Builder, Sel); }
+
+  /// The NeXT/Apple runtimes do not support typed selectors; just emit an
+  /// untyped one.
+  virtual llvm::Value *GetSelector(CGBuilderTy &Builder,
+                                   const ObjCMethodDecl *Method)
+    { return EmitSelector(Builder, Method->getSelector()); }
   
   virtual void GenerateCategory(const ObjCCategoryImplDecl *CMD);
   
@@ -1305,6 +1316,10 @@ llvm::Value *CGObjCMac::GetClass(CGBuilderTy &Builder,
 llvm::Value *CGObjCMac::GetSelector(CGBuilderTy &Builder, Selector Sel) {
   return EmitSelector(Builder, Sel);
 }
+llvm::Value *CGObjCMac::GetSelector(CGBuilderTy &Builder, const ObjCMethodDecl
+    *Method) {
+  return EmitSelector(Builder, Method->getSelector());
+}
 
 /// Generate a constant CFString object.
 /* 
@@ -1384,7 +1399,8 @@ CodeGen::RValue CGObjCMac::GenerateMessageSend(CodeGen::CodeGenFunction &CGF,
                                                Selector Sel,
                                                llvm::Value *Receiver,
                                                bool IsClassMessage,
-                                               const CallArgList &CallArgs) {
+                                               const CallArgList &CallArgs,
+                                               const ObjCMethodDecl *Method) {
   return EmitMessageSend(CGF, ResultType, Sel,
                          Receiver, CGF.getContext().getObjCIdType(),
                          false, CallArgs);
@@ -2059,35 +2075,6 @@ CGObjCMac::EmitClassExtension(const ObjCImplementationDecl *ID) {
   return CreateMetadataVar("\01L_OBJC_CLASSEXT_" + ID->getNameAsString(),
                            Init, "__OBJC,__class_ext,regular,no_dead_strip", 
                            4, true);
-}
-
-/// getInterfaceDeclForIvar - Get the interface declaration node where
-/// this ivar is declared in.
-/// FIXME. Ideally, this info should be in the ivar node. But currently 
-/// it is not and prevailing wisdom is that ASTs should not have more
-/// info than is absolutely needed, even though this info reflects the
-/// source language. 
-///
-static const ObjCInterfaceDecl *getInterfaceDeclForIvar(
-                                  const ObjCInterfaceDecl *OI,
-                                  const ObjCIvarDecl *IVD,
-                                  ASTContext &Context) {
-  if (!OI)
-    return 0;
-  assert(isa<ObjCInterfaceDecl>(OI) && "OI is not an interface");
-  for (ObjCInterfaceDecl::ivar_iterator I = OI->ivar_begin(),
-       E = OI->ivar_end(); I != E; ++I)
-    if ((*I)->getIdentifier() == IVD->getIdentifier())
-      return OI;
-  // look into properties.
-  for (ObjCInterfaceDecl::prop_iterator I = OI->prop_begin(Context),
-       E = OI->prop_end(Context); I != E; ++I) {
-    ObjCPropertyDecl *PDecl = (*I);
-    if (ObjCIvarDecl *IV = PDecl->getPropertyIvarDecl())
-      if (IV->getIdentifier() == IVD->getIdentifier())
-        return OI;
-  }
-  return getInterfaceDeclForIvar(OI->getSuperClass(), IVD, Context);
 }
 
 /*
@@ -4219,35 +4206,17 @@ llvm::GlobalVariable * CGObjCNonFragileABIMac::BuildClassMetaData(
 void CGObjCNonFragileABIMac::GetClassSizeInfo(const ObjCImplementationDecl *OID,
                                               uint32_t &InstanceStart,
                                               uint32_t &InstanceSize) {
-  // Find first and last (non-padding) ivars in this interface.
+  const ASTRecordLayout &RL = 
+    CGM.getContext().getASTObjCImplementationLayout(OID);
+  
+  // InstanceSize is really instance end.
+  InstanceSize = llvm::RoundUpToAlignment(RL.getNextOffset(), 8) / 8;
 
-  // FIXME: Use iterator.
-  llvm::SmallVector<ObjCIvarDecl*, 16> OIvars;
-  GetNamedIvarList(OID->getClassInterface(), OIvars);
-
-  if (OIvars.empty()) {
-    InstanceStart = InstanceSize = 0;
-    return;
-  }
-
-  const ObjCIvarDecl *First = OIvars.front();
-  const ObjCIvarDecl *Last = OIvars.back();
-
-  InstanceStart = ComputeIvarBaseOffset(CGM, OID, First);
-  const llvm::Type *FieldTy =
-    CGM.getTypes().ConvertTypeForMem(Last->getType());
-  unsigned Size = CGM.getTargetData().getTypePaddedSize(FieldTy);
-// FIXME. This breaks compatibility with llvm-gcc-4.2 (but makes it compatible
-// with gcc-4.2). We postpone this for now.
-#if 0
-  if (Last->isBitField()) {
-    Expr *BitWidth = Last->getBitWidth();
-    uint64_t BitFieldSize =
-      BitWidth->EvaluateAsInt(CGM.getContext()).getZExtValue();
-    Size = (BitFieldSize / 8) + ((BitFieldSize % 8) != 0);
-  }
-#endif
-  InstanceSize = ComputeIvarBaseOffset(CGM, OID, Last) + Size;
+  // If there are no fields, the start is the same as the end.
+  if (!RL.getFieldCount())
+    InstanceStart = InstanceSize;
+  else
+    InstanceStart = RL.getFieldOffset(0) / 8;
 }
 
 void CGObjCNonFragileABIMac::GenerateClass(const ObjCImplementationDecl *ID) {
@@ -4529,12 +4498,15 @@ llvm::Constant *CGObjCNonFragileABIMac::EmitMethodList(
 
 /// ObjCIvarOffsetVariable - Returns the ivar offset variable for
 /// the given ivar.
-///
 llvm::GlobalVariable * CGObjCNonFragileABIMac::ObjCIvarOffsetVariable(
                               const ObjCInterfaceDecl *ID,
                               const ObjCIvarDecl *Ivar) {
-  std::string Name = "OBJC_IVAR_$_" + 
-    getInterfaceDeclForIvar(ID, Ivar, CGM.getContext())->getNameAsString() + 
+  // FIXME: We shouldn't need to do this lookup.
+  unsigned Index;
+  const ObjCInterfaceDecl *Container = 
+    FindIvarInterface(CGM.getContext(), ID, Ivar, Index);
+  assert(Container && "Unable to find ivar container!");
+  std::string Name = "OBJC_IVAR_$_" + Container->getNameAsString() +
     '.' + Ivar->getNameAsString();
   llvm::GlobalVariable *IvarOffsetGV = 
     CGM.getModule().getGlobalVariable(Name);
@@ -5029,7 +5001,8 @@ CodeGen::RValue CGObjCNonFragileABIMac::GenerateMessageSend(
                                                Selector Sel,
                                                llvm::Value *Receiver,
                                                bool IsClassMessage,
-                                               const CallArgList &CallArgs) {
+                                               const CallArgList &CallArgs,
+                                               const ObjCMethodDecl *Method) {
   return EmitMessageSend(CGF, ResultType, Sel,
                          Receiver, CGF.getContext().getObjCIdType(),
                          false, CallArgs);

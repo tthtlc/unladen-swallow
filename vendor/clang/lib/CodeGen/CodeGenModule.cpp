@@ -135,6 +135,17 @@ void CodeGenModule::setGlobalVisibility(llvm::GlobalValue *GV,
   }
 }
 
+const char *CodeGenModule::getMangledName(const GlobalDecl &GD) {
+  const NamedDecl *ND = GD.getDecl();
+  
+  if (const CXXConstructorDecl *D = dyn_cast<CXXConstructorDecl>(ND))
+    return getMangledCXXCtorName(D, GD.getCtorType());
+  if (const CXXDestructorDecl *D = dyn_cast<CXXDestructorDecl>(ND))
+    return getMangledCXXDtorName(D, GD.getDtorType());
+  
+  return getMangledName(ND);
+}
+
 /// \brief Retrieves the mangled name for the given declaration.
 ///
 /// If the given declaration requires a mangled name, returns an
@@ -411,7 +422,7 @@ void CodeGenModule::EmitDeferred() {
   // previously unused static decl may become used during the generation of code
   // for a static function, iterate until no  changes are made.
   while (!DeferredDeclsToEmit.empty()) {
-    const ValueDecl *D = DeferredDeclsToEmit.back();
+    GlobalDecl D = DeferredDeclsToEmit.back();
     DeferredDeclsToEmit.pop_back();
 
     // The mangled name for the decl must have been emitted in GlobalDeclMap.
@@ -502,7 +513,9 @@ bool CodeGenModule::MayDeferGeneration(const ValueDecl *Global) {
   return VD->getStorageClass() == VarDecl::Static;
 }
 
-void CodeGenModule::EmitGlobal(const ValueDecl *Global) {
+void CodeGenModule::EmitGlobal(const GlobalDecl &GD) {
+  const ValueDecl *Global = GD.getDecl();
+  
   // If this is an alias definition (which otherwise looks like a declaration)
   // emit it now.
   if (Global->hasAttr<AliasAttr>())
@@ -532,28 +545,32 @@ void CodeGenModule::EmitGlobal(const ValueDecl *Global) {
   if (MayDeferGeneration(Global)) {
     // If the value has already been used, add it directly to the
     // DeferredDeclsToEmit list.
-    const char *MangledName = getMangledName(Global);
+    const char *MangledName = getMangledName(GD);
     if (GlobalDeclMap.count(MangledName))
-      DeferredDeclsToEmit.push_back(Global);
+      DeferredDeclsToEmit.push_back(GD);
     else {
       // Otherwise, remember that we saw a deferred decl with this name.  The
       // first use of the mangled name will cause it to move into
       // DeferredDeclsToEmit.
-      DeferredDecls[MangledName] = Global;
+      DeferredDecls[MangledName] = GD;
     }
     return;
   }
 
   // Otherwise emit the definition.
-  EmitGlobalDefinition(Global);
+  EmitGlobalDefinition(GD);
 }
 
-void CodeGenModule::EmitGlobalDefinition(const ValueDecl *D) {
-  if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
+void CodeGenModule::EmitGlobalDefinition(const GlobalDecl &GD) {
+  const ValueDecl *D = GD.getDecl();
+  
+  if (const CXXConstructorDecl *CD = dyn_cast<CXXConstructorDecl>(D))
+    EmitCXXConstructor(CD, GD.getCtorType());
+  else if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D))
     EmitGlobalFunctionDefinition(FD);
-  } else if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
+  else if (const VarDecl *VD = dyn_cast<VarDecl>(D))
     EmitGlobalVarDefinition(VD);
-  } else {
+  else {
     assert(0 && "Invalid argument to EmitGlobalDefinition()");
   }
 }
@@ -582,7 +599,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(const char *MangledName,
   // This is the first use or definition of a mangled name.  If there is a
   // deferred decl with this name, remember that we need to emit it at the end
   // of the file.
-  llvm::DenseMap<const char*, const ValueDecl*>::iterator DDI = 
+  llvm::DenseMap<const char*, GlobalDecl>::iterator DDI = 
   DeferredDecls.find(MangledName);
   if (DDI != DeferredDecls.end()) {
     // Move the potentially referenced deferred decl to the DeferredDeclsToEmit
@@ -654,7 +671,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMGlobal(const char *MangledName,
   // This is the first use or definition of a mangled name.  If there is a
   // deferred decl with this name, remember that we need to emit it at the end
   // of the file.
-  llvm::DenseMap<const char*, const ValueDecl*>::iterator DDI = 
+  llvm::DenseMap<const char*, GlobalDecl>::iterator DDI = 
     DeferredDecls.find(MangledName);
   if (DDI != DeferredDecls.end()) {
     // Move the potentially referenced deferred decl to the DeferredDeclsToEmit
@@ -725,7 +742,7 @@ void CodeGenModule::EmitTentativeDefinition(const VarDecl *D) {
     // later.
     const char *MangledName = getMangledName(D);
     if (GlobalDeclMap.count(MangledName) == 0) {
-      DeferredDecls[MangledName] = D;
+      DeferredDecls[MangledName] = GlobalDecl(D);
       return;
     }
   }
@@ -834,6 +851,69 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D) {
   }
 }
 
+/// ReplaceUsesOfNonProtoTypeWithRealFunction - This function is called when we
+/// implement a function with no prototype, e.g. "int foo() {}".  If there are
+/// existing call uses of the old function in the module, this adjusts them to
+/// call the new function directly.
+///
+/// This is not just a cleanup: the always_inline pass requires direct calls to
+/// functions to be able to inline them.  If there is a bitcast in the way, it
+/// won't inline them.  Instcombine normally deletes these calls, but it isn't
+/// run at -O0.
+static void ReplaceUsesOfNonProtoTypeWithRealFunction(llvm::GlobalValue *Old,
+                                                      llvm::Function *NewFn) {
+  // If we're redefining a global as a function, don't transform it.
+  llvm::Function *OldFn = dyn_cast<llvm::Function>(Old);
+  if (OldFn == 0) return;
+  
+  const llvm::Type *NewRetTy = NewFn->getReturnType();
+  llvm::SmallVector<llvm::Value*, 4> ArgList;
+
+  for (llvm::Value::use_iterator UI = OldFn->use_begin(), E = OldFn->use_end();
+       UI != E; ) {
+    // TODO: Do invokes ever occur in C code?  If so, we should handle them too.
+    llvm::CallInst *CI = dyn_cast<llvm::CallInst>(*UI++);
+    if (!CI) continue;
+    
+    // If the return types don't match exactly, and if the call isn't dead, then
+    // we can't transform this call.
+    if (CI->getType() != NewRetTy && !CI->use_empty())
+      continue;
+
+    // If the function was passed too few arguments, don't transform.  If extra
+    // arguments were passed, we silently drop them.  If any of the types
+    // mismatch, we don't transform.
+    unsigned ArgNo = 0;
+    bool DontTransform = false;
+    for (llvm::Function::arg_iterator AI = NewFn->arg_begin(),
+         E = NewFn->arg_end(); AI != E; ++AI, ++ArgNo) {
+      if (CI->getNumOperands()-1 == ArgNo ||
+          CI->getOperand(ArgNo+1)->getType() != AI->getType()) {
+        DontTransform = true;
+        break;
+      }
+    }
+    if (DontTransform)
+      continue;
+    
+    // Okay, we can transform this.  Create the new call instruction and copy
+    // over the required information.
+    ArgList.append(CI->op_begin()+1, CI->op_begin()+1+ArgNo);
+    llvm::CallInst *NewCall = llvm::CallInst::Create(NewFn, ArgList.begin(),
+                                                     ArgList.end(), "", CI);
+    ArgList.clear();
+    if (NewCall->getType() != llvm::Type::VoidTy)
+      NewCall->takeName(CI);
+    NewCall->setCallingConv(CI->getCallingConv());
+    NewCall->setAttributes(CI->getAttributes());
+
+    // Finally, remove the old call, replacing any uses with the new one.
+    if (!CI->use_empty())
+      CI->replaceAllUsesWith(NewCall);
+    CI->eraseFromParent();
+  }
+}
+
 
 void CodeGenModule::EmitGlobalFunctionDefinition(const FunctionDecl *D) {
   const llvm::FunctionType *Ty;
@@ -869,8 +949,10 @@ void CodeGenModule::EmitGlobalFunctionDefinition(const FunctionDecl *D) {
   
   
   if (cast<llvm::GlobalValue>(Entry)->getType()->getElementType() != Ty) {
+    llvm::GlobalValue *OldFn = cast<llvm::GlobalValue>(Entry);
+    
     // If the types mismatch then we have to rewrite the definition.
-    assert(cast<llvm::GlobalValue>(Entry)->isDeclaration() &&
+    assert(OldFn->isDeclaration() &&
            "Shouldn't replace non-declaration");
 
     // F is the Function* for the one with the wrong type, we must make a new
@@ -883,15 +965,23 @@ void CodeGenModule::EmitGlobalFunctionDefinition(const FunctionDecl *D) {
     // correct type, RAUW, then steal the name.
     GlobalDeclMap.erase(getMangledName(D));
     llvm::Function *NewFn = cast<llvm::Function>(GetAddrOfFunction(D, Ty));
-    NewFn->takeName(cast<llvm::GlobalValue>(Entry));
+    NewFn->takeName(OldFn);
+    
+    // If this is an implementation of a function without a prototype, try to
+    // replace any existing uses of the function (which may be calls) with uses
+    // of the new function
+    if (D->getType()->isFunctionNoProtoType())
+      ReplaceUsesOfNonProtoTypeWithRealFunction(OldFn, NewFn);
     
     // Replace uses of F with the Function we will endow with a body.
-    llvm::Constant *NewPtrForOldDecl = 
-      llvm::ConstantExpr::getBitCast(NewFn, Entry->getType());
-    Entry->replaceAllUsesWith(NewPtrForOldDecl);
+    if (!Entry->use_empty()) {
+      llvm::Constant *NewPtrForOldDecl = 
+        llvm::ConstantExpr::getBitCast(NewFn, Entry->getType());
+      Entry->replaceAllUsesWith(NewPtrForOldDecl);
+    }
     
     // Ok, delete the old function now, which is dead.
-    cast<llvm::GlobalValue>(Entry)->eraseFromParent();
+    OldFn->eraseFromParent();
     
     Entry = NewFn;
   }
@@ -1356,7 +1446,7 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
   case Decl::CXXMethod:
   case Decl::Function:
   case Decl::Var:
-    EmitGlobal(cast<ValueDecl>(D));
+    EmitGlobal(GlobalDecl(cast<ValueDecl>(D)));
     break;
 
   // C++ Decls

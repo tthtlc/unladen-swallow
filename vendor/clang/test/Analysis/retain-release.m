@@ -431,19 +431,21 @@ void rdar6704930(unsigned char *s, unsigned int length) {
 //===----------------------------------------------------------------------===//
 
 @interface TestOwnershipAttr : NSObject
-- (NSString*) returnsAnOwnedString  __attribute__((ns_ownership_returns));
-- (void) myRetain:(id)__attribute__((ns_ownership_retain))obj;
-- (void) myCFRetain:(id)__attribute__((cf_ownership_retain))obj;
-- (void) myRelease:(id)__attribute__((ns_ownership_release))obj;
-- (void) myCFRelease:(id)__attribute__((cf_ownership_release))obj;
-
-- (void) myRetain __attribute__((ns_ownership_retain));
-- (void) myRelease __attribute__((ns_ownership_release));
+- (NSString*) returnsAnOwnedString  __attribute__((ns_returns_owned));
+- (NSString*) returnsAnOwnedCFString  __attribute__((cf_returns_owned));
+- (void) myRetain:(id)__attribute__((ns_retains))obj;
+- (void) myCFRetain:(id)__attribute__((cf_retains))obj;
+- (void) myRelease:(id)__attribute__((ns_releases))obj;
+- (void) myCFRelease:(id)__attribute__((cf_releases))obj;
+- (void) myRetain __attribute__((ns_retains));
+- (void) myRelease __attribute__((ns_releases));
+- (void) myAutorelease __attribute__((ns_autoreleases));
+- (void) myAutorelease:(id)__attribute__((ns_autoreleases))obj;
 @end
 
 @interface TestAttrHelper : NSObject
 - (NSString*) createString:(TestOwnershipAttr*)X;
-- (NSString*) createStringAttr:(TestOwnershipAttr*)X __attribute__((ns_ownership_returns));
+- (NSString*) createStringAttr:(TestOwnershipAttr*)X __attribute__((ns_returns_owned));
 @end
 
 @implementation TestAttrHelper
@@ -459,8 +461,38 @@ void test_attr_1(TestOwnershipAttr *X) {
   NSString *str = [X returnsAnOwnedString]; // expected-warning{{leak}}
 }
 
+void test_attr_1b(TestOwnershipAttr *X) {
+  NSString *str = [X returnsAnOwnedCFString]; // expected-warning{{leak}}
+}
+
+__attribute__((ns_returns_owned))
+NSString* test_attr_1c(TestOwnershipAttr *X) {
+  NSString *str = [X returnsAnOwnedString]; // no-warning
+  return str;
+}
+
+void test_attr_1d_helper(NSString* str __attribute__((ns_retains)));
+
+__attribute__((ns_returns_owned))
+NSString* test_attr_1d(TestOwnershipAttr *X) {
+  NSString *str = [X returnsAnOwnedString]; // expected-warning{{leak}}
+  test_attr_1d_helper(str);
+  return str;
+}
+
+void test_attr_1e(TestOwnershipAttr *X) {
+  NSString *str = [X returnsAnOwnedString]; // no-warning
+  [X myAutorelease:str];
+}
+
 void test_attr_2(TestOwnershipAttr *X) {
   NSString *str = [X returnsAnOwnedString]; // expected-warning{{leak}}
+  [X myRetain:str];
+  [str release];
+}
+
+void test_attr_2b(TestOwnershipAttr *X) {
+  NSString *str = [X returnsAnOwnedCFString]; // expected-warning{{leak}}
   [X myRetain:str];
   [str release];
 }
@@ -520,6 +552,11 @@ void test_attr_6c() {
   TestOwnershipAttr *X = [TestOwnershipAttr alloc]; // expected-warning{{leak}}
   [X myRetain];
   [X myRelease];
+}
+
+void test_attr_6d() {
+  TestOwnershipAttr *X = [TestOwnershipAttr alloc]; // no-warning
+  [X myAutorelease];
 }
 
 //===----------------------------------------------------------------------===//
