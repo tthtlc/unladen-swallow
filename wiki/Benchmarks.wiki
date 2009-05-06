@@ -2,7 +2,7 @@
 
 = Unladen Swallow Benchmarks =
 
-The Unladen Swallow benchmark suite is kept in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/tests tests/] directory. `tests/perf.py` is the main interface to the tests, with the individual benchmarks stored under the `tests/performance/` directory.
+The Unladen Swallow benchmark suite is kept in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/tests tests/] directory (note that this is in the `/svn/tests/` tree, parallel to trunk). `tests/perf.py` is the main interface to the tests, with the individual benchmarks stored under the `tests/performance/` directory.
 
 
 Example `perf.py` command:
