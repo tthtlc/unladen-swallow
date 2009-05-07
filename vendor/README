@@ -1,0 +1,13 @@
+This where Unladen Swallow keeps its vendor branches for third-party apps and
+libraries we will want to ship with Unladen Swallow. We import the virgin source
+trees into vendor/, then copy the tree into trunk/. Any modifications should be
+made in trunk and pushed upstream; these will be incorporated into future
+source drops into vendor/.
+
+If the third-party app/library is only used for benchmarks or correctness tests
+-- that is, it won't actually ship with Unladen Swallow -- please put those
+under tests/lib/.
+
+The vendor/scripts/ directory contains tools to help with managing vendor
+branches:
+  * svn_load_dirs.pl: load a vendor source drop into a vendor branch.
