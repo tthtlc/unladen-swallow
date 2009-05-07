@@ -17,6 +17,12 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>>
 }}}
 
-This will checkout and build [Releases our 2009Q1 release]. Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher]. Active development is being done in `trunk/`, which can be checked out from `http://unladen-swallow.googlecode.com/svn/trunk`. Note that trunk includes a copy of LLVM 2.5 and will take longer to build.
+This will checkout and build [Releases our 2009Q1 release]. Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher]. Active development is being done in `trunk/`, which can be checked out from `http://unladen-swallow.googlecode.com/svn/trunk`. Note that trunk includes a copy of LLVM and will take longer to build.
+
+If your system is a 32/64-bit hybrid (say, a 64-bit kernel but a 32-bit userspace), you'll need to run a different `./configure` command. In the case of a 32-bit userspace, something like this should work:
+{{{
+CFLAGS=-m32 CXXFLAGS=-m32 ./configure --build=i386-unknown-linux-gnu
+}}}
+
 
 Any patches should follow [StyleGuide our style guide] and be put on http://codereview.appspot.com and sent to [http://groups.google.com/group/unladen-swallow unladen-swallow@googlegroups.com] for pre-commit review.
