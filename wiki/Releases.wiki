@@ -62,3 +62,34 @@ Unpickle (simple):<br>
 Min: 0.756 -> 0.486: 55.60% faster<br>
 Avg: 0.774 -> 0.493: 56.91% faster<br>
 Significant (t=331.578243, a=0.95)
+
+== Feedback-Directed Optimization ==
+
+This table summarizes the benefits we saw from using gcc 4.4's feedback-directed optimizations to improve Python performance. We experimented with a number of training loads. Both training and measurement was done with `perf.py --rigorous`. We observed similar benefits across both 32-bit and 64-bit Python.
+
+In these charts, the columns indicate the training loads (SlowFoo means all the "slow" benchmarks: SlowSpitfire, SlowPickle, SlowUnpickle). "MEAN-PYBENCH-C" indicates the mean of the benchmarks if PyBench and the cPickle benchmarks are excluded. The percentage values are improvements over the baseline; negative numbers indicate performance regressions.
+
+|| || Training=SlowSpitfire || Training=2to3 || Training=PyBench || Training=2to3,Django,SlowFoo ||
+|| 2to3 ||4%||7%||5%||6%||
+|| Django ||10%||10%||7%||13%||
+|| Pickle ||-4%||0%||-1%||-1%||
+||PyBench||-6%||2%||5%||-7%||
+||SlowPickle||9%||4%||9%||8%||
+||SlowSpitfire||32%||23%||27%||25%||
+||SlowUnpickle||10%||4%||15%||12%||
+||Unpickle||0%||6%||1%||6%||
+|| ||
+||MEAN||6.88%||7.00%||8.50%||7.75%||
+||MEAN-PYBENCH||8.71%||7.71%||9.00%||9.86%||
+||MEAN-PYBENCH-C||13.00%||9.60%||12.60%||12.80%||
+
+
+The results above, removing PyBench and any benchmarks that stress C-language extension modules.
+|| || Training=SlowSpitfire || Training=2to3 || Training=PyBench || Training=2to3,Django,SlowFoo ||
+|| 2to3 ||4%||7%||5%||6%||
+|| Django ||10%||10%||7%||13%||
+||SlowPickle||9%||4%||9%||8%||
+||SlowSpitfire||32%||23%||27%||25%||
+||SlowUnpickle||10%||4%||15%||12%||
+|| ||
+||GEOMEAN||10.29%||7.62%||10.50%||11.34%||
