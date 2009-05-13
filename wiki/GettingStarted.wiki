@@ -25,4 +25,8 @@ CFLAGS=-m32 CXXFLAGS=-m32 ./configure --build=i386-unknown-linux-gnu
 }}}
 
 
+== Working on Unladen Swallow ==
+
+We maintain a list of [http://code.google.com/p/unladen-swallow/issues/list?can=2&q=label%3AStarterProject good volunteer projects] in our issue tracker under the label [http://code.google.com/p/unladen-swallow/issues/list?can=2&q=label%3AStarterProject StarterProject]. Look over these and let us know if any strike your fancy.
+
 Any patches should follow [StyleGuide our style guide] and be put on http://codereview.appspot.com and sent to [http://groups.google.com/group/unladen-swallow unladen-swallow@googlegroups.com] for pre-commit review.
