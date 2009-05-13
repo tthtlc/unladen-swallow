@@ -14,3 +14,7 @@ In C++, inside a class, you're allowed to call member functions and access membe
 = Don't throw exceptions. =
 
 We don't throw exceptions because so much CPython code isn't exception safe. However, we _may_ start catching particular exceptions thrown by the standard library like std::bad_alloc in order to convert them to a form Python can deal with inside the language.
+
+= Capitalization =
+
+Class and struct names, member function names (all of public, private, and static), PyPublic_Function, and `_`PyInternal_Function names should all be `CamelCased`. Static functions within a .cc file are `lower_case_with_underscores`. Variable names are `lower_case_with_underscores`. Member variable names `end_with_an_underscore_`.
