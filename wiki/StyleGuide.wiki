@@ -18,3 +18,7 @@ We don't throw exceptions because so much CPython code isn't exception safe. How
 = Capitalization =
 
 Class and struct names, member function names (all of public, private, and static), PyPublic_Function, and `_`PyInternal_Function names should all be `CamelCased`. Static functions within a .cc file are `lower_case_with_underscores`. Variable names are `lower_case_with_underscores`. Member variable names `end_with_an_underscore_`.
+
+= Smart Pointers =
+
+For now, we're only using [http://llvm.org/doxygen/classllvm_1_1OwningPtr.html llvm::OwningPtr] (and OwningArrayPtr). `std::auto_ptr` does nearly the same thing, but has confusing assignment and copy construction semantics, so we're avoiding it. We don't have a smart pointer for Python refcounting because we couldn't use it in the C code anyway, and we haven't yet discussed the requirements for a non-PyObject refcounting pointer.
