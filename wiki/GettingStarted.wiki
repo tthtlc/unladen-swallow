@@ -1,4 +1,5 @@
 #summary How to build Unladen Swallow
+#labels Featured
 
 Setting up Unladen Swallow uses the same procedure as setting up CPython:
 
