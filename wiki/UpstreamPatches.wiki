@@ -3,6 +3,7 @@
 = CPython =
 
 == Patches reviewed, submitted ==
+  * [http://bugs.python.org/issue6042 Issue 6042]. Document and simplify lnotab-based tracing.
   * [http://bugs.python.org/issue5670 Issue 5670]. Improve performance of cPickle when pickling dicts.
   * [http://bugs.python.org/issue5665 Issue 5665]. Add more tests for pickling, including backwards-compatibility tests.
   * [http://bugs.python.org/issue5588 Issue 5588]. Add --randseed to regrtest.py.
