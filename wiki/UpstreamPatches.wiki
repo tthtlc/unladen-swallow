@@ -31,6 +31,7 @@ Note that the listed revisions are necessary, but might not be sufficient; later
 = LLVM =
 
 == Patches reviewed, submitted ==
+  * [http://llvm.org/viewvc/llvm-project?view=rev&revision=72426 r72426]. Avoid quadratic space use in codegen.  This patch also inspired [http://llvm.org/viewvc/llvm-project?view=rev&revision=72411 r72411], which removed one large variable entirely.
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=70898 r70898]. Fix codegen for conditional branches with `llc -march=cpp`.
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=70610 r70610]. Fix an issue where llc -march=cpp fails on input containing the x86_fp80 type.
   * [http://llvm.org/viewvc/llvm-project?view=rev&revision=70084 r70084]. Add a new TypeBuilder helper class, which eases making LLVM IR types.
