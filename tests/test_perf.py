@@ -49,7 +49,62 @@ class TestStatsFunctions(unittest.TestCase):
         self.assertTrue(significant)
 
 
+# Sample smaps sections from ssh-agent running on Ubuntu.
+SMAPS_DATA = """
+08047000-08059000 r-xp 00000000 08:01 41130                              /usr/bin/ssh-agent
+Size:                72 kB
+Rss:                 56 kB
+Shared_Clean:         0 kB
+Shared_Dirty:         0 kB
+Private_Clean:       56 kB
+Private_Dirty:        0 kB
+08059000-0805a000 rw-p 00011000 08:01 41130                              /usr/bin/ssh-agent
+Size:                 4 kB
+Rss:                  4 kB
+Shared_Clean:         0 kB
+Shared_Dirty:         0 kB
+Private_Clean:        0 kB
+Private_Dirty:        4 kB
+0805a000-0807d000 rw-p 0805a000 00:00 0                                  [heap]
+Size:               140 kB
+Rss:                 56 kB
+Shared_Clean:         0 kB
+Shared_Dirty:         0 kB
+Private_Clean:        0 kB
+Private_Dirty:       56 kB
+45f48000-45f5d000 r-xp 00000000 08:01 1079490                            /lib/ld-2.3.6.so
+Size:                84 kB
+Rss:                  0 kB
+Shared_Clean:         0 kB
+Shared_Dirty:         0 kB
+Private_Clean:        0 kB
+Private_Dirty:        0 kB
+"""
+
+class TestSmaps(unittest.TestCase):
+
+    def testParseSmapsData(self):
+        self.assertEqual(perf._ParseSmapsData(SMAPS_DATA), 116)
+
+
 class TestMisc(unittest.TestCase):
+
+    def test_SummarizeData(self):
+        result = perf.SummarizeData([], points=3)
+        self.assertEqual(result, [])
+
+        result = perf.SummarizeData(range(3), points=3)
+        self.assertEqual(result, range(3))
+
+        result = perf.SummarizeData(range(10), points=5)
+        self.assertEqual(result, [1, 3, 5, 7, 9])
+
+        result = perf.SummarizeData(range(9), points=5)
+        self.assertEqual(result, [1, 3, 5, 7, 8])
+
+        result = perf.SummarizeData(range(10), points=5, summary_func=min)
+        self.assertEqual(result, [0, 2, 4, 6, 8])
+
 
     def testParseBenchmarksOption(self):
         legal = ["2to3", "pybench", "spitfire", "django"]
