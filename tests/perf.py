@@ -939,6 +939,8 @@ def MeasureStartup(python, cmd_opts, num_loops, track_memory):
         _StartupPython(command, mem_usage, track_memory)
         t1 = time.time()
         times.append(t1 - t0)
+    if not track_memory:
+      mem_usage = None
     return times, mem_usage
 
 
