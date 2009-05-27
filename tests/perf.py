@@ -53,7 +53,6 @@ import os
 import os.path
 import platform
 import re
-import resource
 import shutil
 import subprocess
 import sys
@@ -357,13 +356,21 @@ def SummarizeData(data, points=100, summary_func=max):
 def ChangeDir(new_cwd):
     former_cwd = os.getcwd()
     os.chdir(new_cwd)
-    yield
-    os.chdir(former_cwd)
+    try:
+        yield
+    finally:
+        os.chdir(former_cwd)
 
 
 def RemovePycs():
-    subprocess.check_call(["find", ".", "-name", "*.py[co]",
-                           "-exec", "rm", "-f", "{}", ";"])
+    if sys.platform == "win32":
+        for root, dirs, files in os.walk('.'):
+            for name in files:
+                if name.endswith('.pyc') or name.endswith('.pyo'):
+                    os.remove(os.path.join(root, name))
+    else:
+        subprocess.check_call(["find", ".", "-name", "*.py[co]",
+                               "-exec", "rm", "-f", "{}", ";"])
 
 
 def Relative(path):
@@ -376,8 +383,15 @@ def LogCall(command):
     return command
 
 
-def GetChildUserTime():
-    return resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
+try:
+    import resource
+except ImportError:
+    # Approximate child time using wall clock time.
+    def GetChildUserTime():
+        return time.time()
+else:
+    def GetChildUserTime():
+        return resource.getrusage(resource.RUSAGE_CHILDREN).ru_utime
 
 
 @contextlib.contextmanager
@@ -396,6 +410,28 @@ def TimeDelta(old, new):
         return "%.2f%% slower" % delta
     else:
         return "%.2f%% faster" % -delta
+
+
+def BuildEnv(env):
+    """Massage an environment variables dict for the host platform.
+
+    Platforms like Win32 require certain env vars to be set.
+
+    Args:
+        env: environment variables dict.
+
+    Returns:
+        A copy of `env`, possibly with modifications.
+    """
+    if env == None:
+        return env
+    fixed_env = env.copy()
+    if sys.platform == "win32":
+        # Win32 requires certain environment variables be present
+        for k in ('COMSPEC', 'SystemRoot'):
+            if k in os.environ and k not in ret:
+                fixed_env[k] = os.environ[k]
+    return fixed_env
 
 
 ### Benchmarks
@@ -429,10 +465,10 @@ def BM_PyBench(base_python, changed_python, options):
         warp = "100"
 
     PYBENCH_PATH = Relative("performance/pybench/pybench.py")
-    PYBENCH_ENV = {"PYTHONPATH": ""}
+    PYBENCH_ENV = BuildEnv({"PYTHONPATH": ""})
 
     try:
-        with contextlib.nested(open("/dev/null", "wb"),
+        with contextlib.nested(open(os.devnull, "wb"),
                                TemporaryFilename(prefix="baseline."),
                                TemporaryFilename(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
@@ -478,14 +514,14 @@ def Measure2to3(python, options):
     FAST_TARGET = Relative("lib/2to3/lib2to3/refactor.py")
     TWO_TO_THREE_PROG = Relative("lib/2to3/2to3")
     TWO_TO_THREE_DIR = Relative("lib/2to3")
-    TWO_TO_THREE_ENV = {"PYTHONPATH": ""}
+    TWO_TO_THREE_ENV = BuildEnv({"PYTHONPATH": ""})
 
     if options.fast:
         target = FAST_TARGET
     else:
         target = TWO_TO_THREE_DIR
 
-    with open("/dev/null", "wb") as dev_null:
+    with open(os.devnull, "wb") as dev_null:
         RemovePycs()
         # Warm up the cache and .pyc files.
         subprocess.check_call(LogCall(python + ["-E", "-O",
@@ -602,7 +638,7 @@ def CompareBenchmarkData(base_data, changed_data, options):
     return comp
 
 
-def CallAndCaptureOutput(command, env={}, track_memory=False):
+def CallAndCaptureOutput(command, env=None, track_memory=False):
     """Run the given command, capturing stdout.
 
     Args:
@@ -624,7 +660,7 @@ def CallAndCaptureOutput(command, env={}, track_memory=False):
     subproc = subprocess.Popen(LogCall(command),
                                stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE,
-                               env=env)
+                               env=BuildEnv(env))
     if track_memory:
         future = MemoryUsageFuture(subproc.pid)
     result, err = subproc.communicate()
@@ -677,7 +713,7 @@ def ComesWithPsyco(python):
         True if we can "import psyco" with the given Python, False if not.
     """
     try:
-        with open("/dev/null", "wb") as dev_null:
+        with open(os.devnull, "wb") as dev_null:
             subprocess.check_call(python + ["-E", "-c", "import psyco"],
                                   stdout=dev_null, stderr=dev_null)
         return True
@@ -706,7 +742,7 @@ def BuildPsyco(python):
     return psyco_build_dir
 
 
-def MeasureSpitfire(python, options, env={}, extra_args=[]):
+def MeasureSpitfire(python, options, env=None, extra_args=[]):
     """Use Spitfire to test a Python binary's performance.
 
     Args:
@@ -755,7 +791,7 @@ def MeasureSpitfireWithPsyco(python, options):
         psyco_dir = BuildPsyco(python)
 
     env_dirs = filter(bool, [SPITFIRE_DIR, psyco_dir])
-    spitfire_env = {"PYTHONPATH": ":".join(env_dirs)}
+    spitfire_env = {"PYTHONPATH": os.pathsep.join(env_dirs)}
 
     try:
         return MeasureSpitfire(python, options, spitfire_env)

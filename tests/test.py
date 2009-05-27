@@ -71,6 +71,28 @@ class BuildBotMollifier(threading.Thread):
         self.stop()
 
 
+def BuildEnv(env):
+    """Massage an environment variables dict for the host platform.
+
+    Platforms like Win32 require certain env vars to be set.
+
+    Args:
+        env: environment variables dict.
+
+    Returns:
+        A copy of `env`, possibly with modifications.
+    """
+    if env == None:
+        return env
+    fixed_env = env.copy()
+    if sys.platform == "win32":
+        # Win32 requires certain environment variables be present
+        for k in ('COMSPEC', 'SystemRoot'):
+            if k in os.environ and k not in ret:
+                fixed_env[k] = os.environ[k]
+    return fixed_env
+
+
 def CallAndCaptureOutput(command, env=None):
     """Run the given command, capturing stdout and stderr.
 
@@ -88,7 +110,7 @@ def CallAndCaptureOutput(command, env=None):
     subproc = subprocess.Popen(command,
                                stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE,
-                               env=env)
+                               env=BuildEnv(env))
     with BuildBotMollifier():
         result, err = subproc.communicate()
     print result + err,
@@ -121,7 +143,8 @@ def Test2to3():
     return DefaultPassCheck([sys.executable, "-E", "test.py"])
 
 def TestCheetah():
-    path = ":".join([os.environ["PATH"], os.path.dirname(sys.executable)])
+    path = os.pathsep.join([os.environ["PATH"],
+                            os.path.dirname(sys.executable)])
     with ChangeDir(os.path.join("src", "Tests")):
         return DefaultPassCheck([sys.executable, "-E", "Test.py"],
                                 env={"PATH": path})
