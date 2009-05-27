@@ -27,6 +27,18 @@ If --track_memory is passed, perf.py will continuously sample the benchmark's
 memory usage, then give you the maximum usage and a link to a Google Chart of
 the benchmark's memory usage over time. This currently only works on Linux
 2.6.16 and higher.
+
+If --args is passed, it specifies extra arguments to pass to the test
+python binaries. For example,
+  perf.py --args="-A -B,-C -D" base_python changed_python
+will run benchmarks like
+  base_python -A -B the_benchmark.py
+  changed_python -C -D the_benchmark.py
+while
+  perf.py --args="-A -B" base_python changed_python
+will pass the same arguments to both pythons:
+  base_python -A -B the_benchmark.py
+  changed_python -A -B the_benchmark.py
 """
 
 from __future__ import division, with_statement
@@ -425,20 +437,20 @@ def BM_PyBench(base_python, changed_python, options):
                                TemporaryFilename(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
             RemovePycs()
-            subprocess.check_call(LogCall([changed_python, "-E", "-O",
+            subprocess.check_call(LogCall(changed_python + ["-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", changed_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
             RemovePycs()
-            subprocess.check_call(LogCall([base_python, "-E", "-O",
+            subprocess.check_call(LogCall(base_python + ["-E", "-O",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", base_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
-            comparer = subprocess.Popen([base_python, "-E",
+            comparer = subprocess.Popen(base_python + ["-E",
                                          PYBENCH_PATH,
                                          "--debug",
                                          "-s", base_pybench,
@@ -476,7 +488,7 @@ def Measure2to3(python, options):
     with open("/dev/null", "wb") as dev_null:
         RemovePycs()
         # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall([python, "-E", "-O",
+        subprocess.check_call(LogCall(python + ["-E", "-O",
                                        TWO_TO_THREE_PROG,
                                        "-f", "all",
                                        target]),
@@ -490,7 +502,7 @@ def Measure2to3(python, options):
         mem_usage = []
         for _ in range(trials):
             start_time = GetChildUserTime()
-            subproc = subprocess.Popen(LogCall([python, "-E", "-O",
+            subproc = subprocess.Popen(LogCall(python + ["-E", "-O",
                                                 TWO_TO_THREE_PROG,
                                                 "-f", "all",
                                                 target]),
@@ -510,6 +522,8 @@ def Measure2to3(python, options):
             if options.track_memory:
                 mem_usage.extend(mem_samples)
 
+    if not options.track_memory:
+        mem_usage = None
     return times, mem_usage
 
 
@@ -634,7 +648,7 @@ def MeasureDjango(python, options):
         trials = 5
 
     RemovePycs()
-    command = [python, "-O", TEST_PROG, "-n", trials]
+    command = python + ["-O", TEST_PROG, "-n", trials]
     result, mem_usage = CallAndCaptureOutput(command, django_env,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -657,14 +671,14 @@ def ComesWithPsyco(python):
     If the answer is no, we should build it (see BuildPsyco()).
 
     Args:
-        python: path to the Python binary.
+        python: prefix of a command line for the Python binary.
 
     Returns:
         True if we can "import psyco" with the given Python, False if not.
     """
     try:
         with open("/dev/null", "wb") as dev_null:
-            subprocess.check_call([python, "-E", "-c", "import psyco"],
+            subprocess.check_call(python + ["-E", "-c", "import psyco"],
                                   stdout=dev_null, stderr=dev_null)
         return True
     except subprocess.CalledProcessError:
@@ -675,7 +689,7 @@ def BuildPsyco(python):
     """Build Psyco against the given Python binary.
 
     Args:
-        python: path to the Python binary.
+        python: prefix of a command line for the Python binary.
 
     Returns:
         Path to Psyco's build directory. Putting this on your PYTHONPATH will
@@ -685,7 +699,7 @@ def BuildPsyco(python):
 
     info("Building Psyco for %s", python)
     psyco_build_dir = tempfile.mkdtemp()
-    abs_python = os.path.abspath(python)
+    abs_python = os.path.abspath(python[0])
     with ChangeDir(PSYCO_SRC_DIR):
         subprocess.check_call(LogCall([abs_python, "setup.py", "build",
                                        "--build-lib=" + psyco_build_dir]))
@@ -696,7 +710,7 @@ def MeasureSpitfire(python, options, env={}, extra_args=[]):
     """Use Spitfire to test a Python binary's performance.
 
     Args:
-        python: path to the Python binary to test.
+        python: prefix of a command line for the Python binary to test.
         options: optparse.Values instance.
         env: optional; dict of environment variables to pass to Python.
         extra_args: optional; list of arguments to append to the Python
@@ -716,7 +730,7 @@ def MeasureSpitfire(python, options, env={}, extra_args=[]):
         trials = 5
 
     RemovePycs()
-    command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
+    command = python + ["-O", TEST_PROG, "-n", trials] + extra_args
     result, mem_usage = CallAndCaptureOutput(command, env, options.track_memory)
     times = [float(line) for line in result.splitlines()]
     return times, mem_usage
@@ -726,7 +740,7 @@ def MeasureSpitfireWithPsyco(python, options):
     """Use Spitfire to measure Python's performance.
 
     Args:
-        python: path to the Python binary.
+        python: prefix of a command line for the Python binary.
         options: optparse.Values instance.
 
     Returns:
@@ -780,7 +794,7 @@ def MeasurePickle(python, options, extra_args):
     """Test the performance of Python's pickle implementations.
 
     Args:
-        python: path to the Python binary.
+        python: prefix of a command line for the Python binary.
         options: optparse.Values instance.
         extra_args: list of arguments to append to the command line.
 
@@ -799,7 +813,7 @@ def MeasurePickle(python, options, extra_args):
         trials = 5
 
     RemovePycs()
-    command = [python, "-O", TEST_PROG, "-n", trials] + extra_args
+    command = python + ["-O", TEST_PROG, "-n", trials] + extra_args
     result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -810,8 +824,10 @@ def _PickleBenchmark(base_python, changed_python, options, extra_args):
     """Test the performance of Python's pickle implementations.
 
     Args:
-        base_python: path to the reference Python binary.
-        changed_python: path to the experimental Python binary.
+        base_python: prefix of a command line for the reference
+                Python binary.
+        changed_python: prefix of a command line for the
+                experimental Python binary.
         options: optparse.Values instance.
         extra_args: list of arguments to append to the command line.
 
@@ -859,7 +875,7 @@ def MeasureAi(python, options):
     """Test the performance of some small AI problem solvers.
 
     Args:
-        python: path to the Python binary.
+        python: prefix of a command line for the Python binary.
         options: optparse.Values instance.
 
     Returns:
@@ -877,7 +893,7 @@ def MeasureAi(python, options):
         trials = 5
 
     RemovePycs()
-    command = [python, "-E", "-O", TEST_PROG, "-n", trials]
+    command = python + ["-E", "-O", TEST_PROG, "-n", trials]
     result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -912,7 +928,7 @@ def MeasureStartup(python, cmd_opts, num_loops, track_memory):
         # thread has time to work. We can't just do 'time.sleep(x)', because
         # under -S, 'import time' fails.
         work = "for _ in xrange(200000): pass"
-    command = [python] + cmd_opts + ["-c", work]
+    command = python + cmd_opts + ["-c", work]
     mem_usage = []
     info("Running `%s` %d times", command, num_loops * 20)
     for _ in xrange(num_loops):
@@ -1035,6 +1051,26 @@ def ParseBenchmarksOption(benchmarks_opt, legal_benchmarks):
     return should_run
 
 
+def ParsePythonArgsOption(python_args_opt):
+    """Parses the --args option.
+
+    Args:
+        python_args_opt: the string passed to the -a option on the command line.
+
+    Returns:
+        A pair of lists: (base_python_args, changed_python_args).
+    """
+    args_pair = python_args_opt.split(",")
+    base_args = args_pair[0].split()  # On whitespace.
+    changed_args = base_args
+    if len(args_pair) == 2:
+        changed_args = args_pair[1].split()
+    elif len(args_pair) > 2:
+        logging.warning("Didn't expect two or more commas in --args flag: %s",
+                        python_args_opt)
+    return base_args, changed_args
+
+
 if __name__ == "__main__":
     bench_funcs = _FindAllBenchmarks()
     all_benchmarks = BENCH_GROUPS["all"]
@@ -1052,6 +1088,14 @@ if __name__ == "__main__":
                       help=("Print more output"))
     parser.add_option("-m", "--track_memory", action="store_true",
                       help=("Track memory usage. This only works on Linux."))
+    parser.add_option("-a", "--args", default="",
+                      help=("Pass extra arguments to the python binaries."
+                            " If there is a comma in this option's value, the"
+                            " arguments before the comma (interpreted as a"
+                            " space-separated list) are passed to the baseline"
+                            " python, and the arguments after are passed to the"
+                            " changed python. If there's no comma, the same"
+                            " options are passed to both."))
     parser.add_option("-b", "--benchmarks", metavar="BM_LIST", default="",
                       help=("Comma-separated list of benchmarks to run.  Can" +
                             " contain both positive and negative arguments:" +
@@ -1069,6 +1113,10 @@ if __name__ == "__main__":
     options.base_binary = base
     options.changed_binary = changed
 
+    base_args, changed_args = ParsePythonArgsOption(options.args)
+    base_cmd_prefix = [base] + base_args
+    changed_cmd_prefix = [changed] + changed_args
+
     if options.track_memory:
         try:
             _ReadSmapsFile(pid=1)
@@ -1084,7 +1132,8 @@ if __name__ == "__main__":
     for name in sorted(should_run):
         func = bench_funcs[name]
         print "Running %s..." % name
-        results.append((name, func(base, changed, options)))
+        results.append((name, func(base_cmd_prefix, changed_cmd_prefix,
+                                   options)))
 
     print
     print "Report on %s" % " ".join(platform.uname())
