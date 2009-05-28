@@ -87,8 +87,8 @@ def BuildEnv(env):
     fixed_env = env.copy()
     if sys.platform == "win32":
         # Win32 requires certain environment variables be present
-        for k in ('COMSPEC', 'SystemRoot'):
-            if k in os.environ and k not in ret:
+        for k in ("COMSPEC", "SystemRoot"):
+            if k in os.environ and k not in fixed_env:
                 fixed_env[k] = os.environ[k]
     return fixed_env
 
