@@ -4,11 +4,16 @@
 
 The Unladen Swallow benchmark suite is kept in the [http://code.google.com/p/unladen-swallow/source/browse/#svn/tests tests/] directory (note that this is in the `/svn/tests/` tree, parallel to trunk). `tests/perf.py` is the main interface to the tests, with the individual benchmarks stored under the `tests/performance/` directory.
 
+To check out the latest version of the benchmarks:
+
+{{{
+svn checkout http://unladen-swallow.googlecode.com/svn/tests unladen-bmarks
+}}}
 
 Example `perf.py` command:
 
 {{{
-python2.5 tests/perf.py --rigorous --benchmarks=2to3,django control/python experiment/python
+python2.5 unladen-bmarks/perf.py -r --benchmarks=2to3,django control/python experiment/python
 }}}
 
 This will run the 2to3 and Django template benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with. `perf.py` will take care of comparing the performance and running statistics on the result to determine statistical significance. The performance degradation/improvement is calculated using `((new - old) / new)`.
