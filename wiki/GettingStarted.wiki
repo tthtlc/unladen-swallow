@@ -33,3 +33,120 @@ We maintain a list of [http://code.google.com/p/unladen-swallow/issues/list?can=
 There's also a category called [http://code.google.com/p/unladen-swallow/issues/list?can=2&q=label%3ABeer Beer]. The `Beer` tag indicates tasks that aren't exactly sexy, but need to get done. As a thank-you for taking on one of these tasks, the Googlers on the team will [http://en.wikipedia.org/wiki/Round_of_drinks buy you a round] at a conference. Seriously.
 
 Any patches should follow [StyleGuide our style guide] and be put on http://codereview.appspot.com and sent to [http://groups.google.com/group/unladen-swallow unladen-swallow@googlegroups.com] for pre-commit review.
+
+== Improving generated code ==
+
+The first step to improving the code we generate is to look at it. In Unladen Swallow, every function has four representations. First, the Python code:
+
+{{{
+def sum(x):
+  result = 0
+  for i in x:
+    result += i
+  return result
+}}}
+
+This is compiled into CPython bytecode, which you can inspect with the `dis` module:
+
+{{{
+>>> import dis
+>>> dis.dis(sum)
+  2           0 LOAD_CONST               1 (0)
+              3 STORE_FAST               1 (result)
+
+  3           6 SETUP_LOOP              24 (to 33)
+              9 LOAD_FAST                0 (x)
+             12 GET_ITER            
+        >>   13 FOR_ITER                16 (to 32)
+             16 STORE_FAST               2 (i)
+
+  4          19 LOAD_FAST                1 (result)
+             22 LOAD_FAST                2 (i)
+             25 INPLACE_ADD         
+             26 STORE_FAST               1 (result)
+             29 JUMP_ABSOLUTE           13
+        >>   32 POP_BLOCK           
+
+  5     >>   33 LOAD_FAST                1 (result)
+             36 RETURN_VALUE        
+>>> 
+}}}
+
+[http://code.google.com/p/unladen-swallow/source/browse/trunk/Doc/library/dis.rst Doc/library/dis.rst] documents what the opcodes mean.
+
+Third, when a function is hot, the bytecode gets compiled to [http://llvm.org/docs/LangRef.html LLVM IR]. You can force this compilation by setting `func.__code__.co_optimization` to an integer between -1 and 2 (which determines how much to optimize the code). Then print the bytecode with `func.__code__.co_llvm`:
+
+{{{
+>>> sum.__code__.co_optimization=1
+>>> print sum.__code__.co_llvm
+
+define %struct._object* @"#u#sum"(%struct._frame* %frame) {
+entry:
+	%exc_info = alloca %struct.PyExcInfo, align 4		; <%struct.PyExcInfo*> [#uses=4]
+	%stack_pointer_addr = alloca %struct._object**, align 4		; <%struct._object***> [#uses=50]
+	%call.i = call %struct._ts* @PyThreadState_Get() nounwind		; <%struct._ts*> [#uses=13]
+	%use_tracing = getelementptr %struct._ts* %call.i, i32 0, i32 5		; <i32*> [#uses=1]
+	%use_tracing1 = load i32* %use_tracing		; <i32> [#uses=1]
+	%0 = icmp eq i32 %use_tracing1, 0		; <i1> [#uses=1]
+	br i1 %0, label %continue_entry, label %trace_enter_function
+
+... # Lots of IR
+
+call_trace38:		; preds = %_PyLlvm_WrapXDecref.exit192
+	%f_lasti39 = getelementptr %struct._frame* %frame, i32 0, i32 17		; <i32*> [#uses=1]
+	store i32 13, i32* %f_lasti39
+	%132 = call i32 @_PyLlvm_CallLineTrace(%struct._ts* %call.i, %struct._frame* %frame, %struct._object*** %stack_pointer_addr)		; <i32> [#uses=2]
+	switch i32 %132, label %goto_line [
+		i32 -2, label %propagate_exception
+		i32 -1, label %JUMP_ABSOLUTE_target
+	]
+}
+
+>>> 
+}}}
+
+Fourth, this code is JIT-compiled to native machine code. Unfortunately, there's no easy way to display this machine code. The easiest involves setting `PYTHONLLVMFLAGS=-debug-only=jit` before starting Python and running Python inside gdb with a breakpoint in `_PyLlvmFunction_Eval()` just before the call to `native(frame)`. When `_PyLlvmFunction_Eval()` calls `ExecutionEngine::getPointerToFunction()`, the JIT will dump a lot of information including the location and size of the machine code:
+
+{{{
+$ PYTHONLLVMFLAGS=-debug-only=jit gdb ./python.exe 
+...
+(gdb) b _llvmfunctionobject.cc:69
+Breakpoint 1 at 0xa72a0: file ../src/Objects/_llvmfunctionobject.cc, line 69.
+(gdb) run
+...
+>>> def sum(x):
+...   result = 0
+...   for i in x:
+...     result += i
+...   return result
+... 
+>>> sum.__code__.__use_llvm__=True
+>>> sum.__code__.co_optimization=1
+>>> sum([1,2,3])
+JIT: Starting CodeGen of Function #u#sum
+...
+JIT: Finished CodeGen of [0x2080020] Function: #u#sum: 2763 bytes of text, 214 relocations
+JIT: Binary code:
+JIT: 00000000: 56575355 e83cec83 fe0e2771 00147883 
+...
+JIT: 00000ac0: 8950244c 2fe9240c fffffc
+
+Breakpoint 1, _PyLlvmFunction_Eval (function_obj=0x14a3208, frame=0x1552ad8) at ../src/Objects/_llvmfunctionobject.cc:69
+69	    return native(frame);
+(gdb) disassemble 0x2080020 (0x2080020 + 2763)
+Dump of assembler code from 0x2080020 to 0x2080aeb:
+0x02080020:	push   %ebp
+0x02080021:	push   %ebx
+0x02080022:	push   %edi
+0x02080023:	push   %esi
+0x02080024:	sub    $0x3c,%esp
+...
+0x02080adf:	mov    0x50(%esp),%ecx
+0x02080ae3:	mov    %ecx,(%esp)
+0x02080ae6:	jmp    0x208071a
+End of assembler dump.
+Current language:  auto; currently c++
+(gdb) 
+}}}
+
+And there's the machine code for this function.  If you link LLVM with [http://udis86.sourceforge.net/ libudis86], it'll disassemble this for you in the JIT debug output, but getting that link to work is non-trivial.
