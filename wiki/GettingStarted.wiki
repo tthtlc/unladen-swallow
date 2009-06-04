@@ -1,6 +1,10 @@
 #summary How to build Unladen Swallow
 #labels Featured
 
+<wiki:toc max_depth="2" />
+
+== The basics ==
+
 Setting up Unladen Swallow uses the same procedure as setting up CPython:
 
 {{{
