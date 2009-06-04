@@ -38,6 +38,12 @@ There's also a category called [http://code.google.com/p/unladen-swallow/issues/
 
 Any patches should follow [StyleGuide our style guide] and be put on http://codereview.appspot.com and sent to [http://groups.google.com/group/unladen-swallow unladen-swallow@googlegroups.com] for pre-commit review.
 
+To upload a patch, download [http://codereview.appspot.com/static/upload.py upload.py] and go to your checkout directory.  Pick some project members as reviewers, and invoke upload.py like so:
+
+{{{
+upload.py -e EMAIL@gmail.com -r REVIEWERS --cc=unladen-swallow@googlegroups.com --send_mail
+}}}
+
 == Improving generated code ==
 
 The first step to improving the code we generate is to look at it. In Unladen Swallow, every function has four representations. First, the Python code:
