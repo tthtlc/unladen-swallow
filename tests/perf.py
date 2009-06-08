@@ -1034,6 +1034,45 @@ def BM_startup_nosite(base_python, changed_python, options):
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
+def MeasureRegexV8(python, options):
+    """Test the performance of Python's regex engine using V8's benchmarks.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run all the regexes routines once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    TEST_PROG = Relative("performance/bm_regex_v8.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = python + ["-E", "-O", TEST_PROG, "-n", trials]
+    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
+def BM_regex_v8(base_python, changed_python, options):
+    try:
+        changed_data = MeasureRegexV8(changed_python, options)
+        base_data = MeasureRegexV8(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
 def _FindAllBenchmarks():
     return dict((name[3:].lower(), func)
                 for (name, func) in sorted(globals().iteritems())
