@@ -107,39 +107,41 @@ class TestMisc(unittest.TestCase):
 
 
     def testParseBenchmarksOption(self):
-        legal = ["2to3", "pybench", "spitfire", "django"]
-
         # perf.py, no -b option.
-        should_run = perf.ParseBenchmarksOption("", legal)
-        self.assertEqual(should_run, set(["2to3", "django", "slowspitfire",
+        should_run = perf.ParseBenchmarksOption("")
+        self.assertEqual(should_run, set(["2to3", "django", "normal_startup",
+                                          "regex_v8", "regex_effbot",
+                                          "slowspitfire", "startup_nosite",
                                           "pickle", "unpickle"]))
 
         # perf.py -b 2to3
-        should_run = perf.ParseBenchmarksOption("2to3", legal)
+        should_run = perf.ParseBenchmarksOption("2to3")
         self.assertEqual(should_run, set(["2to3"]))
 
         # perf.py -b 2to3,pybench
-        should_run = perf.ParseBenchmarksOption("2to3,pybench", legal)
+        should_run = perf.ParseBenchmarksOption("2to3,pybench")
         self.assertEqual(should_run, set(["2to3", "pybench"]))
 
         # perf.py -b -2to3
-        should_run = perf.ParseBenchmarksOption("-2to3", legal)
+        should_run = perf.ParseBenchmarksOption("-2to3")
         self.assertEqual(should_run, set(["django", "slowspitfire",
-                                          "pickle", "unpickle"]))
+                                          "pickle", "unpickle",
+                                          "regex_v8", "regex_effbot",
+                                          "normal_startup", "startup_nosite"]))
 
         # perf.py -b all
-        should_run = perf.ParseBenchmarksOption("all", legal)
+        should_run = perf.ParseBenchmarksOption("all")
         self.assertTrue("django" in should_run, should_run)
         self.assertTrue("pybench" in should_run, should_run)
 
         # perf.py -b -2to3,all
-        should_run = perf.ParseBenchmarksOption("-2to3,all", legal)
+        should_run = perf.ParseBenchmarksOption("-2to3,all")
         self.assertTrue("django" in should_run, should_run)
         self.assertTrue("pybench" in should_run, should_run)
         self.assertFalse("2to3" in should_run, should_run)
 
         # Error conditions
-        self.assertRaises(ValueError, perf.ParseBenchmarksOption, "-all", legal)
+        self.assertRaises(ValueError, perf.ParseBenchmarksOption, "-all")
 
 if __name__ == "__main__":
     unittest.main()

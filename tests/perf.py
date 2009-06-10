@@ -1034,11 +1034,12 @@ def BM_startup_nosite(base_python, changed_python, options):
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
-def MeasureRegexV8(python, options):
-    """Test the performance of Python's regex engine using V8's benchmarks.
+def MeasureRegexPerformance(python, bm_path, options):
+    """Test the performance of Python's regex engine.
 
     Args:
         python: prefix of a command line for the Python binary.
+        bm_path: relative path; which benchmark script to run.
         options: optparse.Values instance.
 
     Returns:
@@ -1046,7 +1047,7 @@ def MeasureRegexV8(python, options):
         time it took to run all the regexes routines once; mem_usage is a list
         of memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_regex_v8.py")
+    TEST_PROG = Relative(bm_path)
     CLEAN_ENV = {"PYTHONPATH": ""}
 
     trials = 50
@@ -1064,9 +1065,21 @@ def MeasureRegexV8(python, options):
 
 
 def BM_regex_v8(base_python, changed_python, options):
+    cmd = ["performance/bm_regex_v8.py", options]
     try:
-        changed_data = MeasureRegexV8(changed_python, options)
-        base_data = MeasureRegexV8(base_python, options)
+        changed_data = MeasureRegexPerformance(changed_python, *cmd)
+        base_data = MeasureRegexPerformance(base_python, *cmd)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
+def BM_regex_effbot(base_python, changed_python, options):
+    cmd = ["performance/bm_regex_effbot.py", options]
+    try:
+        changed_data = MeasureRegexPerformance(changed_python, *cmd)
+        base_data = MeasureRegexPerformance(base_python, *cmd)
     except subprocess.CalledProcessError, e:
         return str(e)
 
@@ -1082,23 +1095,42 @@ def _FindAllBenchmarks():
 # Benchmark groups. The "default" group is what's run if no -b option is
 # specified. The "all" group includes every benchmark perf.py knows about.
 # If you update the default group, be sure to update the module docstring, too.
-BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "pickle",
-                            "unpickle"],
+BENCH_GROUPS = {"default": ["2to3", "django", "regex", "slowspitfire",
+                            "startup", "pickle", "unpickle"],
                 "startup": ["normal_startup", "startup_nosite"],
+                "regex": ["regex_v8", "regex_effbot"],
                 "all": _FindAllBenchmarks().keys(),
                }
 
 
-def ParseBenchmarksOption(benchmarks_opt, legal_benchmarks):
+def _ExpandBenchmarkName(bm_name):
+    """Recursively expand name benchmark names.
+
+    Args:
+        bm_name: string naming a benchmark or benchmark group.
+
+    Yields:
+        Names of actual benchmarks, with all group names fully expanded.
+    """
+    expansion = BENCH_GROUPS.get(bm_name)
+    if expansion:
+        for name in expansion:
+            for name in _ExpandBenchmarkName(name):
+                yield name
+    else:
+        yield bm_name
+
+
+def ParseBenchmarksOption(benchmarks_opt):
     """Parses and verifies the --benchmarks option.
 
     Args:
         benchmarks_opt: the string passed to the -b option on the command line.
-        legal_benchmarks: list of all legal benchmark names.
 
     Returns:
         A set() of the names of the benchmarks to run.
     """
+    legal_benchmarks = BENCH_GROUPS["all"]
     benchmarks = benchmarks_opt.split(",")
     positive_benchmarks = set(
         bm.lower() for bm in benchmarks if bm and bm[0] != "-")
@@ -1107,15 +1139,14 @@ def ParseBenchmarksOption(benchmarks_opt, legal_benchmarks):
 
     should_run = set()
     if not positive_benchmarks:
-        should_run = set(BENCH_GROUPS["default"])
+        should_run = set(_ExpandBenchmarkName("default"))
 
-    for bm in positive_benchmarks:
-        if bm in BENCH_GROUPS:
-            should_run.update(BENCH_GROUPS[bm])
-        elif bm not in legal_benchmarks:
-            logging.warning("No benchmark named %s", bm)
-        else:
-            should_run.add(bm)
+    for name in positive_benchmarks:
+        for bm in _ExpandBenchmarkName(name):
+            if bm not in legal_benchmarks:
+                logging.warning("No benchmark named %s", bm)
+            else:
+                should_run.add(bm)
     for bm in negative_benchmarks:
         if bm in BENCH_GROUPS:
             raise ValueError("Negative groups not supported: -%s" % bm)
@@ -1201,7 +1232,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    should_run = ParseBenchmarksOption(options.benchmarks, all_benchmarks)
+    should_run = ParseBenchmarksOption(options.benchmarks)
 
     results = []
     for name in sorted(should_run):
