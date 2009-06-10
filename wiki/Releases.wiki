@@ -9,7 +9,7 @@ The first release. Unladen Swallow 2009Q1 is based on CPython 2.6.1. This releas
 
 == Performance ==
 
-We recommend building Unladen Swallow with 64-bit mode for maximum performance. The following timings are comparing virgin Python 2.6.1 against Unladen Swallow 2009Q1 in 64-bit mode. Compiled with gcc 4.3.1 on Intel Core 2 Duo machines. See the [Benchmarks] page for a description of each benchmark below. If you have access to gcc 4.4, we highly recommend using the FDO support (via `-fprofile-generate` and `-fprofile-use`). We have found that training it on 2to3, Django and SlowSpitfire (via `test.py`) adds additional 10-30% percent performance, depending on the benchmark. We have not included those improvements in our results since gcc 4.4 is not widely available.
+We recommend building Unladen Swallow with 64-bit mode for maximum performance. The following timings are comparing virgin Python 2.6.1 against Unladen Swallow 2009Q1 in 64-bit mode. Compiled with gcc 4.3.1 on Intel Core 2 Duo machines. See the [Benchmarks] page for a description of each benchmark below. If you have access to gcc 4.4, we highly recommend using the FDO support (via `-fprofile-generate` and `-fprofile-use`). We have found that training it on 2to3, Django and SlowSpitfire (via `test.py`) adds additional 10-30% percent performance, depending on the benchmark. We have not included those improvements in our results since gcc 4.4 is not widely available; FDO is available in earlier versions of gcc, but is not as easy to use.
 
 Note on the benchmark names: the SlowFoo benchmarks are pure-Python versions. So SlowPickle is a pure-Python version of Pickle, which uses the `cPickle` module.
 
