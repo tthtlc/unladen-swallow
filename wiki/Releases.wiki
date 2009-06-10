@@ -1,6 +1,7 @@
 #summary Unladen Swallow Releases
 
-Unladen Swallow is released every three months, with bug-fix releases in between as needed.
+Unladen Swallow is released every three months, with bug-fix releases in between as needed. 2009Q1 was released in late March 2009, 2009Q2 will be released in late June 2009, 2009Q3 in late September 2009, and so on.
+
 
 = 2009Q1 =
 
@@ -12,7 +13,7 @@ We recommend building Unladen Swallow with 64-bit mode for maximum performance. 
 
 Note on the benchmark names: the SlowFoo benchmarks are pure-Python versions. So SlowPickle is a pure-Python version of Pickle, which uses the `cPickle` module.
 
-The performance improvements are calculated using `((new - old) / new)`.
+The performance improvements are calculated using `((new - old) / new)`. We feel this is a better representation of performance improvements than `((new - old) / old)`; you can see the difference with `old=100` and `new=5` then `new=2`.
 
 2to3:<br>
 Min: 22.888 -> 20.299: 12.75% faster<br>
