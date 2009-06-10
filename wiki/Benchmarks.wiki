@@ -28,12 +28,16 @@ This will run the 2to3 and Django template benchmarks in rigorous mode (lots of 
   * *pickle_dict* - microbenchmark; use the `cPickle` module to pickle a lot of dicts.
   * *pickle_list* - microbenchmark; use the `cPickle` module to pickle a lot of lists.
   * *pybench* - run the standard Python [http://svn.python.org/projects/python/trunk/Tools/pybench/README PyBench] benchmark suite. This is considered an unreliable, unrepresentative benchmark; do not base decisions off it. It is included only for completeness.
-  * *regex_v8* - Python port of [http://code.google.com/p/v8/source/browse/trunk/benchmarks/regexp.js V8's regex benchmark].
+  * *regex* - collection of regex benchmarks:
+    * *regex_effbot* - Some of the original benchmarks used to tune mainline Python's current regex engine.
+    * *regex_v8* - Python port of [http://code.google.com/p/v8/source/browse/trunk/benchmarks/regexp.js V8's regex benchmark].
   * *slowpickle* - use the pure-Python `pickle` module to pickle a variety of datasets.
   * *slowspitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table. Unlike the `spitfire` benchmark listed below, `slowspitfire` does not use Psyco.
   * *slowunpickle* - use the pure-Python `pickle` module to unpickle a variety of datasets.
   * *spitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table, taking advantage of Psyco for acceleration.
-  * *startup* - collection of microbenchmarks focused on Python interpreter start-up time.
+  * *startup* - collection of microbenchmarks focused on Python interpreter start-up time:
+    * *normal_startup* - start Python, then exit immediately.
+    * *startup_nosite* - start Python with the `-S` option, then exit immediately.
   * *unpickle* - use the `cPickle` module to unpickle a variety of datasets.
 
 ==Memory benchmarking==
