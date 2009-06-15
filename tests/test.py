@@ -179,6 +179,10 @@ def TestPyxml():
         lines = output.splitlines()
         return lines[-1].endswith("OK.")
 
+def TestSympy():
+    output = CallAndCaptureOutput([sys.executable, "-E", "setup.py", "test"])
+    return not output.endswith("DO *NOT* COMMIT!\n")
+
 
 ### Utility code ###
 
