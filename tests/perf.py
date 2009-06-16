@@ -12,7 +12,8 @@ as the baseline and `experiment/python` as the experiment. The --fast and
 --help to get a full list of options that can be passed to -b.
 
 Omitting the -b option will result in the default group of benchmarks being run
-This currently consists of: 2to3, django, slowspitfire, pickle, unpickle.
+This currently consists of: 2to3, django, pickle, regex, slowspitfire, startup,
+unpickle.
 Omitting -b is the same as specifying `-b default`.
 
 To run every benchmark perf.py knows about, use `-b all`.
