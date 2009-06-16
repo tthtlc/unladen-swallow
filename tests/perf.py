@@ -473,14 +473,14 @@ def BM_PyBench(base_python, changed_python, options):
                                TemporaryFilename(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
             RemovePycs()
-            subprocess.check_call(LogCall(changed_python + ["-E", "-O",
+            subprocess.check_call(LogCall(changed_python + ["-E",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", changed_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
             RemovePycs()
-            subprocess.check_call(LogCall(base_python + ["-E", "-O",
+            subprocess.check_call(LogCall(base_python + ["-E",
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", base_pybench,
@@ -524,7 +524,7 @@ def Measure2to3(python, options):
     with open(os.devnull, "wb") as dev_null:
         RemovePycs()
         # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall(python + ["-E", "-O",
+        subprocess.check_call(LogCall(python + ["-E",
                                        TWO_TO_THREE_PROG,
                                        "-f", "all",
                                        target]),
@@ -538,7 +538,7 @@ def Measure2to3(python, options):
         mem_usage = []
         for _ in range(trials):
             start_time = GetChildUserTime()
-            subproc = subprocess.Popen(LogCall(python + ["-E", "-O",
+            subproc = subprocess.Popen(LogCall(python + ["-E",
                                                 TWO_TO_THREE_PROG,
                                                 "-f", "all",
                                                 target]),
@@ -684,7 +684,7 @@ def MeasureDjango(python, options):
         trials = 5
 
     RemovePycs()
-    command = python + ["-O", TEST_PROG, "-n", trials]
+    command = python + [TEST_PROG, "-n", trials]
     result, mem_usage = CallAndCaptureOutput(command, django_env,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -766,7 +766,7 @@ def MeasureSpitfire(python, options, env=None, extra_args=[]):
         trials = 5
 
     RemovePycs()
-    command = python + ["-O", TEST_PROG, "-n", trials] + extra_args
+    command = python + [TEST_PROG, "-n", trials] + extra_args
     result, mem_usage = CallAndCaptureOutput(command, env, options.track_memory)
     times = [float(line) for line in result.splitlines()]
     return times, mem_usage
@@ -849,7 +849,7 @@ def MeasurePickle(python, options, extra_args):
         trials = 5
 
     RemovePycs()
-    command = python + ["-O", TEST_PROG, "-n", trials] + extra_args
+    command = python + [TEST_PROG, "-n", trials] + extra_args
     result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -929,7 +929,7 @@ def MeasureAi(python, options):
         trials = 5
 
     RemovePycs()
-    command = python + ["-E", "-O", TEST_PROG, "-n", trials]
+    command = python + ["-E", TEST_PROG, "-n", trials]
     result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -1006,7 +1006,7 @@ def BM_normal_startup(base_python, changed_python, options):
     else:
         num_loops = 50
 
-    opts = ["-E", "-O"]
+    opts = ["-E"]
     changed_data = MeasureStartup(changed_python, opts, num_loops,
                                   options.track_memory)
     base_data = MeasureStartup(base_python, opts, num_loops,
@@ -1025,7 +1025,7 @@ def BM_startup_nosite(base_python, changed_python, options):
     else:
         num_loops = 100
 
-    opts = ["-E", "-O", "-S"]
+    opts = ["-E", "-S"]
     changed_data = MeasureStartup(changed_python, opts, num_loops,
                                   options.track_memory)
     base_data = MeasureStartup(base_python, opts, num_loops,
@@ -1057,7 +1057,7 @@ def MeasureRegexPerformance(python, bm_path, options):
         trials = 5
 
     RemovePycs()
-    command = python + ["-E", "-O", TEST_PROG, "-n", trials]
+    command = python + ["-E", TEST_PROG, "-n", trials]
     result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
                                              track_memory=options.track_memory)
     times = [float(line) for line in result.splitlines()]
@@ -1220,8 +1220,8 @@ if __name__ == "__main__":
     options.changed_binary = changed
 
     base_args, changed_args = ParsePythonArgsOption(options.args)
-    base_cmd_prefix = [base] + base_args
-    changed_cmd_prefix = [changed] + changed_args
+    base_cmd_prefix = [base, "-O"] + base_args
+    changed_cmd_prefix = [changed, "-O"] + changed_args
 
     if options.track_memory:
         try:
