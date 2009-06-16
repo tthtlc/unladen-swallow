@@ -1086,6 +1086,56 @@ def BM_regex_effbot(base_python, changed_python, options):
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
+def MeasureThreading(python, bm_name, options):
+    """Test the performance of Python's threading support.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        bm_name: name of the threading benchmark to run.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run the threading benchmark once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    TEST_PROG = Relative("performance/bm_threading.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = python + ["-E", TEST_PROG, "-n", trials, bm_name]
+    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
+def ThreadingBenchmark(base_python, changed_python, bm_name, options):
+    try:
+        changed_data = MeasureThreading(changed_python, bm_name, options)
+        base_data = MeasureThreading(base_python, bm_name, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
+def BM_threaded_count(base_python, changed_python, options):
+    bm_name = "threaded_count"
+    return ThreadingBenchmark(base_python, changed_python, bm_name, options)
+
+
+def BM_iterative_count(base_python, changed_python, options):
+    bm_name = "iterative_count"
+    return ThreadingBenchmark(base_python, changed_python, bm_name, options)
+
+
 def _FindAllBenchmarks():
     return dict((name[3:].lower(), func)
                 for (name, func) in sorted(globals().iteritems())
@@ -1099,6 +1149,7 @@ BENCH_GROUPS = {"default": ["2to3", "django", "regex", "slowspitfire",
                             "startup", "pickle", "unpickle"],
                 "startup": ["normal_startup", "startup_nosite"],
                 "regex": ["regex_v8", "regex_effbot"],
+                "threading": ["threaded_count", "iterative_count"],
                 "all": _FindAllBenchmarks().keys(),
                }
 
