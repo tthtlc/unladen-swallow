@@ -38,6 +38,8 @@ This will run the 2to3 and Django template benchmarks in rigorous mode (lots of 
   * *startup* - collection of microbenchmarks focused on Python interpreter start-up time:
     * *normal_startup* - start Python, then exit immediately.
     * *startup_nosite* - start Python with the `-S` option, then exit immediately.
+  * *threading* - collection of microbenchmarks for Python's threading support. These benchmarks come in pairs: an iterative version (iterative_foo), and a multithreaded version (threaded_foo).
+    * *threaded_count*, *iterative_count* - spin in a while loop, counting down from a large number.
   * *unpickle* - use the `cPickle` module to unpickle a variety of datasets.
 
 ==Memory benchmarking==
