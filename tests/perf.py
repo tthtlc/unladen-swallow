@@ -628,9 +628,9 @@ def CompareMultipleRuns(base_times, changed_times, options):
     return (("Min: %(min_base).3f -> %(min_changed).3f:" +
              " %(delta_min)s\n" +
              "Avg: %(avg_base).3f -> %(avg_changed).3f:" +
-             " %(delta_avg)s\n" +
+             " %(delta_avg)s\n" + t_msg +
              "Stddev: %(std_base).3f -> %(std_changed).3f:" +
-             " %(delta_std)s\n" + t_msg)
+             " %(delta_std)s\n")
              % locals())
 
 
