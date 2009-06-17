@@ -215,14 +215,6 @@ def _ReadSmapsFile(pid):
         return f.read()
 
 
-def MemDelta(old, new):
-    delta = ((new - old) / new) * 100
-    if delta > 0:
-        return "%.2f%% bigger" % delta
-    else:
-        return "%.2f%% smaller" % -delta
-
-
 class MemoryUsageFuture(threading.Thread):
     """Continuously sample a process's memory usage for its lifetime.
 
@@ -308,7 +300,7 @@ def GetMemoryUsageChart(base_usage, changed_usage, options):
 def CompareMemoryUsage(base_usage, changed_usage, options):
     """Like CompareMultipleRuns, but for memory usage."""
     max_base, max_changed = max(base_usage), max(changed_usage)
-    delta_max = MemDelta(max_base, max_changed)
+    delta_max = QuantityDelta(max_base, max_changed)
 
     raw_link = GetMemoryUsageChart(base_usage, changed_usage, options)
     chart_link = ShortenUrl(raw_link)
