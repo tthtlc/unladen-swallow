@@ -24,6 +24,10 @@ DATA2 = [79.3, 78.3, 85.3, 79.3, 88.9, 91.2, 87.2, 89.2, 93.3, 79.9]
 
 class TestStatsFunctions(unittest.TestCase):
 
+    def testSampleStdDev(self):
+        result = perf.SampleStdDev([1, 2, 3, 4, 5])
+        self.assertAlmostEqual(result, 1.58, places=2)
+
     def testPooledSampleVariance(self):
         result = perf.PooledSampleVariance(DATA1, DATA2)
         self.assertAlmostEqual(result, 31.782, places=3)

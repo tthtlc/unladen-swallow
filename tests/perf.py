@@ -67,7 +67,21 @@ info = logging.info
 
 
 def avg(seq):
-    return sum(seq) / len(seq)
+    return sum(seq) / float(len(seq))
+
+
+def SampleStdDev(seq):
+    """Compute the standard deviation of a sample.
+
+    Args:
+        seq: the numeric input data sequence.
+
+    Returns:
+        The standard deviation as a float.
+    """
+    mean = avg(seq)
+    squares = ((x - mean) ** 2 for x in seq)
+    return math.sqrt(sum(squares) / (len(seq) - 1))
 
 
 # A table of 95% confidence intervals for a two-tailed t distribution, as a
@@ -413,6 +427,14 @@ def TimeDelta(old, new):
         return "%.2f%% faster" % -delta
 
 
+def QuantityDelta(old, new):
+    delta = ((new - old) / new) * 100
+    if delta > 0:
+        return "%.2f%% larger" % delta
+    else:
+        return "%.2f%% smaller" % -delta
+
+
 def BuildEnv(env):
     """Massage an environment variables dict for the host platform.
 
@@ -600,8 +622,11 @@ def CompareMultipleRuns(base_times, changed_times, options):
 
     min_base, min_changed = base_times[0], changed_times[0]
     avg_base, avg_changed = avg(base_times), avg(changed_times)
+    std_base = SampleStdDev(base_times)
+    std_changed = SampleStdDev(changed_times)
     delta_min = TimeDelta(min_base, min_changed)
     delta_avg = TimeDelta(avg_base, avg_changed)
+    delta_std = QuantityDelta(std_base, std_changed)
 
     t_msg = "Not significant\n"
     significant, t_score = IsSignificant(base_times, changed_times)
@@ -611,7 +636,9 @@ def CompareMultipleRuns(base_times, changed_times, options):
     return (("Min: %(min_base).3f -> %(min_changed).3f:" +
              " %(delta_min)s\n" +
              "Avg: %(avg_base).3f -> %(avg_changed).3f:" +
-             " %(delta_avg)s\n" + t_msg)
+             " %(delta_avg)s\n" +
+             "Stddev: %(std_base).3f -> %(std_changed).3f:" +
+             " %(delta_std)s\n" + t_msg)
              % locals())
 
 
