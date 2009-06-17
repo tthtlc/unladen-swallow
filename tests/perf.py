@@ -1299,8 +1299,8 @@ if __name__ == "__main__":
     options.changed_binary = changed
 
     base_args, changed_args = ParsePythonArgsOption(options.args)
-    base_cmd_prefix = [base, "-O"] + base_args
-    changed_cmd_prefix = [changed, "-O"] + changed_args
+    base_cmd_prefix = [base] + base_args
+    changed_cmd_prefix = [changed] + changed_args
 
     if options.track_memory:
         try:
