@@ -61,6 +61,10 @@ import tempfile
 import time
 import threading
 import urllib2
+try:
+    import multiprocessing
+except ImportError:
+    multiprocessing = None
 
 
 info = logging.info
@@ -1314,6 +1318,8 @@ if __name__ == "__main__":
 
     print
     print "Report on %s" % " ".join(platform.uname())
+    if multiprocessing:
+        print "Total CPU cores:", multiprocessing.cpu_count()
     for name, result in results:
         print
         print name + ":"
