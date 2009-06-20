@@ -27,7 +27,7 @@ Positive benchmarks are parsed before the negative benchmarks are subtracted.
 If --track_memory is passed, perf.py will continuously sample the benchmark's
 memory usage, then give you the maximum usage and a link to a Google Chart of
 the benchmark's memory usage over time. This currently only works on Linux
-2.6.16 and higher.
+2.6.16 and higher or Windows with PyWin32.
 
 If --args is passed, it specifies extra arguments to pass to the test
 python binaries. For example,
@@ -65,6 +65,13 @@ try:
     import multiprocessing
 except ImportError:
     multiprocessing = None
+try:
+    import win32api
+    import win32con
+    import win32process
+    import pywintypes
+except ImportError:
+    win32api = None
 
 
 info = logging.info
@@ -219,6 +226,68 @@ def _ReadSmapsFile(pid):
         return f.read()
 
 
+# Code to sample memory usage on Win32
+
+def _GetWin32MemorySample(process_handle):
+    """Gets the amount of memory in use by a process on Win32
+
+    Args:
+        process_handle: handle to the process to get the memory usage for
+
+    Returns:
+        The size of the process's private data, in kilobytes
+    """
+    pmi = win32process.GetProcessMemoryInfo(process_handle)
+    return pmi["PagefileUsage"] // 1024
+
+
+@contextlib.contextmanager
+def _OpenWin32Process(pid):
+    """Open a process on Win32 and close it when done
+
+    Args:
+        pid: the process id of the process to open
+
+    Yields:
+        A handle to the process
+
+    Raises:
+        pywintypes.error if the process does not exist or the user
+            does not have sufficient privileges to open it
+
+    Example:
+        with _OpenWin32Process(pid) as process_handle:
+            ...
+    """
+    h = win32api.OpenProcess(
+            win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ,
+            0,
+            pid)
+    try:
+        yield h
+    finally:
+        win32api.CloseHandle(h)
+
+
+def CanGetMemoryUsage():
+    """Returns True if MemoryUsageFuture is supported on this platform."""
+    if win32api:
+        try:
+            with _OpenWin32Process(win32process.GetCurrentProcessId()):
+                return True
+        except pywintypes.error:
+            pass
+
+    try:
+        _ReadSmapsFile(pid=1)
+    except IOError:
+        pass
+    else:
+        return True
+
+    return False
+
+
 class MemoryUsageFuture(threading.Thread):
     """Continuously sample a process's memory usage for its lifetime.
 
@@ -239,15 +308,23 @@ class MemoryUsageFuture(threading.Thread):
         self.start()
 
     def run(self):
-        while True:
-            try:
-                sample = _ParseSmapsData(_ReadSmapsFile(self._pid))
-                self._usage.append(sample)
-            except IOError:
-                # Once the process exits, its smaps file will go away,
-                # leading _ReadSmapsFile() to raise IOError.
-                self._done.set()
-                return
+        if win32api:
+            with _OpenWin32Process(self._pid) as process_handle:
+                while (win32process.GetExitCodeProcess(process_handle) ==
+                       win32con.STILL_ACTIVE):
+                    sample = _GetWin32MemorySample(process_handle)
+                    self._usage.append(sample)
+                    time.sleep(0.001)
+        else:
+            while True:
+                try:
+                    sample = _ParseSmapsData(_ReadSmapsFile(self._pid))
+                    self._usage.append(sample)
+                except IOError:
+                    # Once the process exits, its smaps file will go away,
+                    # leading _ReadSmapsFile() to raise IOError.
+                    break
+        self._done.set()
 
     def GetMemoryUsage(self):
         """Get the memory usage over time for the process being sampled.
@@ -1299,11 +1376,10 @@ if __name__ == "__main__":
     changed_cmd_prefix = [changed] + changed_args
 
     if options.track_memory:
-        try:
-            _ReadSmapsFile(pid=1)
-        except IOError:
+        if not CanGetMemoryUsage():
             # TODO(collinwinter): make this work on other platforms.
-            parser.error("--track_memory requires Linux 2.6.16 or above")
+            parser.error("--track_memory requires Windows with PyWin32 or " +
+                         "Linux 2.6.16 or above")
 
     logging.basicConfig(level=logging.INFO)
 
