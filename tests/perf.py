@@ -687,7 +687,7 @@ def CompareMultipleRuns(base_times, changed_times, options):
         # below.
         base_time, changed_time = base_times[0], changed_times[0]
         time_delta = TimeDelta(base_time, changed_time)
-        return ("%(base_time).2f -> %(changed_time).2f: %(time_delta)s"
+        return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
                 % locals())
 
     base_times = sorted(base_times)
@@ -706,11 +706,11 @@ def CompareMultipleRuns(base_times, changed_times, options):
     if significant:
         t_msg = "Significant (t=%f, a=0.95)\n" % t_score
 
-    return (("Min: %(min_base).3f -> %(min_changed).3f:" +
+    return (("Min: %(min_base)f -> %(min_changed)f:" +
              " %(delta_min)s\n" +
-             "Avg: %(avg_base).3f -> %(avg_changed).3f:" +
+             "Avg: %(avg_base)f -> %(avg_changed)f:" +
              " %(delta_avg)s\n" + t_msg +
-             "Stddev: %(std_base).3f -> %(std_changed).3f:" +
+             "Stddev: %(std_base).5f -> %(std_changed).5f:" +
              " %(delta_std)s\n")
              % locals())
 
@@ -1235,6 +1235,45 @@ def BM_threaded_count(base_python, changed_python, options):
 def BM_iterative_count(base_python, changed_python, options):
     bm_name = "iterative_count"
     return ThreadingBenchmark(base_python, changed_python, bm_name, options)
+
+
+def MeasureUnpackSequence(python, options):
+    """Test the performance of sequence unpacking.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run the threading benchmark once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    TEST_PROG = Relative("performance/bm_unpack_sequence.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50000
+    if options.rigorous:
+        trials = 100000
+    elif options.fast:
+        trials = 500
+
+    RemovePycs()
+    command = python + ["-E", TEST_PROG, "-n", trials]
+    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
+def BM_unpack_sequence(base_python, changed_python, options):
+    try:
+        changed_data = MeasureUnpackSequence(changed_python, options)
+        base_data = MeasureUnpackSequence(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
 
 
 def _FindAllBenchmarks():
