@@ -619,13 +619,11 @@ def Measure2to3(python, options):
 
     with open(os.devnull, "wb") as dev_null:
         RemovePycs()
-        # Warm up the cache and .pyc files.
-        subprocess.check_call(LogCall(python + ["-E",
-                                       TWO_TO_THREE_PROG,
-                                       "-f", "all",
-                                       target]),
-                              stdout=dev_null, stderr=dev_null,
-                              env=TWO_TO_THREE_ENV)
+        # Warm up the cache and .pyc files. Use CallAndCaptureOutput() for its
+        # more useful error messages.
+        CallAndCaptureOutput(python +
+                             ["-E", TWO_TO_THREE_PROG, "-f", "all", target],
+                             env=TWO_TO_THREE_ENV)
         if options.rigorous:
             trials = 5
         else:
