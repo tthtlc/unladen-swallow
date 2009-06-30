@@ -1,0 +1,29 @@
+#summary Summary of the testing done/available for Unladen Swallow
+
+Our goal is to be as compatible with mainline CPython 2.6.1 as possible, with both pure-Python code and C-language extension modules able to migrate seemlessly, with at most a simple recompilation required. To that end, we have a number of open-source Python projects that are run against every commit to make sure we haven't broken anything.
+
+== Testing Correctness ==
+
+  * Python's own regression test suite
+  * Pure-Python apps
+    * 2to3
+    * Cheetah
+    * Django
+    * Nose
+    * Setuptools
+    * SymPy
+  * C Extension modules
+    * NumPy
+    * PyXML
+    * SWIG
+
+We add new projects as we find them relevant or sufficiently important; we don't want to waste time testing the same code paths over and over again. Some projects that we'd like to add -- Twisted, for example -- have a lot of dependencies, and have taken more time than desirable to get fully working. Other projects -- like Mercurial -- have interesting tests, but they're flaky or very slow to run.
+
+
+== Testing the JIT ==
+
+Unladen Swallow exposes knobs for tuning which code objects are run through LLVM. This is fairly coarse-grained, but allows us to test both the bytecode virtual machine and the native code pathways extensively:
+
+  * *python -j never*: run all code through the bytecode interpreter.
+  * *python -j whenhot*: the default; only run hot code though JIT compilation.
+  * *python -j always*: compile every piece of Python code to machine code.
