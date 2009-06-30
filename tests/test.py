@@ -182,6 +182,10 @@ def TestPyxml():
 def TestSetuptools():
     return DefaultPassCheck([sys.executable, "-E", "setup.py", "test"])
 
+def TestSwig():
+    ret_code = subprocess.call(["make", "check"])
+    return ret_code == 0
+
 def TestSympy():
     output = CallAndCaptureOutput([sys.executable, "-E", "setup.py", "test"])
     return not output.endswith("DO *NOT* COMMIT!\n")

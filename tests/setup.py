@@ -2,7 +2,8 @@
 
 """Wrapper script for building all of Unladen Swallow's third-party tests.
 
-This is equivalent to manually invoking setup.py in each lib/ directory.
+This is equivalent to manually invoking setup.py in each lib/ directory, except
+in cases like swig, where configure/make is invoked.
 """
 
 __author__ = "collinwinter@google.com (Collin Winter)"
@@ -17,19 +18,54 @@ import sys
 SKIP_LIBS = set(["psyco", ".svn"])
 
 
-def SetupSubdir(subdir):
+class swig(object):
+
+    def build(self):
+        # This prefix is used because the continuous build is configured to
+        # delete python_prefix, so this will take care of cleaning up swig as
+        # well. Note that swig isn't actually installed, so this is just to be
+        # sure that we're not polluting /usr/... with potentially-busted swig
+        # installations.
+        python_prefix = os.path.dirname(os.path.dirname(sys.executable))
+        swig_prefix = os.path.join(python_prefix, "swig")
+
+        subprocess.check_call(["./configure", "--without-perl5",
+                               "--without-java", "--without-ruby",
+                               "--without-php", "--disable-ccache",
+                               "--prefix=" + swig_prefix,
+                               "--without-tcl",
+                               "--with-python=" + sys.executable])
+        subprocess.check_call(["make"])
+
+    def install(self):
+        # This intentionally doesn't install anything. We only install Python
+        # modules/scripts because some tests require them. In this case,
+        # we don't need to install swig for it to work. This is here to make
+        # test.py's life easier, not to serve as a general-purpose setup.py
+        # wrapper.
+        self.build()
+
+    def clean(self):
+        subprocess.check_call(["make", "clean"])
+
+
+def SetupSubdir(subdir, argv):
     """Run the setup.py command in the given subdir.
 
     Args:
         subdir: a directory relative to the current working directory where
             the setup.py command should be run.
+        argv: list of arguments given to setup.py. Example: ["clean"].
     """
     current_dir = os.getcwd()
     os.chdir(subdir)
     try:
-        retval = subprocess.call([sys.executable, "setup.py"] + sys.argv[1:])
-        if retval:
-          raise SystemExit()
+        setup_class = globals().get(os.path.basename(subdir))
+        if setup_class:
+            # This translates to, e.g., swig().build().
+            getattr(setup_class(), argv[0])()
+        else:
+            subprocess.check_call([sys.executable, "setup.py"] + argv)
     finally:
         os.chdir(current_dir)
 
@@ -54,4 +90,5 @@ def FindThirdPartyLibs(basedir):
 if __name__ == "__main__":
     basedir = os.path.join(os.path.split(__file__)[0], "lib")
     for subdir in FindThirdPartyLibs(basedir):
-        SetupSubdir(subdir)
+        print "### Setting up", subdir
+        SetupSubdir(subdir, sys.argv[1:])
