@@ -193,8 +193,8 @@ def TestSympy():
 def TestZope_interface():
     # zope.interface is included because Twisted and a number of Zope packages
     # depend on it.
-    return DefaultPasCheck([sys.executable, "-E", "setup.py", "test",
-                            "-s", "zope.interface.tests"])
+    return DefaultPassCheck([sys.executable, "-E", "setup.py", "test",
+                             "-s", "zope.interface.tests"])
 
 
 ### Utility code ###
