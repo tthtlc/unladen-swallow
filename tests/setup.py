@@ -33,7 +33,7 @@ class swig(object):
                                "--without-java", "--without-ruby",
                                "--without-php", "--disable-ccache",
                                "--prefix=" + swig_prefix,
-                               "--without-tcl",
+                               "--without-tcl", "--without-r",
                                "--with-python=" + sys.executable])
         subprocess.check_call(["make"])
 
