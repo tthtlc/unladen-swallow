@@ -70,6 +70,25 @@ def SetupSubdir(subdir, argv):
         os.chdir(current_dir)
 
 
+def SortLibs(libs):
+    """Sort the third-party libraries as they should be installed.
+
+    Args:
+        libs: iterable of library paths.
+
+    Returns:
+        The input iterable `libs` as a list, sorted in the order they should
+        be processed.
+    """
+    def KeyFunc(lib):
+        priority = 100  # Higher numbers are sorted later in the list.
+        if lib.endswith("setuptools"):
+            priority = 0
+        return (priority, lib)
+
+    return sorted(libs, key=KeyFunc)
+
+
 def FindThirdPartyLibs(basedir):
     """Enumerate the subdirectories of the given base directory.
 
@@ -89,6 +108,6 @@ def FindThirdPartyLibs(basedir):
 
 if __name__ == "__main__":
     basedir = os.path.join(os.path.split(__file__)[0], "lib")
-    for subdir in FindThirdPartyLibs(basedir):
+    for subdir in SortLibs(FindThirdPartyLibs(basedir)):
         print "### Setting up", subdir
         SetupSubdir(subdir, sys.argv[1:])

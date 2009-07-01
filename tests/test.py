@@ -190,6 +190,12 @@ def TestSympy():
     output = CallAndCaptureOutput([sys.executable, "-E", "setup.py", "test"])
     return not output.endswith("DO *NOT* COMMIT!\n")
 
+def TestZope_interface():
+    # zope.interface is included because Twisted and a number of Zope packages
+    # depend on it.
+    return DefaultPasCheck([sys.executable, "-E", "setup.py", "test",
+                            "-s", "zope.interface.tests"])
+
 
 ### Utility code ###
 
