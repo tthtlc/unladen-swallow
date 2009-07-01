@@ -1,0 +1,3 @@
+This is Swig 1.3.39. Changes made for Unladen Swallow:
+- Disabled all tests related to Boost. These assume you have Boost installed
+  without checking for it at ./configure-time.
