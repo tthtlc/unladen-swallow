@@ -1,0 +1,1 @@
+This is cvs2svn trunk r4809, minus some tests. No released version of cvs2svn worked well with mainline Python 2.6.1, and trunk@r4809 worked best. I still needed to disable a number of tests to get the test suite to pass.

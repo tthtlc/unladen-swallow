@@ -101,7 +101,8 @@ def CallAndCaptureOutput(command, env=None):
         env: optional; dict of environment variables to set.
 
     Returns:
-        The captured stdout + stderr as a string.
+        (output, retcode) where output is captured stdout + stderr as a string;
+        retcode is the process's return code.
 
     Raises:
         RuntimeError: if the command failed. The value of the exception will
@@ -114,7 +115,7 @@ def CallAndCaptureOutput(command, env=None):
     with BuildBotMollifier():
         result, err = subproc.communicate()
     print result + err,
-    return result + err
+    return (result + err, subproc.returncode)
 
 
 def DefaultPassCheck(command, env=None):
@@ -130,11 +131,16 @@ def DefaultPassCheck(command, env=None):
     Returns:
         True if the test passed, False otherwise.
     """
-    output = CallAndCaptureOutput(command, env)
+    output, _ = CallAndCaptureOutput(command, env)
     lines = output.splitlines()
     if not lines:
         return False
     return lines[-1].startswith("OK")
+
+
+def CheckReturnCode(command):
+    output, ret_code = CallAndCaptureOutput(command)
+    return ret_code == 0
 
 
 ### Wrappers for the third-party modules we don't want to break go here. ###
@@ -148,6 +154,9 @@ def TestCheetah():
     with ChangeDir(os.path.join("src", "Tests")):
         return DefaultPassCheck([sys.executable, "-E", "Test.py"],
                                 env={"PATH": path})
+
+def TestCvs2svn():
+    return CheckReturnCode([sys.executable, "-E", "run-tests.py", "-v"])
 
 def TestDjango():
     py_path = os.path.join("..", "..", "correctness")
@@ -175,7 +184,7 @@ def TestNumpy():
 
 def TestPyxml():
     with ChangeDir("test"):
-        output = CallAndCaptureOutput([sys.executable, "-E", "regrtest.py"])
+        output, _ = CallAndCaptureOutput([sys.executable, "-E", "regrtest.py"])
         lines = output.splitlines()
         return lines[-1].endswith("OK.")
 
@@ -183,11 +192,10 @@ def TestSetuptools():
     return DefaultPassCheck([sys.executable, "-E", "setup.py", "test"])
 
 def TestSwig():
-    ret_code = subprocess.call(["make", "check"])
-    return ret_code == 0
+    return CheckReturnCode(["make", "check"])
 
 def TestSympy():
-    output = CallAndCaptureOutput([sys.executable, "-E", "setup.py", "test"])
+    output, _ = CallAndCaptureOutput([sys.executable, "-E", "setup.py", "test"])
     return not output.endswith("DO *NOT* COMMIT!\n")
 
 def TestZope_interface():
