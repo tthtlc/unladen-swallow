@@ -30,13 +30,14 @@ class QueuePoolTest(TestBase, AssertsExecutionResults):
             return conn2
         c2 = go()
 
-    def test_second_samethread_connect(self):
-        conn = pool.connect()
-
-        @profiling.function_call_count(5, {'2.4': 3})
-        def go():
-            return pool.connect()
-        c2 = go()
+    # Disabled for Unladen Swallow. See README.unladen.
+    # def test_second_samethread_connect(self):
+    #     conn = pool.connect()
+    #
+    #     @profiling.function_call_count(5, {'2.4': 3})
+    #     def go():
+    #         return pool.connect()
+    #     c2 = go()
 
 
 if __name__ == '__main__':

@@ -191,6 +191,9 @@ def TestPyxml():
 def TestSetuptools():
     return DefaultPassCheck([sys.executable, "-E", "setup.py", "test"])
 
+def TestSqlalchemy():
+    return DefaultPassCheck([sys.executable, "-E", "test/alltests.py"])
+
 def TestSwig():
     return CheckReturnCode(["make", "check"])
 

@@ -1,0 +1,13 @@
+This is SQLAlchemy 0.5.4p2. Four tests have been disabled in this distribution:
+	- profiling.compiler.CompileTest.test_insert
+	- profiling.compiler.CompileTest.test_select
+	- profiling.compiler.CompileTest.test_update
+	- profiling.pool.QueuePoolTest.test_second_samethread_connect
+
+All of these tests were making assertions about how many functions were being
+called. Since Unladen Swallow converted a number of opcodes to function calls,
+this changes the number of expected function calls. SQLAlchemy's profile-testing
+has a way of changing these values per-Python version, but CPython 2.6.1
+and Unladen Swallow 2.6.1 show up as the same version. There's probably a way to
+get around this by being clever, but as a wise man once said, these are not the
+tests we're looking for.
