@@ -37,6 +37,7 @@ At every commit we run the tests for the following projects.
     * Django
     * Nose
     * Setuptools
+    * SQLAlchemy
     * SymPy
   * C Extension modules
     * NumPy
