@@ -231,15 +231,17 @@ if __name__ == "__main__":
     tests_passed = {}
     for dirname, subdir in FindThirdPartyLibs(basedir):
         test_name = dirname.capitalize()
-        test_func = globals()["Test" + test_name]
-
-        print "Testing", test_name
-        current_dir = os.getcwd()
-        os.chdir(subdir)
-        try:
-            tests_passed[test_name] = test_func()
-        finally:
-            os.chdir(current_dir)
+        test_func = globals().get("Test" + test_name)
+        if not test_func:
+            print "No tests defined for", test_name
+        else:
+            print "Testing", test_name
+            current_dir = os.getcwd()
+            os.chdir(subdir)
+            try:
+                tests_passed[test_name] = test_func()
+            finally:
+                os.chdir(current_dir)
 
     if all(tests_passed.values()):
         print "All OK"
