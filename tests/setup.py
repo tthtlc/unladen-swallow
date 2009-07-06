@@ -46,7 +46,7 @@ class swig(object):
         self.build()
 
     def clean(self):
-        subprocess.check_call(["make", "clean"])
+        subprocess.call(["make", "clean"])
 
 
 def SetupSubdir(subdir, argv):
