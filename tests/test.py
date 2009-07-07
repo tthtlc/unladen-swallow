@@ -182,6 +182,10 @@ def TestNumpy():
         return DefaultPassCheck([sys.executable, "-E", "-c",
                                  "import numpy; numpy.test()"])
 
+def TestPycrypto():
+    output, _ = CallAndCaptureOutput([sys.executable, "-E", "test.py"])
+    return "***ERROR" not in output
+
 def TestPyxml():
     with ChangeDir("test"):
         output, _ = CallAndCaptureOutput([sys.executable, "-E", "regrtest.py"])
