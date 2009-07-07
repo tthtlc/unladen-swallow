@@ -186,6 +186,11 @@ def TestPycrypto():
     output, _ = CallAndCaptureOutput([sys.executable, "-E", "test.py"])
     return "***ERROR" not in output
 
+def TestPyopenssl():
+    # Note that this is only half the pyOpenSSL test suite, but it's the half
+    # we're most interested in.
+    return DefaultPassCheck([sys.executable, "-E", "test/test_crypto.py"])
+
 def TestPyxml():
     with ChangeDir("test"):
         output, _ = CallAndCaptureOutput([sys.executable, "-E", "regrtest.py"])

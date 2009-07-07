@@ -1,0 +1,3 @@
+This is pyOpenSSL, branched from trunk with `bzr branch lp:pyopenssl` at
+revno 112. This was done to fix an fatal error in pyOpenSSL when run against
+a version of Python built with --with-pydebug.
