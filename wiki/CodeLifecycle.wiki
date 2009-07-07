@@ -1,8 +1,22 @@
 #summary The lifecycle of various kinds of code, including compiled Python functions.
 
-LLVM assumes certain things about when it can destroy or change Values, especially Functions, and other things about when users can destroy Values, and Unladen Swallow needs to be compatible with that.
+== Creating code ==
+  # Python source code is parsed and compiled to bytecode when it's imported for the first time.
+  # The bytecode is cached in `.pyc` files, which let us skip parsing and the first compilation stage on subsequent imports.
+  # Inside `PyCode_New()` (in `Objects/codeobject.c`) (whether it was called by the bytecode compiler or by loading the .pyc file), if `-j always` is on, we call `_PyCode_Recompile(co, Py_OptimizeFlag)`, which compiles the Python bytecode to LLVM IR using `_PyCode_To_Llvm()`. The IR gets stored in `PyCodeObject::co_llvm_function`.  At this stage, we _don't_ compile the function all the way to machine code.
+  # Each time a function is called, `PyEval_EvalCodeEx` (in Python/eval.cc) calls mark_called_and_maybe_compile(). This increments the code object's call count. If `-j whenhot` is on and the call count passes the hotness threshold (currently defined by Py_HOT_OR_NOT in the same file), then we compile the code to IR.
+  # Inside mark_called_and_maybe_compile(), we check whether anyone (either `PyCode_New`, the hotness threshold, or the user directly) has set co_use_llvm.  If so, we ask LLVM to translate it to machine code with `_LlvmFunction_Jit` (defined in `Objects/_llvmfunctionobject.cc`). This currently uses `ExecutionEngine::getPointerToFunction`, but we may eventually do something more amenable to recompilation.  The pointer to the native function is cached as `PyCodeObject::co_native_function`.
 
-Python functions are compiled to LLVM IR in a single call, which assumes the Module doesn't change at all during the call. (This will eventually be a bottleneck to threaded compilation, but we'll deal with that when we get there.) The output IR will refer to Module globals, including constants, CPython-controlled variables, and eventually inlinable Functions. Once a Function is emitted, its semantics never change.
+All of this happens in a single thread, which lets us assume that the Module doesn't change out from under us in any particular phase. (This will eventually be a bottleneck to threaded compilation, but we'll deal with that when we get there.)
+
+The output IR refers to Module globals, including constants, CPython-controlled variables, and eventually inlinable Functions. 
+
+== Changing code ==
+
+Once an IR Function is translated from bytecode, its semantics never change.  It may be optimized further, but there's currently no way to re-JIT a Function to machine code.
+
+== Destroying code ==
+LLVM assumes certain things about when it can destroy or change Values, especially Functions, and other things about when users can destroy Values, and Unladen Swallow needs to be compatible with that.
 
 Llvm Functions are referenced by a PyLlvmFunctionObject, which is referenced by a PyCodeObject, which is referenced by one or more PyFunctionObjects. A referenced llvm::Function has external linkage to prevent module-level optimizations from deleting it or changing its signature. While a function is executing, its thread keeps a reference to the PyFunctionObject which keeps the PyLlvmFunctionObject alive. When the PyLlvmFunctionObject loses its last reference, we currently 1) set the llvm::Function to internal and 2) if the use-list is empty, free the JITted code if any and erase the Function.
 
