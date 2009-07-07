@@ -49,6 +49,24 @@ class swig(object):
         subprocess.call(["make", "clean"])
 
 
+class zodb(object):
+
+    def build(self):
+        subprocess.check_call([sys.executable, "-E", "bootstrap.py"])
+        subprocess.check_call([sys.executable, "-E", "bin/buildout"])
+
+    def install(self):
+        # This intentionally doesn't install anything. We only install Python
+        # modules/scripts because some tests require them. In this case,
+        # we don't need to install ZODB for it to work. This is here to make
+        # test.py's life easier, not to serve as a general-purpose setup.py
+        # wrapper.
+        self.build()
+
+    def clean(self):
+        subprocess.call([sys.executable, "-E", "setup.py", "clean"])
+
+
 def SetupSubdir(subdir, argv):
     """Run the setup.py command in the given subdir.
 
@@ -82,7 +100,7 @@ def SortLibs(libs):
     """
     def KeyFunc(lib):
         priority = 100  # Higher numbers are sorted later in the list.
-        if lib.endswith("setuptools"):
+        if lib.endswith("setuptools") or lib.endswith("zope_interface"):
             priority = 0
         return (priority, lib)
 
