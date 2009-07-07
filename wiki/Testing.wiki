@@ -30,19 +30,19 @@ $ /path/to/test/python test.py
 At every commit we run the tests for the following projects.
 
   * Python's own regression test suite
-  * Pure-Python apps
+  * These applications/libraries:
     * 2to3
     * Cheetah
     * cvs2svn
     * Django
     * Nose
-    * Setuptools
-    * SQLAlchemy
-    * SymPy
-  * C Extension modules
     * NumPy
     * PyXML
+    * Setuptools
+    * SQLAlchemy
     * SWIG
+    * SymPy
+    * ZODB
 
 We add new projects as we find them relevant or sufficiently important; we don't want to waste time testing the same code paths over and over again. Some projects that we'd like to add -- Twisted, for example -- have a lot of dependencies, and have taken more time than desirable to get fully working. Other projects -- like Mercurial -- have interesting tests, but they're flaky or very slow to run.
 
