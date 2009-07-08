@@ -138,8 +138,8 @@ def DefaultPassCheck(command, env=None):
     return lines[-1].startswith("OK")
 
 
-def CheckReturnCode(command):
-    output, ret_code = CallAndCaptureOutput(command)
+def CheckReturnCode(command, env=None):
+    output, ret_code = CallAndCaptureOutput(command, env)
     return ret_code == 0
 
 
@@ -209,6 +209,13 @@ def TestSwig():
 def TestSympy():
     output, _ = CallAndCaptureOutput([sys.executable, "-E", "setup.py", "test"])
     return not output.endswith("DO *NOT* COMMIT!\n")
+
+def TestTwisted():
+    # Make sys.executable take precedence over other python binaries. I don't
+    # see that trial has a way to pass this kind of thing in as an argument.
+    path = os.pathsep.join([os.path.dirname(sys.executable),
+                            os.environ["PATH"]])
+    return CheckReturnCode(["trial", "twisted"], env={"PATH": path})
 
 def TestZodb():
     return CheckReturnCode([sys.executable, "-E", "bin/test"])
