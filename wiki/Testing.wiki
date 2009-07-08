@@ -37,11 +37,14 @@ At every commit we run the tests for the following projects.
     * Django
     * Nose
     * NumPy
+    * PyCrypto
+    * pyOpenSSL
     * PyXML
     * Setuptools
     * SQLAlchemy
     * SWIG
     * SymPy
+    * Twisted
     * ZODB
 
 We add new projects as we find them relevant or sufficiently important; we don't want to waste time testing the same code paths over and over again. Some projects that we'd like to add -- Twisted, for example -- have a lot of dependencies, and have taken more time than desirable to get fully working. Other projects -- like Mercurial -- have interesting tests, but they're flaky or very slow to run.
