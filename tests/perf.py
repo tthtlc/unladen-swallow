@@ -12,11 +12,11 @@ as the baseline and `experiment/python` as the experiment. The --fast and
 --help to get a full list of options that can be passed to -b.
 
 Omitting the -b option will result in the default group of benchmarks being run
-This currently consists of: 2to3, django, pickle, regex, slowspitfire, startup,
-unpickle.
-Omitting -b is the same as specifying `-b default`.
+This currently consists of: 2to3, django, slowspitfire, slowpickle,
+slowunpickle. Omitting -b is the same as specifying `-b default`.
 
-To run every benchmark perf.py knows about, use `-b all`.
+To run every benchmark perf.py knows about, use `-b all`. To see a full list of
+all available benchmarks, use `--help`.
 
 Negative benchmarks specifications are also supported: `-b -2to3` will run every
 benchmark in the default group except for 2to3 (this is the same as
@@ -1283,11 +1283,12 @@ def _FindAllBenchmarks():
 # Benchmark groups. The "default" group is what's run if no -b option is
 # specified. The "all" group includes every benchmark perf.py knows about.
 # If you update the default group, be sure to update the module docstring, too.
-BENCH_GROUPS = {"default": ["2to3", "django", "regex", "slowspitfire",
-                            "startup", "pickle", "unpickle"],
+BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "slowpickle",
+                            "slowunpickle"],
                 "startup": ["normal_startup", "startup_nosite"],
                 "regex": ["regex_v8", "regex_effbot"],
                 "threading": ["threaded_count", "iterative_count"],
+                "cpickle": ["pickle", "unpickle"],
                 "all": _FindAllBenchmarks().keys(),
                }
 
