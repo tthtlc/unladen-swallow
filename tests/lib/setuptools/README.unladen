@@ -1,0 +1,5 @@
+This is setuptools 0.6c9.
+
+setuptools/depends.py has been patched to disable some functionality that makes
+unsound assumptions about CPython bytecode that don't hold under Unladen Swallow
+2009Q1; this just adds another test alongside tests for Jython and IronPython.
