@@ -1,7 +1,7 @@
 #summary How to build Unladen Swallow
 #labels Featured
 
-<wiki:toc max_depth="2" />
+<wiki:toc max_depth="3" />
 
 == The basics ==
 
@@ -175,3 +175,53 @@ $ ./configure --with-llvm=/tmp/llvm && make
 }}}
 
 This will configure, build and install LLVM into `/tmp/llvm`, then reuse that directory when building Unladen Swallow. The LLVM installation in `/tmp/llvm` can be reused and shared among different Unladen Swallow object directories, saving you considerable build time. See [http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/llvm/install-llvm.sh install-llvm.sh] for more details.
+
+
+== Performance analysis ==
+
+Let's say you have a change you'd like to make to Python, and you'd like to see if it impacts performance. The main tool for this is the benchmarks available via `perf.py` (see [Benchmarks] for checkout instructions).
+
+This will compare the performance of two Python binaries, a control binary and an experiment binary, on a benchmark based on Django template rendering.
+
+{{{
+$ ./perf.py -r -b django control/python experiment/python
+}}}
+
+`perf.py -r` will run the benchmarks in a more rigorous mode. In practice, this usually means increasing the number of iterations. When making judgements about the performance improvement/degradation caused by your change, you should always use `-r`.
+
+`perf.py` will run some basic stats on the results for you, yielding the minimum running time, the arithmetic mean running time, the standard deviation and a two-tailed T-test to determine significance. If `perf.py` tells you that the performance change is insignificant or the printed `t` value is low (the absolute value is less than, say, five), it's probably right. The larger the `t` value, the more confident we are in the result.
+
+If you want to pass arguments to the control or experiment binaries, use `perf.py --args`. This will compare the performance of Unladen Swallow's -O2 and -O3 flags on the Django templates benchmark:
+
+{{{
+$ ./perf.py -r -b django --args "-O2,-O3" control/python control/python
+}}}
+
+
+=== Improving startup performance ===
+
+Python startup time is heavily dependent on the number of modules imported. If you can find a way to eliminate or delay an import (in either case, getting it out of the critical path for startup), that will usually improve startup time.
+
+See which modules are required to do no work at all:
+
+{{{
+$ ./python.exe -v -c '' 2>&1 | grep ^import
+import zipimport # builtin
+import site # precompiled from /Users/collinwinter/src/us/trunk3/Lib/site.pyc
+import os # precompiled from /Users/collinwinter/src/us/trunk3/Lib/os.pyc
+import errno # builtin
+import posix # builtin
+import posixpath # precompiled from /Users/collinwinter/src/us/trunk3/Lib/posixpath.pyc
+import stat # precompiled from /Users/collinwinter/src/us/trunk3/Lib/stat.pyc
+import genericpath # precompiled from /Users/collinwinter/src/us/trunk3/Lib/genericpath.pyc
+import copy_reg # precompiled from /Users/collinwinter/src/us/trunk3/Lib/copy_reg.pyc
+import encodings # directory /Users/collinwinter/src/us/trunk3/Lib/encodings
+import encodings # precompiled from /Users/collinwinter/src/us/trunk3/Lib/encodings/__init__.pyc
+import codecs # precompiled from /Users/collinwinter/src/us/trunk3/Lib/codecs.pyc
+import _codecs # builtin
+import encodings.aliases # precompiled from /Users/collinwinter/src/us/trunk3/Lib/encodings/aliases.pyc
+import encodings.utf_8 # precompiled from /Users/collinwinter/src/us/trunk3/Lib/encodings/utf_8.pyc
+$
+}}}
+
+`perf.py` includes benchmarks for both normal startup and startup with the `-S` option (don't import `site.py`). These benchmarks are `-b normal_startup` and `-b startup_nosite` respectively, or use `-b startup` to run both.
