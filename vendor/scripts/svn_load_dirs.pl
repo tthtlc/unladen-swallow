@@ -1263,7 +1263,7 @@ while (defined (my $load_dir = &get_next_load_dir))
       {
         $message = wrap('', '', "Load $load_dir into $repos_load_abs_path.\n");
       }
-    read_from_process($svn, 'xxcommit',
+    read_from_process($svn, 'commit',
                       @svn_use_repos_cmd_opts,
                       '-m', $message);
 
@@ -1707,7 +1707,7 @@ sub commit_renames
   my $cwd = cwd;
   chdir($wc_import_dir_cwd)
     or die "$0: cannot chdir '$wc_import_dir_cwd': $!\n";
-  read_from_process($svn, 'xxcommit', @svn_use_repos_cmd_opts, '-m', $message);
+  read_from_process($svn, 'commit', @svn_use_repos_cmd_opts, '-m', $message);
   read_from_process($svn, 'update', @svn_use_repos_cmd_opts);
   chdir($cwd)
     or die "$0: cannot chdir '$cwd': $!\n";
