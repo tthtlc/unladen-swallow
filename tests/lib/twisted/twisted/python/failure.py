@@ -135,7 +135,10 @@ class Failure:
     # The opcode of "yield" in Python bytecode. We need this in _findFailure in
     # order to identify whether an exception was thrown by a
     # throwExceptionIntoGenerator.
-    _yieldOpcode = chr(opcode.opmap["YIELD_VALUE"])
+    if getattr(sys, "unladen_swallow", "") == "2009Q1":
+        _yieldOpcode = opcode.make_opcode(opcode.opmap["YIELD_VALUE"])
+    else:
+        _yieldOpcode = chr(opcode.opmap["YIELD_VALUE"])
 
     def __init__(self, exc_value=None, exc_type=None, exc_tb=None):
         """
