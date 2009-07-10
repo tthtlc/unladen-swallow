@@ -143,7 +143,18 @@ def CheckReturnCode(command, env=None):
     return ret_code == 0
 
 
+def GetSubversionVersion():
+    subproc = subprocess.Popen(["svn", "--version", "--quiet"],
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    result, err = subproc.communicate()
+    return map(int, result.split(".")[:2])
+
+
 ### Wrappers for the third-party modules we don't want to break go here. ###
+
+# Tests should return this if they can't run correctly.
+SKIP_TEST = object()
 
 def Test2to3():
     return DefaultPassCheck([sys.executable, "-E", "test.py"])
@@ -218,9 +229,16 @@ def TestTwisted():
     return CheckReturnCode(["trial", "twisted"], env={"PATH": path})
 
 def TestZodb():
-    # Disabled until ZODB's setup problems on Linux are resolved.
-    # return CheckReturnCode([sys.executable, "-E", "bin/test"])
-    return True
+    # This doesn't work with Subversion 1.6+ because of bugs in setuptools.
+    if GetSubversionVersion() >= [1, 6]:
+        print "Skipping ZODB: doesn't work with Subversion 1.6+"
+        return SKIP_TEST
+    bin_dir = os.path.dirname(sys.executable)
+    test_runner = os.path.join(bin_dir, "zope-testrunner")
+    import ZODB
+    zodb_dir = os.path.dirname(os.path.dirname(ZODB.__file__))
+    return CheckReturnCode([sys.executable, test_runner, "--all", "--test-path",
+                            zodb_dir])
 
 def TestZope_interface():
     # zope.interface is included because Twisted and a number of Zope packages
@@ -266,6 +284,10 @@ if __name__ == "__main__":
                 tests_passed[test_name] = test_func()
             finally:
                 os.chdir(current_dir)
+
+    skipped = [k for k, v in tests_passed.items() if v is SKIP_TEST]
+    if skipped:
+        print "SKIPPED:", skipped
 
     if all(tests_passed.values()):
         print "All OK"

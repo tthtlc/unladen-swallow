@@ -56,12 +56,8 @@ class zodb(object):
         subprocess.check_call([sys.executable, "-E", "bin/buildout"])
 
     def install(self):
-        # This intentionally doesn't install anything. We only install Python
-        # modules/scripts because some tests require them. In this case,
-        # we don't need to install ZODB for it to work. This is here to make
-        # test.py's life easier, not to serve as a general-purpose setup.py
-        # wrapper.
         self.build()
+        subprocess.call([sys.executable, "-E", "setup.py", "install"])
 
     def clean(self):
         subprocess.call([sys.executable, "-E", "setup.py", "clean"])
