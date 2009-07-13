@@ -15,7 +15,8 @@ import subprocess
 import sys
 
 # We skip psyco because Unladen Swallow's stdlib includes it (for now).
-SKIP_LIBS = set(["psyco", ".svn"])
+# The AppEngine SDK doesn't have any tests, but is used by some benchmarks.
+SKIP_LIBS = set(["psyco", ".svn", "google_appengine"])
 
 
 class swig(object):

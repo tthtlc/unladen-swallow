@@ -21,8 +21,9 @@ import time
 # We skip psyco because it doesn't build against Unladen Swallow trunk.
 # It's still useful for testing against vanilla builds, though.
 # Mercurial is disabled due to general flakiness.
+# The AppEngine SDK doesn't ship any tests.
 # TODO(collinwinter): add test integration for Spitfire.
-SKIP_LIBS = set(["psyco", ".svn", "spitfire", "mercurial"])
+SKIP_LIBS = set(["psyco", ".svn", "spitfire", "mercurial", "google_appengine"])
 
 
 @contextlib.contextmanager
