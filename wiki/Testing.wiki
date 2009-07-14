@@ -47,11 +47,11 @@ At every commit we run the tests for the following projects.
     * Twisted
     * ZODB
 
-We add new projects as we find them relevant or sufficiently important; we don't want to waste time testing the same code paths over and over again. Some projects that we'd like to add -- Twisted, for example -- have a lot of dependencies, and have taken more time than desirable to get fully working. Other projects -- like Mercurial -- have interesting tests, but they're flaky or very slow to run.
+We add new projects as we find them relevant or sufficiently important; we don't want to waste time testing the same code paths over and over again. Some projects that we'd like to use -- like Mercurial -- have interesting tests, but they're flaky or very slow to run and so aren't included.
 
 === Caveats ===
 
-We try to use the most recent releases for the above projects, but sometimes that isn't feasible. If the most recent release doesn't work with mainline CPython 2.6.1 (which Unladen Swallow is based on), we'll pull in that project's trunk at HEAD. In some cases that _still_ doesn't result in a cleanly-passing test suite, so we'll disable the few failing tests after verifying that they're bugs in the application, not in CPython 2.6.1. In rare cases when we find projects making unsound assumptions about the Python implementation they're running on (like the length of pickled objects, for example), we'll fix those tests and send the patches upstream.
+We try to use the most recent releases for the above projects, but sometimes that isn't feasible. If the most recent release doesn't work with mainline CPython 2.6.1 (which Unladen Swallow is based on), we'll pull in that project's trunk at HEAD. In some cases that _still_ doesn't result in a cleanly-passing test suite, so we'll disable the few failing tests after verifying that they're bugs in the application, not in CPython 2.6.1. In rare cases when we find projects making unsound assumptions about the Python implementation they're running on (like the length of pickled objects, for example), we'll fix those tests and send the patches upstream. Any changes that we make to a project will be noted in a `README.unladen` file ([http://code.google.com/p/unladen-swallow/source/browse/tests/lib/twisted/README.unladen example]).
 
 
 == Testing the JIT ==
