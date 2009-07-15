@@ -11,10 +11,10 @@ svn checkout http://unladen-swallow.googlecode.com/svn/branches/release-2009Q2-m
 The Unladen Swallow team does not recommend wide adoption of the 2009Q2 release. This is intended as a checkpoint of our progress, a milestone on the long path to our eventual performance goals. 2009Q2 can compile all pure-Python code to correct native machine code, but is intended to set the stage for more significant performance improvements in the 2009Q3 release that will take advantage of the LLVM-based compiler infrastructure built in Q2.
 
 *Highlights:*
-  * Unladen Swallow 2009Q2 uses LLVM to compile hot function (called more than 10000 times) to machine code. A `-j always` command-line option is available to force all functions though LLVM.
+  * Unladen Swallow 2009Q2 uses LLVM to compile hot functions (anything called more than 10000 times) to machine code. A `-j always` command-line option is available to force all functions though LLVM.
   * Unladen Swallow 2009Q2 starts up faster than 2009Q1.
   * A number of buggy corner cases in the 2009Q1 version of `cPickle` have been fixed.
-  * Unladen Swallow 2009Q2 is passes the tests for all the third-party tools and libraries listed on the [Testing] page. Significantly for many projects, this includes compatibility with Twisted, Django, NumPy and Swig.
+  * Unladen Swallow 2009Q2 passes the tests for all the third-party tools and libraries listed on the [Testing] page. Significantly for many projects, this includes compatibility with Twisted, Django, NumPy and Swig.
 
 *Lowlights:*
   * Memory usage has increased by 10x. We have thus far spent no time improving this; lowering memory usage is a goal for the 2009Q3 release.
