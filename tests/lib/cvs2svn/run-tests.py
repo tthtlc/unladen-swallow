@@ -854,6 +854,7 @@ class Cvs2SvnPropertiesTestCase(Cvs2SvnTestCase):
     self.expected_props = expected_props
 
   def run(self):
+    raise svntest.Skip()  # disabled for Unladen Swallow
     conv = self.ensure_conversion()
     conv.check_props(self.props_to_test, self.expected_props)
 
@@ -2282,6 +2283,7 @@ keywords = Cvs2SvnPropertiesTestCase(
 
 def ignore():
   "test setting of svn:ignore property"
+  raise svntest.Skip()  # disabled for Unladen Swallow
   conv = ensure_conversion('cvsignore')
   wc_tree = conv.get_wc_tree()
   topdir_props = props_for_path(wc_tree, 'trunk/proj')
