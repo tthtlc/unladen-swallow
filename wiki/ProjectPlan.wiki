@@ -227,6 +227,13 @@ One of CPython's virtues is its simplicity: modifying CPython's VM and compiler 
   * *Specialized platforms:* CPython currently runs on a wide range of hardware and software platforms, from big iron server machines down to Nokia phones. We would like to maintain that kind of hard-won portability and flexibility as much as possible. We already know that LLVM (or even a hand-written JIT compiler) will increase memory usage and Python's binary footprint, possibly to a degree that makes it prohibitive to run Unladen Swallow on previously-support platforms. To mitigate this risk, Unladen Swallow will include a `./configure` flag to disable LLVM integration entirely and forcing the use of the traditional eval loop.
 
 
+= Lessons Learned =
+
+This section attempts to list the ways that our plans have changed as work has progressed, as we've read more papers and talked to more people. This list is incomplete; 
+
+  * Early in our planning, we had considered completely removing the custom CPython virtual machine and replacing it with LLVM. The benefit would be that there would be less code to maintain, and only a single encoding of Python's semantics. The theory was that we could either a) generate slow-to-run but fast-to-compile machine code, or b) generate LLVM IR and run it through LLVM's interpreter. Both of these turned out to be impractical: even at its fastest (using no optimization passes and LLVM's `FastISel` instruction selector), compiling to native code was too slow. LLVM's IR interpreter was both too slow and did not support all of LLVM's IR.<br><br>Preserving the CPython VM also allows Unladen to keep compatibility with the unfortunate number of Python packages that parse CPython bytecode.
+
+
 = Communication =
 
 All communication about Unladen Swallow should take place on the [http://groups.google.com/group/unladen-swallow Unladen Swallow list]. This is where design issues will be discussed, as well as notifications of continuous build results, performance numbers, code reviews, and all the other details of an open-source project. If you add a comment below, on this page, we'll probably miss it. Sorry. Please mail our list instead.
