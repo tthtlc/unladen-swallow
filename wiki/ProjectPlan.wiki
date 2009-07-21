@@ -216,7 +216,7 @@ We already have benchmarks tracking start-up time in a number of configurations.
 
 Unladen Swallow maintains a directory of interesting performance tests under the [http://code.google.com/p/unladen-swallow/source/browse/#svn/tests tests] directory. `perf.py` is the main interface to the benchmarks we care about, and will take care of priming runs, clearing `*.py[co]` files and running interesting statistics over the results.
 
-Unladen Swallow's benchmark suite is focused on the hot spots in major Python applications, in particular web applications. The major web applications we have surveyed have indicated that they bottleneck primarily on template systems, and hence our initial benchmark suite focuses on them:
+[Benchmarks Unladen Swallow's benchmark suite] is focused on the hot spots in major Python applications, in particular web applications. The major web applications we have surveyed have indicated that they bottleneck primarily on template systems, and hence our initial benchmark suite focuses on them:
   * *Django and Spitfire templates*. Two very different ways of implementing a template language.
   * *2to3*. Translates Python 2 syntax to Python 3. Has an interesting, pure-Python kernel that makes heavy use of objects and method dispatch.
   * *Pickling and unpickling*. Large-scale web applications rely on memcache, which in turns uses Python's Pickle format for serialization.
