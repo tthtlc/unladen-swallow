@@ -3,7 +3,7 @@
 
 <font size="1">NB: all cited papers are linked on [RelevantPapers]. A version of this document is also [http://danmarner.yo2.cn/unladen-swallow-project-plan/ available in Chinese], though we can't vouch for the translation.</font>
 
-<wiki:toc max_depth="3" />
+<wiki:toc max_depth="2" />
 
 = Goals =
 
