@@ -235,6 +235,7 @@ This section attempts to list the ways that our plans have changed as work has p
 
   * There are a number of Python programs that parse or otherwise interact with CPython bytecode. Since the exact opcode set, semantics and layout are considered an implementation detail of CPython, we were inclined to disregard any breakage we may inflict on these packages (a pox upon their houses, etc). However, some packages that are too important to break deal with CPython bytecode, among them Twisted and setuptools. This has forced us to be more cautious than we would otherwise like when changing the bytecode.
 
+  * Initially we generated LLVM IR at the same time as the Python bytecode, using hooks from the Python compiler. The idea was that we would move to generating the LLVM IR from the AST instead, allowing us to generate more efficient IR. The overhead of generating LLVM IR and the decision not to get rid of the CPython VM pre-empted that move, however, and instead we now generate LLVM IR from the Python bytecode. Besides allowing us to generate LLVM IR for any code object (including hand-crafted ones) and not requiring us to keep the AST for a codeblock around, it also means the existing (bytecode) peephole optimizer ends up optimizing the bytecode before it is turned into LLVM IR. The peephole optimizer, with its intimate knowledge of Python semantics, does a good job optimizing things that would be a lot harder to do in LLVM optimization passes.
 
 = Communication =
 
