@@ -14,7 +14,7 @@ Ultimately, the reason for working off of CPython is compatibility: compatibilit
 
 == Q: What is your relationship with Google? ==
 
-A: Unladen Swallow is Google-sponsored, but not Google-owned. The engineers on the project are full-time Google engineers, but ultimately this an open-source project, not really that different from Chrome or [http://code.google.com/webtoolkit/ Google Web Toolkit]. We are pushing patches back into mainline CPython as quickly as we can. These patches are all code-reviewed by the CPython community, and we cannot merge the patches without their consent.
+A: Unladen Swallow is Google-sponsored, but not Google-owned. The engineers on the project are full-time Google engineers, but ultimately this an open-source project, not really that different from [http://code.google.com/chromium/ Chrome] or [http://code.google.com/webtoolkit/ Google Web Toolkit]. We are pushing patches back into mainline CPython as quickly as we can. These patches are all code-reviewed by the CPython community, and we cannot merge the patches without their consent.
 
 == Q: Do I need to sign a Contributor License Agreement? ==
 
