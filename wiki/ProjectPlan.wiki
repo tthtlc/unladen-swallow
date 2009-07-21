@@ -81,11 +81,11 @@ Ideas for achieving this goal:
   * Simplify frame objects to make frame alloc/dealloc faster.
   * Implement one of the several proposed schemes for speeding lookups of globals and builtins.
 
-The 2009Q1 release can be found in the [http://code.google.com/p/unladen-swallow/source/browse/branches/release-2009Q1-maint release-2009Q1-maint branch]. See [Releases] for our performance relative to CPython 2.6.1.
+The 2009Q1 release can be found in the [http://code.google.com/p/unladen-swallow/source/browse/branches/release-2009Q1-maint release-2009Q1-maint branch]. See [Release2009Q1] for our performance relative to CPython 2.6.1.
 
 == 2009 Q2 ==
 
-Q2 will focus on supplementing the Python VM with a functionally-equivalent implementation in terms of LLVM. We anticipate some performance improvement, but that is not the primary focus of the 2009Q2 release. We will focus on just getting something working on top of LLVM. Making it faster will come in subsequent quarters.
+Q2 focused on supplementing the Python VM with a functionally-equivalent implementation in terms of LLVM. We anticipated some performance improvement, but that was not the primary focus of the 2009Q2 release; the focus was just on getting something working on top of LLVM. Making it faster will come in subsequent quarters.
 
 Goals:
   * Addition of an LLVM-based JIT.
@@ -93,6 +93,8 @@ Goals:
   * Source compatibility maintained with existing applications, C extension modules.
   * 10% performance improvement.
   * Stretch goal: 25% performance improvement.
+
+The 2009Q2 release can be found in the [http://code.google.com/p/unladen-swallow/source/browse/branches/release-2009Q2-maint release-2009Q2-maint branch]. See [Release2009Q2] for our performance relative to 2009Q1.
 
 
 == 2009 Q3 and Beyond ==
