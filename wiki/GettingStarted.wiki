@@ -176,6 +176,7 @@ $ ./configure --with-llvm=/tmp/llvm && make
 
 This will configure, build and install LLVM into `/tmp/llvm`, then reuse that directory when building Unladen Swallow. The LLVM installation in `/tmp/llvm` can be reused and shared among different Unladen Swallow object directories, saving you considerable build time. See [http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/llvm/install-llvm.sh install-llvm.sh] for more details.
 
+On OS X, Python comes with a suite of Carbon toolkit modules that we generally don't care about when working on Unladen Swallow. You can pass `--disable-toolbox-glue` to avoid wasting cycles building these modules you won't use. This brings build times down to what they are on Linux.
 
 == Performance analysis ==
 
