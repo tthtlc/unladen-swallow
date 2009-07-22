@@ -207,7 +207,7 @@ Start-up time is currently dominated by imports, especially for large applicatio
 
 For large users that don't take advantage of that flexibility -- in particular servers, where imports shouldn't change between restarts -- we might provide a way to opt in to stricter, faster import semantics. One idea is to ship all required modules in a single, self-contained "binary". This would both a) avoid multiple filesystem calls for each import, and b) open up the possibility of Python-level [http://www.airs.com/blog/archives/100 link-time optimization], resulting in faster code via inter-module inlining and similar optimizations. Self-contained images like this would be especially attractive for large Python users in the server application space, where hermetic builds and deployments are already considered essential.
 
-A less invasive optimization would be speed up [http://docs.python.org/library/marshal.html Python's marshal module], which is used for `.pyc` and `.pyo` files. Based on Unladen Swallow's work speeding up `cPickle`, similarly low-hanging fruit probably exists in `marshal`.
+A less invasive optimization would be to speed up [http://docs.python.org/library/marshal.html Python's marshal module], which is used for `.pyc` and `.pyo` files. Based on Unladen Swallow's work speeding up `cPickle`, similarly low-hanging fruit probably exists in `marshal`.
 
 We already have benchmarks tracking start-up time in a number of configurations. We will probably also add microbenchmarks focusing specifically on imports, since imports currently dominate CPython start time.
 
