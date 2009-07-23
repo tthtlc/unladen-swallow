@@ -1,5 +1,5 @@
-This is cvs2svn trunk r4809, minus some tests. No released version of cvs2svn
-worked well with mainline Python 2.6.1, and trunk@r4809 worked best.
+This is cvs2svn trunk r4825, minus some tests. No released version of cvs2svn
+worked well with mainline Python 2.6.1.
 
 The following tests are disabled because of an incompatibility with
 Subversion 1.6 (http://cvs2svn.tigris.org/issues/show_bug.cgi?id=124):

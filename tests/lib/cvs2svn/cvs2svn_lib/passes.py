@@ -106,7 +106,18 @@ def sort_file(infilename, outfilename, options=[]):
       ]
 
   try:
-    call_command(command, stdout=open(outfilename, 'w'))
+    # Under Windows, the subprocess module uses the Win32
+    # CreateProcess, which always looks in the Windows system32
+    # directory before it looks in the directories listed in the PATH
+    # environment variable.  Since the Windows sort.exe is in the
+    # system32 directory it will always be chosen.  A simple
+    # workaround is to launch the sort in a shell.  When the shell
+    # (cmd.exe) searches it only examines the directories in the PATH
+    # so putting the directory with GNU sort ahead of the Windows
+    # system32 directory will cause GNU sort to be chosen.
+    call_command(
+        command, stdout=open(outfilename, 'w'), shell=(sys.platform=='win32')
+        )
   finally:
     if lc_all_tmp is None:
       del os.environ['LC_ALL']
@@ -709,8 +720,8 @@ class InitializeChangesetsPass(Pass):
       # extent that the timestamps are correct and unique).
       changeset_items.sort(self.compare_items)
       indexes = {}
-      for i in range(len(changeset_items)):
-        indexes[changeset_items[i].id] = i
+      for (i, changeset_item) in enumerate(changeset_items):
+        indexes[changeset_item.id] = i
       # How many internal dependencies would be broken by breaking the
       # Changeset after a particular index?
       breaks = [0] * len(changeset_items)

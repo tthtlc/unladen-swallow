@@ -43,6 +43,11 @@ import time
 import os.path
 import locale
 import textwrap
+import calendar
+try:
+  from hashlib import md5
+except ImportError:
+  from md5 import md5
 from difflib import Differ
 
 # Make sure that a supported version of Python is being used:
@@ -439,25 +444,26 @@ def make_conversion_id(
 
   conv_id = name
 
-  _win32_fname_mapping = { '/': '_sl_', '\\': '_bs_', ':': '_co_',
-                           '*': '_st_', '?': '_qm_', '"': '_qq_',
-                           '<': '_lt_', '>': '_gt_', '|': '_pi_', }
-  for arg in args:
-    # Replace some characters that Win32 isn't happy about having in a
-    # filename (which was causing the eol_mime test to fail).
-    sanitized_arg = arg
-    for a, b in _win32_fname_mapping.items():
-      sanitized_arg = sanitized_arg.replace(a, b)
-    conv_id += sanitized_arg
+  args = args[:]
 
   if passbypass:
-    conv_id += '-passbypass'
-
-  if options_file is not None:
-    conv_id += '--options=%s' % options_file
+    args.append('--passbypass')
 
   if symbol_hints_file is not None:
-    conv_id += '--symbol-hints=%s' % symbol_hints_file
+    args.append('--symbol-hints=%s' % (symbol_hints_file,))
+
+  # There are some characters that are forbidden in filenames, and
+  # there is a limit on the total length of a path to a file.  So use
+  # a hash of the parameters rather than concatenating the parameters
+  # into a string.
+  if args:
+    conv_id += "-" + md5('\0'.join(args)).hexdigest()
+
+  # Some options-file based tests rely on knowing the paths to which
+  # the repository should be written, so we handle that option as a
+  # predictable string:
+  if options_file is not None:
+    conv_id += '--options=%s' % (options_file,)
 
   return conv_id
 
@@ -3139,15 +3145,20 @@ def timestamp_chaos():
 
   conv = ensure_conversion('timestamp-chaos', args=["-v"])
 
+  # The times are expressed here in UTC:
   times = [
       '2007-01-01 21:00:00', # Initial commit
       '2007-01-01 21:00:00', # revision 1.1 of both files
       '2007-01-01 21:00:01', # revision 1.2 of file1.txt, adjusted forwards
-      '2007-01-01 21:00:02', # revision 1.2 of file1.txt, adjusted backwards
+      '2007-01-01 21:00:02', # revision 1.2 of file2.txt, adjusted backwards
       '2007-01-01 22:00:00', # revision 1.3 of both files
       ]
+
+  # Convert the times to seconds since the epoch, in UTC:
+  times = [calendar.timegm(svn_strptime(t)) for t in times]
+
   for i in range(len(times)):
-    if abs(conv.logs[i + 1].date - time.mktime(svn_strptime(times[i]))) > 0.1:
+    if abs(conv.logs[i + 1].date - times[i]) > 0.1:
       raise Failure()
 
 
@@ -3651,9 +3662,11 @@ test_list = [
 if __name__ == '__main__':
 
   # Configure the environment for reproducable output from svn, etc.
-  # I have no idea if this works on Windows too.
   os.environ["LC_ALL"] = "C"
-  os.environ["TZ"] = "UTC"
+
+  # Unfortunately, there is no way under Windows to make Subversion
+  # think that the local time zone is UTC, so we just work in the
+  # local time zone.
 
   # The Subversion test suite code assumes it's being invoked from
   # within a working copy of the Subversion sources, and tries to use
