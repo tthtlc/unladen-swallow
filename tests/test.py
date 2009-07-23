@@ -3,8 +3,12 @@
 """Wrapper script for running all of Unladen Swallow's third-party tests.
 
 This is equivalent to manually invoking the tests for each third-party app/lib.
-Note that this script is intended to be invoked after setup.py install (certain)
+Note that this script is intended to be invoked after setup.py install; certain
 tests depend on it.
+
+Usage:
+    $ /path/to/python test.py  # Run all third-party tests
+    $ /path/to/python test.py twisted django  # Only test Twisted and Django
 """
 
 __author__ = "collinwinter@google.com (Collin Winter)"
@@ -270,6 +274,12 @@ def FindThirdPartyLibs(basedir):
 
 
 if __name__ == "__main__":
+    restrict = None
+    if len(sys.argv) > 1:
+        # Allow the user to limit which third-party tests are run. sys.argv[1:]
+        # should be a list of lower-case test names, e.g., "django", "twisted".
+        restrict = set(sys.argv[1:])
+
     basedir = os.path.join(os.path.split(__file__)[0], "lib")
     tests_passed = {}
     for dirname, subdir in FindThirdPartyLibs(basedir):
@@ -277,7 +287,7 @@ if __name__ == "__main__":
         test_func = globals().get("Test" + test_name)
         if not test_func:
             print "No tests defined for", test_name
-        else:
+        elif restrict is None or dirname in restrict:
             print "Testing", test_name
             current_dir = os.getcwd()
             os.chdir(subdir)
