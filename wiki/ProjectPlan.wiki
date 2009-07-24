@@ -112,53 +112,20 @@ The exact performance targets for the 2009Q3 release will be finalized some time
 
 = Detailed Plans =
 
-Once we get the quick improvements out of the way and convince some people to adopt our Python, we'll start switching to LLVM, probably initially in a separate branch. This can go in lots of stages:
+== JIT Compilation ==
 
+We plan to start with a simple, easy-to-implement JIT compiler, then add complexity and sophistication as warranted. We will start by implementing a simple, function-at-a-time compiler that takes [http://docs.python.org/library/dis.html the CPython bytecode] and converts it to machine code via LLVM's internal intermediate representation (IR). The initial implementation of this bytecode-to-machine code compiler will be done by translating the code in CPython's interpreter loop to calls to [http://llvm.org/docs/tutorial/JITTutorial2.html LLVM's IRBuilder]. We will apply only a small subset of LLVM's available optimization passes ([http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/global_llvm_data.cc current passes]), since it's not clear that, for unoptimized Python IR, the extra compilation time spent in the optimizers will be compensated with increased execution performance. We've experimented with using LLVM's fast instruction selector (`FastISel`), but it fails over to the default, slower instruction selection DAG with our current IR; we may revisit this in the future.
 
-<ol>
-<li>(Finished) Add `llvmmodule` and `llvmfunction` types in Python, which interface to the LLVM [http://llvm.org/docs/ProgrammersManual.html#Module Module] and [http://llvm.org/docs/ProgrammersManual.html#Function Function] types. Teach `llvmmodule` to [http://llvm.org/doxygen/ReaderWriter_8h.html read bitcode files] and [http://llvm.org/doxygen/PrintModulePass_8h.html pretty-print them]. (Reading the bitcode files isn't really necessary for the next step, but it'll help with testing this one.)
+We've chosen a function-at-a-time JIT instead of a tracing JIT (Gal et al, 2007) because we believe whole-function compilation is easier to implement, given the existing structure of CPython bytecode. That is not to say we are opposed to a tracing JIT; on the contrary, implementing a whole-function compiler will provide a large amount of the necessary infrastructure for a tracing JIT, and a whole-function JIT will serve as a valuable baseline for comparing the performance of any proposed tracing implementations. LLVM's analysis libraries already have some support for specially optimizing hot traces ([https://llvm.org/svn/llvm-project/llvm/trunk/lib/Analysis/Trace.cpp in Trace.cpp]) that we may be able to take advantage of if we pursue a tracing JIT. We can get some of the benefits from having the instrumentation for the planned feedback-directed optimization system track taken/not-taken branches and pruning the not-taken branches from the generated machine code.
 
-[http://code.google.com/p/llvm-py/ llvm-py] has such wrapper types, but using Python-defined types in the core interpreter is very difficult, so we'll write our own. These won't be full wrappers (leave that to llvm-py). Just what's convenient and useful for debugging.</li>
+Since we only wish to spend time optimizing code that will benefit the most -- the program's hot spots -- we will need a way to model hotness. Like in the rest of the JIT compiler, we plan to start simple and add complexity and sophistication as the benchmark results warrant. Our initial model will be very simple: if a function is called 10000 times, it is considered hot and is sent to LLVM for compilation to machine code. This model is obviously deficient, but will serve as a baseline for improvement. Enhancements we're considering: using interpreter loop ticks instead of function calls; aggregating the hotness level of leaf functions up the call tree. In the case of long-running loops, we probably won't try to replace those loops mid-execution, though it should be possible to do this if we desire.
 
-<li>(Finished) Add a way to run Python functions that are backed by LLVM IR. We used the LLVM JIT to compile and run these functions. This got things working really quickly, but there seem to be some [CodeLifecycle lifetime issues] which we need to work out.</li>
+Even at its most naive, the generated machine code differs from its analogue in the interpreter loop in important ways:
+  * The machine code does not support the line-level tracing used by Python's [http://docs.python.org/library/pdb.html pdb module] and others. If the machine code detects that tracing has turned on, it will bail to the interpreter loop, which picks up execution at the same place the machine code left off.
+  * In the machine code, thread switching and signal handling are done at function calls and loop backedges (see [http://code.google.com/p/unladen-swallow/source/detail?r=699 r699]), rather than every 100ish opcodes as in the interpreter loops. There's plenty of room to optimize this: we can eliminate  thread switching/signal handling code on loop backedges where the loop contains function calls, or where we have multiple function calls back-to-back. Support threads and signals in the machine code imposes fairly low overhead (2-4%), so we probably won't start optimizing this unless we find that it inhibits additional optimizations.
 
-<li>(In progress) Make the `compile` builtin generate LLVM IR (as the `llvmmodule` or `llvmfunction` type) in addition to CPython bytecode. We can get this working incrementally and keep a working Python interpreter the whole time. Our progress is visible in the list of UNIMPLEMENTED opcodes in [http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/ll_compile.h Python/ll_compile.h]. We've been translating each opcode into LLVM IR mostly manually, although where we can factor functions out and just call them, we do that.
-Several Python constructs may give us trouble here:
-<ul>
-<li>Closures: A closure is just a function with a pre-bound parameter representing the environment.</li>
-<li>ExceptionHandling -- literally transcribing the ceval exception handling mechanism is working fine so far. CPython saves bytecode indices as jump targets sometimes. Since LLVM doesn't let us save instruction addresses, we instead number the basic blocks that are used as exception handlers and emit a switch statement to jump to the appropriate one.</li>
-<li>The FunctionCallingConvention -- We pass a PyFrameObject containing all the arguments. Besides being more expensive to create than we'd like, the PyFrameObject makes things like the stack and local variables escape when the function returns, which prevents LLVM from optimizing as much as it should.</li>
-<li>Generators: We intend to number yield statements much like we numbered exception handlers and emit a switch statement in the function's entry block to resume where a yield left off. We need to save all registers and local variables across a yield call. Fortunately, with the current literal translation from CPython bytecode, the stack and local variables are all saved into the FrameObject at a return, which should make it really easy to resume the yield.  This will get much harder when/if we stop saving locals into the frame all the time. We'd have to save and restore all the live pseudo-registers at each yield, but LLVM doesn't currently have an intrinsic to do that.</li>
-</ul>
-</li>
+In the initial draft of the JIT compiler, we will block execution while compiling hot functions. This is expensive. We will shift compilation to a separate worker thread using FIFO work queues. This will include instrumentation for work unit throughput, execution pause times, and temporal clustering so that we can measure the impact on execution time. [http://rubini.us/ Rubinius] developed this technique independently, has seen success using it to reduce pause times in execution. We believe this strategy will allow us to perform potentially more expensive optimizations than if we had to always block execution on compilation/optimization (ala Self).
 
-<li>Probably separate the LLVM IR generation back out of the CPython compiler. Generating IR for every function appears to be quite expensive in terms of memory and time. If we compile only hot functions (like every other JITted system does) we'll probably get better performance. We'll need to measure both options before doing this.</li>
-
-<li>Figure out the simplest possible version of [PersistentIr .pyc persistence]. I'm hoping the obvious thing -- dump the python module as an LLVM Module in bitcode to disk -- just works. We can add the fancy profiling data and pre-optimized code later (step 11).</li>
-
-<li>Teach Python how to decide whether to fast-JIT or slow-JIT a particular function (pass fast==true to [http://llvm.org/doxygen/classllvm_1_1JIT.html#fd0a3b0d55489b96760121e3e25b7de6 JIT::create]). nlewycky says, "The codegen is roughly 3x faster in fast mode (note: measured in debug mode not release mode, so who knows).". I imagine that we'll have to tune a bit to find the right balance. At this point I expect Python to get faster than our original release.</li>
-
-<li>Start adding [LlvmOptimizations optimizations].
-
-Talin points out that it'll be hard to apply most of the pre-defined optimizations at first because Python calls are indirect. This motivates type inference so we can make the calls direct.</li>
-</ol>
-
-8+ can be tried in parallel, probably starting toward the end of 2009Q2.
-
-<ol start="8">
-<li>Depending on the outcome of step 4, either consider re-doing the CPython bytecode to facilitate better profiling and compilation to llvm IR, or [DirectLlvmIrGeneration optimize the direct compilation to LLVM IR] using AST information.</li>
-
-<li>Figure out how to specialize functions for particular types, which allows better inlining. We should be able to do as well as psyco pretty easily since we can steal their algorithms.
-<ol type="a">
-<li>Allow users to annotate functions to tell the interpreter which specializations to use.</li>
-<li>Profile calls and [TypeInference infer common argument types].</li>
-</ol></li>
-
-<li>9b and 10 require us to be able to keep multiple versions of code around for any given function and backpatch existing callers. We'll probably want to [GarbageCollectingCode GC the multiple versions], which should be interesting.</li>
-
-<li>[PersistentIr Persist the generated and optimized IR to disk] in place of .pyc
-files, perhaps along with any gathered profile data. This allows subsequent runs to take advantage of the optimization work previous runs have already done. Matches LLVM's promise to be "A Compilation Framework for Lifelong Program Analysis & Transformation". :)</li>
-</ol>
 
 == Feedback-Directed Optimization ==
 
