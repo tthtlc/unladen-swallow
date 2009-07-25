@@ -16,8 +16,8 @@ def test_exp_log():
     assert exp(log(x)) == x
 
 def test_log_expansion():
-    x = Symbol("x", real=True)
-    y = Symbol("y", real=True)
+    x = Symbol("x", positive=True)
+    y = Symbol("y", positive=True)
 
     # ok in interactive, fails in py.test
     #assert log(x*y) != log(x)+log(y)
@@ -58,8 +58,7 @@ def test_exp_expand():
 
     e = exp(log(Rational(2))*(1+x)-log(Rational(2))*x)
     assert e.expand() == 2
-    # XXX The RHS is automatically combined so that it equals the LHS
-    #assert exp(x+y) != exp(x)*exp(y)
+    assert exp(x+y) != exp(x)*exp(y)
     assert exp(x+y).expand() == exp(x)*exp(y)
 
 
@@ -109,7 +108,7 @@ def test_function_nargs():
     assert f(x, x, x, x).nargs == 4
 
 def test_derivative_subs_bug():
-    x = Symbol("x")
+    x = Symbol("x y")
     l = Function('l', nargs=1)
     n = Function('n', nargs=1)
 
@@ -117,6 +116,8 @@ def test_derivative_subs_bug():
     assert e.subs(n(x), l(x)) != e
     assert e.subs(n(x), l(x)) == diff(l(x), x)
     assert e.subs(n(x), -l(x)) == diff(-l(x), x)
+
+    assert e.subs(x, y) == diff(n(y), y)
 
 def test_derivative_subs_self_bug():
     f = Function('f')
@@ -285,5 +286,13 @@ def test_function_evalf():
     assert eq(sin(2).evalf(25), Real("0.9092974268256816953960199",25), 1e-23)
     assert eq(sin(1+I).evalf(15), Real("1.29845758141598") + Real("0.634963914784736")*I, 1e-13)
     assert eq(exp(1+I).evalf(15), Real("1.46869393991588") + Real("2.28735528717884239")*I, 1e-13)
+    assert eq(exp(-0.5+1.5*I).evalf(15), Real("0.0429042815937374") + Real("0.605011292285002")*I, 1e-13)
     assert eq(log(pi+sqrt(2)*I).evalf(15), Real("1.23699044022052") + Real("0.422985442737893")*I, 1e-13)
     assert eq(cos(100).evalf(15), Real("0.86231887228768"), 1e-13)
+
+def test_extensibility_eval():
+    class MyFunc(Function):
+        @classmethod
+        def eval(cls, *args):
+            return (0,0,0)
+    assert MyFunc(0) == (0,0,0)

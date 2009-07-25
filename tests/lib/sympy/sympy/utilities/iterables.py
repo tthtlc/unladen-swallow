@@ -65,7 +65,7 @@ def make_list(expr, kind):
         return [expr]
 
 
-def flatten(iterable):
+def flatten(iterable, cls=None):
     """Recursively denest iterable containers.
 
        >>> flatten([1, 2, 3])
@@ -77,13 +77,30 @@ def flatten(iterable):
        >>> flatten( (1,2, (1, None)) )
        [1, 2, 1, None]
 
+       If cls argument is specif, it will only flatten instances of that
+       class, for example:
+
+       >>> from sympy.core import Basic
+       >>> class MyOp(Basic):
+       ...     pass
+       ...
+       >>> flatten([MyOp(1, MyOp(2, 3))], cls=MyOp)
+       [1, 2, 3]
+
+
+
     adapted from http://kogs-www.informatik.uni-hamburg.de/~meine/python_tricks
     """
-
+    if cls is None:
+        reducible = lambda x: hasattr(x, "__iter__") and not isinstance(x, basestring)
+    else:
+        reducible = lambda x: isinstance(x, cls)
     result = []
     for el in iterable:
-        if hasattr(el, "__iter__") and not isinstance(el, basestring):
-            result.extend(flatten(el))
+        if reducible(el):
+            if hasattr(el, 'args'):
+                el = el.args
+            result.extend(flatten(el, cls=cls))
         else:
             result.append(el)
     return result
@@ -172,3 +189,49 @@ def subsets(M, k):
     for i, item in enumerate(M[:len(M) + 1 - k]):
         for elem in recursion([item], M[i + 1:], k - 1):
             yield elem
+
+
+def cartes(seq0, seq1, modus='pair'):
+    """Return the cartesian product of two sequences
+
+    >>> cartes([1,2], [3,4])
+    [[1, 3], [1, 4], [2, 3], [2, 4]]
+    """
+    if  modus == 'pair':
+        return [[item0, item1] for item0 in seq0 for item1 in seq1]
+    elif modus == 'triple':
+        return [item0 + [item1] for item0 in seq0 for item1 in seq1]
+
+def variations(seq, n, repetition=False):
+    """Returns all the variations of the list of size n.
+
+    variations(seq, n, True) will return all the variations of the list of
+        size n with repetitions
+
+    variations(seq, n, False) will return all the variations of the list of
+        size n without repetitions
+
+    >>> variations([1,2,3], 2)
+    [[1, 2], [1, 3], [2, 1], [2, 3], [3, 1], [3, 2]]
+    >>> variations([1,2,3], 2, repetition=True)
+    [[1, 1], [1, 2], [1, 3], [2, 1], [2, 2], [2, 3], [3, 1], [3, 2], [3, 3]]
+    """
+    def setrep(seq):  # remove sets with duplicates (repetition is relevant)
+        def delrep(seq):  # remove duplicates while maintaining order
+            result = []
+            for item in seq:
+                if item not in result:
+                    result.append(item)
+            return result
+        return [item for item in seq if item == delrep(item)]
+
+    if n == 1:
+        return [[item] for item in seq]
+    result = range(len(seq))
+    cartesmodus = 'pair'
+    for i in range(n-1):
+        result = cartes(result, range(len(seq)), cartesmodus)
+        if not repetition:
+            result = setrep(result)
+        cartesmodus = 'triple'
+    return [[seq[index] for index in indices] for indices in result]

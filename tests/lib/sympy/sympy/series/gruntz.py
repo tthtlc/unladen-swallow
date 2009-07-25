@@ -1,3 +1,4 @@
+from sympy.simplify import powsimp
 """
 Limits
 ======
@@ -195,6 +196,7 @@ def compare(a,b,x):
 @debug
 def mrv(e, x):
     "Returns a python set of  most rapidly varying (mrv) subexpressions of 'e'"
+    e = powsimp(e, deep=True, combine='exp')
     assert isinstance(e, Basic)
     if not e.has(x):
         return set([])
@@ -277,9 +279,13 @@ def rewrite(e,Omega,x,wsym):
         O2.append(exp((f.args[0]-c[0]*g.args[0]).expand())*wsym**c[0])
     #Remember that Omega contains subexpressions of "e". So now we find
     #them in "e" and substitute them for our rewriting, stored in O2
-    f=e
-    for a,b in zip(Omega,O2):
-        f=f.subs(a,b)
+    f = e
+    # the following powsimp is necessary to automatically combine exponentials,
+    # so that the .subs() below succeeds:
+    from sympy import powsimp
+    f = powsimp(f, deep=True, combine='exp')
+    for a, b in zip(Omega, O2):
+        f = f.subs(a, b)
 
     #finally compute the logarithm of w (logw).
     logw=g.args[0]
@@ -321,7 +327,7 @@ def sign(e, x):
         return sign(e.args[0] -1, x)
     elif e.is_Add:
         return sign(limitinf(e, x), x)
-    raise "cannot determine the sign of %s"%e
+    raise ValueError("Cannot determine the sign of %s" % e)
 
 @debug
 def limitinf(e, x):

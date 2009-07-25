@@ -1,5 +1,5 @@
 import warnings
-from sympy import Basic, Symbol
+from sympy import Basic, Symbol, Integer
 from sympy.core import sympify
 
 from sympy.core.basic import S, C
@@ -508,7 +508,7 @@ class Matrix(object):
         elif method == "ADJ":
             return self.inverse_ADJ()
         else:
-            raise Exception("Inversion method unrecognized")
+            raise ValueError("Inversion method unrecognized")
 
 
     def __mathml__(self):
@@ -835,7 +835,7 @@ class Matrix(object):
                 if pivot == -1 and not iszerofunc(A[i,j]):
                     pivot = i
             if pivot < 0:
-                raise "Error: non-invertible matrix passed to LUdecomposition_Simple()"
+                raise ValueError("Error: non-invertible matrix passed to LUdecomposition_Simple()")
             if pivot != j: # row must be swapped
                 A.row_swap(pivot,j)
                 p.append([pivot,j])
@@ -867,7 +867,7 @@ class Matrix(object):
                     else:
                         kpivot = kpivot + 1
                 if kpivot == n+1:
-                    raise "Matrix is not full rank"
+                    raise ValueError("Matrix is not full rank")
                 else:
                     swap = U[k, k:]
                     U[k,k:] = U[kpivot,k:]
@@ -920,11 +920,17 @@ class Matrix(object):
         Both self and X can be a row or a column matrix in any order
         (jacobian() should always work).
 
-        Example:
+        Examples::
         >>> from sympy import symbols, sin, cos
         >>> rho, phi = symbols("rho phi")
-        >>> X = Matrix([rho*cos(phi), rho*sin(phi)])
+        >>> X = Matrix([rho*cos(phi), rho*sin(phi), rho**2])
         >>> Y = Matrix([rho, phi])
+        >>> X.jacobian(Y)
+        [cos(phi), -rho*sin(phi)]
+        [sin(phi),  rho*cos(phi)]
+        [   2*rho,             0]
+
+        >>> X = Matrix([rho*cos(phi), rho*sin(phi)])
         >>> X.jacobian(Y)
         [cos(phi), -rho*sin(phi)]
         [sin(phi),  rho*cos(phi)]
@@ -936,16 +942,21 @@ class Matrix(object):
         assert len(self.shape) == 2
         assert len(X.shape) == 2
         if self.shape[0] == 1:
-            n = self.shape[1]
+            m = self.shape[1]
+        elif self.shape[1] == 1:
+            m = self.shape[0]
         else:
-            n = self.shape[0]
+            raise TypeError("self must be a row or a column matrix")
         if X.shape[0] == 1:
-            assert X.shape[1] == n
+            n = X.shape[1]
+        elif X.shape[1] == 1:
+            n = X.shape[0]
         else:
-            assert X.shape[0] == n
+            raise TypeError("X must be a row or a column matrix")
 
-        # n is the dimension of the matrix, computing the Jacobian is now easy:
-        return Matrix(n, n, lambda j, i: self[j].diff(X[i]))
+        # m is the number of functions and n is the number of variables
+        # computing the Jacobian is now easy:
+        return Matrix(m, n, lambda j, i: self[j].diff(X[i]))
 
     def QRdecomposition(self):
         """
@@ -988,7 +999,7 @@ class Matrix(object):
                 self.lines == 3 and self.cols == 1 ) and \
                 (b.lines == 1 and b.cols == 3 or \
                 b.lines == 3 and b.cols == 1):
-            raise "Dimensions incorrect for cross product"
+            raise ValueError("Dimensions incorrect for cross product")
         else:
             return Matrix(1,3,((self[1]*b[2] - self[2]*b[1]),
                                (self[2]*b[0] - self[0]*b[2]),
@@ -1107,7 +1118,7 @@ class Matrix(object):
         elif method == "berkowitz":
             return self.berkowitz_det()
         else:
-            raise Exception("Determinant method unrecognized")
+            raise ValueError("Determinant method unrecognized")
 
     def det_bareis(self):
         """Compute matrix determinant using Bareis' fraction-free
@@ -1312,7 +1323,7 @@ class Matrix(object):
 
         """
         if not self.is_square:
-            raise MatrixError
+            raise NonSquareMatrixException()
 
         A, N = self, self.lines
         transforms = [0] * (N-1)
@@ -1377,7 +1388,7 @@ class Matrix(object):
     def eigenvects(self, **flags):
         """Return list of triples (eigenval, multiplicty, basis)."""
 
-        if flags.has_key('multiple'):
+        if 'multiple' in flags:
             del flags['multiple']
 
         out, vlist = [], self.eigenvals(**flags)
@@ -1406,6 +1417,62 @@ class Matrix(object):
             return doit
         else:
             raise AttributeError()
+
+    def vec(self):
+        """
+        Return the Matrix converted into a one column matrix by stacking columns
+
+        >>> from sympy import Matrix
+        >>> m=Matrix([ [1,3], [2,4] ])
+        >>> m
+        [1, 3]
+        [2, 4]
+        >>> m.vec()
+        [1]
+        [2]
+        [3]
+        [4]
+        """
+        return Matrix(self.cols*self.lines, 1, self.transpose().mat)
+
+    def vech(self, diagonal=True):
+        """
+        Return the unique elements of a symmetric Matrix as a one column matrix by stacking
+        the elements in the lower triangle
+
+        diagonal ...... include the diagonal cells of self or not
+
+        >>> from sympy import Matrix
+        >>> m=Matrix([ [1,2], [2,3] ])
+        >>> m
+        [1, 2]
+        [2, 3]
+        >>> m.vech()
+        [1]
+        [2]
+        [3]
+        >>> m.vech(diagonal=False)
+        [2]
+        """
+        c = self.cols
+        if c != self.lines:
+            raise TypeError("Matrix must be square")
+        if self != self.transpose():
+            raise TypeError("Matrix must be symmetric")
+        count = 0
+        if diagonal:
+            v = zeros( (c * (c + 1) // 2, 1) )
+            for j in xrange(c):
+                for i in xrange(j,c):
+                    v[count] = self[i,j]
+                    count += 1
+        else:
+            v = zeros( (c * (c - 1) // 2, 1) )
+            for j in xrange(c):
+                for i in xrange(j+1,c):
+                    v[count] = self[i,j]
+                    count += 1
+        return v
 
 def matrix_multiply(A,B):
     """
@@ -1488,12 +1555,12 @@ def hessian(f, varlist):
         m = varlist.cols
         assert varlist.lines == 1
     else:
-        raise "Improper variable list in hessian function"
+        raise ValueError("Improper variable list in hessian function")
     assert m > 0
     try:
         f.diff(varlist[0])   # check differentiability
     except AttributeError:
-        raise "Function %d is not differentiable" % i
+        raise ValueError("Function %d is not differentiable" % i)
     out = zeros(m)
     for i in range(m):
         for j in range(i,m):
@@ -1511,7 +1578,7 @@ def GramSchmidt(vlist, orthog=False):
         for j in range(i):
             tmp -= vlist[i].project(out[j])
         if tmp == Matrix([[0,0,0]]):
-            raise "GramSchmidt: vector set not linearly independent"
+            raise ValueError("GramSchmidt: vector set not linearly independent")
         out.append(tmp)
     if orthog:
         for i in range(len(out)):
@@ -1647,7 +1714,7 @@ class SMatrix(Matrix):
         assert len(key) == 2
         if isinstance(key[0], int) and isinstance(key[1], int):
             i,j=self.key2ij(key)
-            if self.mat.has_key((i,j)):
+            if (i, j) in self.mat:
                 return self.mat[(i,j)]
             else:
                 return 0
@@ -1711,7 +1778,7 @@ class SMatrix(Matrix):
             c = []
             l.append(c)
             for j in range(self.cols):
-                if self.mat.has_key((i, j)):
+                if (i, j) in self.mat:
                     c.append(self[i, j])
                 else:
                     c.append(0)
@@ -1763,7 +1830,7 @@ class SMatrix(Matrix):
                 self.lines == 3 and self.cols == 1 ) and \
                 (b.lines == 1 and b.cols == 3 or \
                 b.lines == 3 and b.cols == 1):
-            raise "Dimensions incorrect for cross product"
+            raise ValueError("Dimensions incorrect for cross product")
         else:
             return SMatrix(1,3,((self[1]*b[2] - self[2]*b[1]),
                                (self[2]*b[0] - self[0]*b[2]),

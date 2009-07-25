@@ -2,9 +2,13 @@
 A Printer which converts an expression into its LaTeX equivalent.
 """
 
-from sympy.core import S, C, Basic, Symbol
+from sympy.core import S, C, Basic, Symbol, Wild, var
 from printer import Printer
 from sympy.simplify import fraction
+
+import sympy.mpmath.libmpf as mlib
+from sympy.mpmath.settings import prec_to_dps
+
 import re
 
 class LatexPrinter(Printer):
@@ -13,16 +17,38 @@ class LatexPrinter(Printer):
     def __init__(self, profile=None):
         Printer.__init__(self)
 
+        mul_symbol_table = {
+            None : r" ",
+            "ldot" : r" \,.\, ",
+            "dot" : r" \cdot ",
+            "times" : r" \times "
+        }
+
         self._settings = {
             "inline" : True,
+            "descending" : False,
+            "mainvar" : None,
             "fold_frac_powers" : False,
             "fold_func_brackets" : False,
             "mul_symbol" : None,
-            "inv_trig_style" : "abbreviated"
+            "inv_trig_style" : "abbreviated",
+            "mat_str" : "smallmatrix",
+            "mat_delim" : "(",
         }
 
+        self._delim_dict = {'(':')','[':']'}
+
         if profile is not None:
+            if profile.has_key('inline'):
+                if not profile['inline']:
+                    #change to "good" defaults for inline=False before
+                    #updating with the settings from profile
+                    self._settings['mat_str'] = 'bmatrix'
+                    self._settings['mat_delim'] = None
             self._settings.update(profile)
+
+        self._settings['mul_symbol_latex'] = \
+            mul_symbol_table[self._settings['mul_symbol']]
 
     def doprint(self, expr):
         tex = Printer.doprint(self, expr)
@@ -80,7 +106,37 @@ class LatexPrinter(Printer):
 
     def _print_Add(self, expr):
         args = list(expr.args)
-        args.sort(Basic._compare_pretty)
+
+        if self._settings['mainvar'] is not None:
+            mainvar = self._settings['mainvar']
+            if type(mainvar) == str:
+                mainvar = var(mainvar)
+
+            def compare_exponents(a, b):
+               p1, p2 = Wild("p1"), Wild("p2")
+               r_a = a.match(p1 * mainvar**p2)
+               r_b = b.match(p1 * mainvar**p2)
+               if r_a is None and r_b is None:
+                   c = Basic._compare_pretty(a,b)
+                   return c
+               elif r_a is not None:
+                   if r_b is None:
+                       return 1
+                   else:
+                       c = Basic.compare(r_a[p2], r_b[p2])
+                       if c!=0:
+                           return c
+                       else:
+                           c = Basic._compare_pretty(a,b)
+                           return c
+               elif r_b is not None and r_a is None:
+                    return -1
+
+            args.sort(compare_exponents)
+        else:
+            args.sort(Basic._compare_pretty)
+        if self._settings['descending']:
+            args.reverse()
 
         tex = str(self._print(args[0]))
 
@@ -94,6 +150,31 @@ class LatexPrinter(Printer):
 
         return tex
 
+    def _print_Real(self, expr):
+        # Based off of that in StrPrinter
+        dps = prec_to_dps(expr._prec)
+        str_real = mlib.to_str(expr._mpf_, dps, strip_zeros=True)
+
+        # Must always have a mul symbol (as 2.5 10^{20} just looks odd)
+        seperator = r" \times "
+
+        if self._settings['mul_symbol'] is not None:
+            seperator = self._settings['mul_symbol_latex']
+
+        if 'e' in str_real:
+            (mant, exp) = str_real.split('e')
+
+            if exp[0] == '+':
+                exp = exp[1:]
+
+            return r"%s%s10^{%s}" % (mant, seperator, exp)
+        elif str_real == "+inf":
+            return r"\infty"
+        elif str_real == "-inf":
+            return r"- \intfy"
+        else:
+            return str_real
+
     def _print_Mul(self, expr):
         coeff, terms = expr.as_coeff_terms()
 
@@ -104,40 +185,53 @@ class LatexPrinter(Printer):
             tex = "- "
 
         numer, denom = fraction(C.Mul(*terms))
-
-        mul_symbol_table = {
-            None : r" ",
-            "ldot" : r" \,.\, ",
-            "dot" : r" \cdot ",
-            "times" : r" \times "
-        }
-
-        seperator = mul_symbol_table[self._settings['mul_symbol']]
+        seperator = self._settings['mul_symbol_latex']
 
         def convert(terms):
-            product = []
-
             if not terms.is_Mul:
                 return str(self._print(terms))
             else:
+                _tex = last_term_tex = ""
                 for term in terms.args:
                     pretty = self._print(term)
 
                     if term.is_Add:
-                        product.append(r"\left(%s\right)" % pretty)
+                        term_tex = (r"\left(%s\right)" % pretty)
                     else:
-                        product.append(str(pretty))
+                        term_tex = str(pretty)
 
-                return seperator.join(product)
+                    # between two digits, \times must always be used,
+                    # to avoid confusion
+                    if seperator == " " and \
+                            re.search("[0-9][} ]*$", last_term_tex) and \
+                            re.match("[{ ]*[-+0-9]", term_tex):
+                        _tex += r" \times "
+                    elif _tex:
+                        _tex += seperator
+
+                    _tex += term_tex
+                    last_term_tex = term_tex
+                return _tex
 
         if denom is S.One:
-            if coeff is not S.One:
-                tex += str(self._print(coeff)) + seperator
-
             if numer.is_Add:
-                tex += r"\left(%s\right)" % convert(numer)
+                _tex = r"\left(%s\right)" % convert(numer)
             else:
-                tex += r"%s" % convert(numer)
+                _tex = r"%s" % convert(numer)
+
+            if coeff is not S.One:
+                tex += str(self._print(coeff))
+
+                # between two digits, \times must always be used, to avoid
+                # confusion
+                if seperator == " " and re.search("[0-9][} ]*$", tex) and \
+                        re.match("[{ ]*[-+0-9]", _tex):
+                    tex +=  r" \times " + _tex
+                else:
+                    tex += seperator + _tex
+            else:
+                tex += _tex
+
         else:
             if numer is S.One:
                 if coeff.is_Integer:
@@ -442,25 +536,37 @@ class LatexPrinter(Printer):
             self._print(expr.args[0])
 
     def _print_Symbol(self, expr):
-        if len(expr.name) == 1:
-            return expr.name
+        pos = 0
+        name = None
+        supers = []
+        subs = []
+        while pos < len(expr.name):
+            pos_hat = expr.name.find("^", pos+1)
+            if pos_hat < 0: pos_hat = len(expr.name)
+            pos_usc = expr.name.find("_", pos+1)
+            if pos_usc < 0: pos_usc = len(expr.name)
+            pos_next = min(pos_hat, pos_usc)
+            #if pos_next == len(expr.name):
+            part = expr.name[pos:pos_next]
+            #print pos, pos_next, part
+            if name is None:
+                name = part
+            elif part.startswith("^"):
+                supers.append(part[1:])
+            elif part.startswith("_"):
+                subs.append(part[1:])
+            else:
+                raise RuntimeError("This should never happen.")
+            pos = pos_next
 
-        #convert trailing digits to subscript
-        m = re.match('(^[a-zA-Z]+)([0-9]+)$', expr.name)
+        # make a little exception when a name ends with digits, i.e. treat them
+        # as a subscript too.
+        m = re.match('(^[a-zA-Z]+)([0-9]+)$', name)
         if m is not None:
-            name, sub=m.groups()
-            tex=self._print_Symbol(Symbol(name))
-            tex="%s_{%s}" %(tex, sub)
-            return tex
+            name, sub = m.groups()
+            subs.append(sub)
 
-        # insert braces to expresions containing '_' or '^'
-        m = re.match('(^[a-zA-Z0-9]+)([_\^]{1})([a-zA-Z0-9]+)$', expr.name)
-        if m is not None:
-            name, sep, rest=m.groups()
-            tex=self._print_Symbol(Symbol(name))
-            tex="%s%s{%s}" %(tex, sep, rest)
-            return tex
-
+        # make a nice name
         greek = set([ 'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta',
                       'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu',
                       'xi', 'omicron', 'pi', 'rho', 'sigma', 'tau', 'upsilon',
@@ -469,12 +575,18 @@ class LatexPrinter(Printer):
         other = set( ['aleph', 'beth', 'daleth', 'gimel', 'ell', 'eth',
                       'hbar', 'hslash', 'mho' ])
 
-        if expr.name.lower() in greek:
-            return "\\" + expr.name
+        if name.lower() in greek:
+            name = "\\" + name
         elif expr.name in other:
-            return "\\" + expr.name
-        else:
-            return expr.name
+            name = "\\" + name
+
+        # glue all items together:
+        if len(supers) > 0:
+            name += "^{%s}" % ",".join(supers)
+        if len(subs) > 0:
+            name += "_{%s}" % ",".join(subs)
+
+        return name
 
     def _print_Relational(self, expr):
         charmap = {
@@ -490,7 +602,7 @@ class LatexPrinter(Printer):
     def _print_Piecewise(self, expr):
         ecpairs = [r"%s & for %s" % (self._print(e), self._print(c)) \
                        for e, c in expr.args[:-1]]
-        if expr.args[-1].cond is S.One:
+        if expr.args[-1].cond == True:
             ecpairs.append(r"%s & \textrm{otherwise}" % \
                                self._print(expr.args[-1].expr))
         else:
@@ -506,12 +618,14 @@ class LatexPrinter(Printer):
         for line in range(expr.lines): # horrible, should be 'rows'
             lines.append(" & ".join([ self._print(i) for i in expr[line,:] ]))
 
-        if self._settings['inline']:
-            tex = r"\left(\begin{smallmatrix}%s\end{smallmatrix}\right)"
-        else:
-            tex = r"\begin{pmatrix}%s\end{pmatrix}"
-
-        return tex % r"\\".join(lines)
+        out_str = r'\begin{%MATSTR%}%s\end{%MATSTR%}'
+        out_str = out_str.replace('%MATSTR%', self._settings['mat_str'])
+        if self._settings['mat_delim']:
+            left_delim = self._settings['mat_delim']
+            right_delim = self._delim_dict[left_delim]
+            out_str = r'\left' + left_delim + out_str + \
+                      r'\right' + right_delim
+        return out_str % r"\\".join(lines)
 
     def _print_tuple(self, expr):
         return r"\begin{pmatrix}%s\end{pmatrix}" % \

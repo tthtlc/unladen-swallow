@@ -238,7 +238,7 @@ All objects in the sympy are immutable - in the sense, that any operation just
 returns a new instance (it can return the same instance only if it didn't
 change). This is a common mistake to change the current instance, like
 ``self.arg=self.arg +1`` (wrong!). Use ``arg=self.arg + 1;return arg`` instead.
-The object in immutable in the
+The object is immutable in the
 sense of the symbolic expression it represents. It can modify itself to keep
 track of for example its hash. Or it can precalculate anything regarding the
 expression it contains. But the expression cannot be changed. So you can pass
@@ -288,9 +288,9 @@ The ``eval`` is called when the class is about to be instantiated and it
 should return either some simplified instance of some other class or if the
 class should be unmodified, return ``None`` (see ``core/function.py`` in
 ``Function.__new__`` for implementation details). See also tests in
-`sympy/functions/elementary/tests/test_interface.py <http://hg.sympy.org/sympy/file/tip/sympy/functions/elementary/tests/test_interface.py>`_,
-that test this interface
-and you can use them to create your own new functions.
+`sympy/functions/elementary/tests/test_interface.py
+<http://git.sympy.org/?p=sympy.git;a=blob;f=sympy/functions/elementary/tests/test_interface.py>`_,
+that test this interface and you can use them to create your own new functions.
 
 The applied function ``sign(x)`` is constructed using
 ::
@@ -513,7 +513,7 @@ get your patch accepted.
 .. _SympyDevelopment:   http://code.google.com/p/sympy/wiki/SympyDevelopment
 
 Please read our excellent :ref:`SymPy Patches Tutorial <patches-tutorial>`
-how to write patches to SymPy, how to work with Mercurial and simply
+how to write patches to SymPy, how to work with Git and simply
 how to get your life easier and get started with SymPy.
 
 

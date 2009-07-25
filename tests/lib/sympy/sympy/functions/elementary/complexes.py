@@ -81,7 +81,10 @@ class re(Function):
     def _eval_conjugate(self):
         return self
 
-    def _eval_expand_complex(self, *args):
+    def _eval_expand_complex(self, deep=True, **hints):
+#        if deep:
+#            return self.args[0].expand(deep, **hints).as_real_imag()[0]
+#        else:
         return self.args[0].as_real_imag()[0]
 
 class im(Function):
@@ -156,7 +159,9 @@ class im(Function):
     def _eval_conjugate(self):
         return self
 
-    def _eval_expand_complex(self, *args):
+    def _eval_expand_complex(self, deep=True, **hints):
+#        if deep:
+#            return self.args[0].expand(deep, **hints).as_real_imag()[1]
         return self.args[0].as_real_imag()[1]
 
 ###############################################################################
@@ -164,6 +169,11 @@ class im(Function):
 ###############################################################################
 
 class sign(Function):
+    """Return the sign of an expression, that is:
+        -1 if expr <  0
+         0 if expr == 0
+         1 if expr >  0
+    """
 
     nargs = 1
 
@@ -280,6 +290,7 @@ class abs(Function):
         return sage.abs_symbolic(self.args[0]._sage_())
 
 class arg(Function):
+    """Returns the argument (in radians) of a complex number"""
 
     nargs = 1
 

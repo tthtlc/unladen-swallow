@@ -29,6 +29,9 @@ def test_latex_basic():
     assert latex(x**(Rational(3,4))) == r"$x^{\frac{3}{4}}$"
     assert latex(x**(Rational(3,4)), fold_frac_powers=True) == "$x^{3/4}$"
 
+    assert latex(1.5e20*x) == r"$1.5 \times 10^{20} x$"
+    assert latex(1.5e20*x, mul_symbol='dot') == r"$1.5 \cdot 10^{20} \cdot x$"
+
 
 def test_latex_symbols():
     Gamma, lmbda, rho = map(Symbol, ('Gamma', 'lambda', 'rho'))
@@ -149,3 +152,50 @@ def test_latex_Matrix():
     M = Matrix([[1+x, y],[y, x-1]])
     assert latex(M) == '$\\left(\\begin{smallmatrix}1 + x & y\\\\y & -1 + '\
                        'x\\end{smallmatrix}\\right)$'
+    profile = {'mat_str' : 'bmatrix'}
+    assert latex(M, profile) == '$\\left(\\begin{bmatrix}1 + x & y\\\\y & -1 + '+ \
+           'x\\end{bmatrix}\\right)$'
+    profile['mat_delim'] = None
+    assert latex(M, profile) == '$\\begin{bmatrix}1 + x & y\\\\y & -1 + '\
+                       'x\\end{bmatrix}$'
+
+def test_latex_mul_symbol():
+    assert latex(4*4**x, mul_symbol='times') == "$4 \\times 4^{x}$"
+    assert latex(4*4**x, mul_symbol='dot') == "$4 \\cdot 4^{x}$"
+    assert latex(4*4**x, mul_symbol='ldot') == "$4 \,.\, 4^{x}$"
+
+    assert latex(4*x, mul_symbol='times') == "$4 \\times x$"
+    assert latex(4*x, mul_symbol='dot') == "$4 \\cdot x$"
+    assert latex(4*x, mul_symbol='ldot') == "$4 \,.\, x$"
+
+def test_latex_issue1282():
+    y = 4*4**log(2)
+    assert latex(y) == '$4 \\times 4^{\\operatorname{log}\\left(2\\right)}$'
+    assert latex(1/y) == '$\\frac{1}{4 \\times 4^{\\operatorname{log}\\left(2\\right)}}$'
+
+def test_latex_issue1477():
+    assert latex(Symbol("beta_13_2")) == r"$\beta_{13,2}$"
+    assert latex(Symbol("beta_132_20")) == r"$\beta_{132,20}$"
+    assert latex(Symbol("beta_13")) == r"$\beta_{13}$"
+    assert latex(Symbol("x_a_b")) == r"$x_{a,b}$"
+    assert latex(Symbol("x_1_2_3")) == r"$x_{1,2,3}$"
+    assert latex(Symbol("x_a_b1")) == r"$x_{a,b1}$"
+    assert latex(Symbol("x_a_1")) == r"$x_{a,1}$"
+    assert latex(Symbol("x_1_a")) == r"$x_{1,a}$"
+    assert latex(Symbol("x_1^aa")) == r"$x^{aa}_{1}$"
+    assert latex(Symbol("x_11^a")) == r"$x^{a}_{11}$"
+    assert latex(Symbol("x_a_a_a_a")) == r"$x_{a,a,a,a}$"
+    assert latex(Symbol("x_a_a^a^a")) == r"$x^{a,a}_{a,a}$"
+    assert latex(Symbol("alpha_11")) == r"$\alpha_{11}$"
+    assert latex(Symbol("alpha_11_11")) == r"$\alpha_{11,11}$"
+
+def test_mainvar():
+    expr = 3*x*y**3+x**2*y+x**3+y**4
+    profile_y = {'mainvar' : y}
+    assert latex(expr, profile_y) == '$x^{3} + y x^{2} + 3 x y^{3} + y^{4}$'
+    profile_x = {'mainvar' : x}
+    assert latex(expr, profile_x) == '$y^{4} + 3 x y^{3} + y x^{2} + x^{3}$'
+    profile_y['descending'] = True
+    assert latex(expr, profile_y) == '$y^{4} + 3 x y^{3} + y x^{2} + x^{3}$'
+    profile_x['descending'] = True
+    assert latex(expr, profile_x) == '$x^{3} + y x^{2} + 3 x y^{3} + y^{4}$'

@@ -2,20 +2,9 @@
 
 import sympy.mpmath as mpmath
 
+from decorators import _sympifyit
 from assumptions import AssumeMeths, make__get_assumption
-from sympify import _sympify, _sympifyit, sympify, SympifyError
-from cache import cacheit, Memoizer, MemoizerArg
-
-# from numbers  import Number, Integer, Rational, Real /cyclic/
-# from interval import Interval /cyclic/
-# from symbol   import Symbol, Wild, Temporary /cyclic/
-# from add      import Add  /cyclic/
-# from mul      import Mul  /cyclic/
-# from power    import Pow  /cyclic/
-# from function import Derivative, FunctionClass   /cyclic/
-# from relational import Equality, Unequality, Inequality, StrictInequality /cyclic/
-# from sympy.functions.elementary.complexes import abs as abs_   /cyclic/
-# from sympy.printing import StrPrinter
+from cache import cacheit
 
 # used for canonical ordering of symbolic sequences
 # via __cmp__ method:
@@ -337,15 +326,29 @@ class Basic(AssumeMeths):
     # XXX better name?
     @property
     def assumptions0(self):
-        """return object `type` assumptions
+        """
+        Return object `type` assumptions.
 
-           For example:
+        For example:
 
-             Symbol('x', real=True)
-             Symbol('x', integer=True)
+          Symbol('x', real=True)
+          Symbol('x', integer=True)
 
-          are different objects, and besides Python type (Symbol), initial
-          assumptions, are too forming their typeinfo.
+        are different objects. In other words, besides Python type (Symbol in
+        this case), the initial assumptions are also forming their typeinfo.
+
+        Example:
+
+        >>> from sympy import Symbol
+        >>> x = Symbol("x")
+        >>> x.assumptions0
+        {}
+        >>> x = Symbol("x", positive=True)
+        >>> x.assumptions0
+        {'commutative': True, 'complex': True, 'imaginary': False,
+        'negative': False, 'nonnegative': True, 'nonpositive': False,
+        'nonzero': True, 'positive': True, 'real': True, 'zero': False}
+
         """
 
         cls = type(self)
@@ -361,15 +364,21 @@ class Basic(AssumeMeths):
 
 
     def new(self, *args):
-        """create new 'similar' object
+        """
+        Create new 'similar' object.
 
-           this is conceptually equivalent to:
+        this is conceptually equivalent to:
 
-             type(self) (*args)
+          type(self) (*args)
 
-           but takes type assumptions into account.
+        but takes type assumptions into account. See also: assumptions0
 
-           see: assumptions0
+        Example:
+
+        >>> x = Symbol("x")
+        >>> x.new("x")
+        x
+
         """
         obj = type(self) (*args, **self.assumptions0)
         return obj
@@ -381,12 +390,12 @@ class Basic(AssumeMeths):
     # new-style classes + __getattr__ is *very* slow!
 
     # def __getattr__(self, name):
-    #     raise 'no way, *all* attribute access will be 2.5x slower'
+    #     raise Warning('no way, *all* attribute access will be 2.5x slower')
 
     # here is what we do instead:
     for k in AssumeMeths._assume_defined:
         exec "is_%s  = property(make__get_assumption('Basic', '%s'))" % (k,k)
-
+    del k
 
     # NB: there is no need in protective __setattr__
 
@@ -462,10 +471,23 @@ class Basic(AssumeMeths):
 
     def compare(self, other):
         """
-        Return -1,0,1 if the object is smaller, equal, or greater than other
-        (not always in mathematical sense).
-        If the object is of different type from other then their classes
-        are ordered according to sorted_classes list.
+        Return -1,0,1 if the object is smaller, equal, or greater than other.
+
+        Not in the mathematical sense. If the object is of a different type
+        from the "other" then their classes are ordered according to
+        the sorted_classes list.
+
+        Example:
+
+        >>> from sympy import *
+        >>> x, y = symbols("x y")
+        >>> x.compare(y)
+        -1
+        >>> x.compare(x)
+        0
+        >>> y.compare(x)
+        1
+
         """
         # all redefinitions of __cmp__ method should start with the
         # following three lines:
@@ -522,6 +544,16 @@ class Basic(AssumeMeths):
         expression and returns the "sane" ordering such as:
 
         1 < x < x**2 < x**3 < O(x**4) etc.
+
+        Example:
+
+        >>> x = Symbol("x")
+        >>> Basic.compare_pretty(x, x**2)
+        -1
+        >>> Basic.compare_pretty(x**2, x**2)
+        0
+        >>> Basic.compare_pretty(x**3, x**2)
+        1
 
         """
         try:
@@ -680,8 +712,30 @@ class Basic(AssumeMeths):
     __truediv__ = __div__
     __rtruediv__ = __rdiv__
 
+    # *******************
+    # * Logic operators *
+    # *******************
 
-
+    def __and__(self, other):
+        """Overloading for & operator"""
+        from sympy.logic.boolalg import And
+        return And(self, other)
+    def __or__(self, other):
+        """Overloading for |"""
+        from sympy.logic.boolalg import Or
+        return Or(self, other)
+    def __invert__(self):
+        """Overloading for ~"""
+        from sympy.logic.boolalg import Not
+        return Not(self)
+    def __rshift__(self, other):
+        """Overloading for >>"""
+        from sympy.logic.boolalg import Implies
+        return Implies(self, other)
+    def __lshift__(self, other):
+        """Overloading for <<"""
+        from sympy.logic.boolalg import Implies
+        return Implies(other, self)
 
 
     def __repr__(self):
@@ -783,6 +837,19 @@ class Basic(AssumeMeths):
 
             >> x == x.func(*x.args)
 
+        Example:
+
+        >>> x = Symbol("x")
+        >>> a = 2*x
+        >>> a.func
+        <class 'sympy.core.mul.Mul'>
+        >>> a.args
+        (2, x)
+        >>> a.func(*a.args)
+        2*x
+        >>> a == a.func(*a.args)
+        True
+
         """
         return self.__class__
 
@@ -815,10 +882,41 @@ class Basic(AssumeMeths):
         return self._args[:]
 
     def iter_basic_args(self):
-        """Iterates arguments of 'self' with are Basic instances. """
+        """
+        Iterates arguments of 'self'.
+
+        Example:
+
+        >>> x = Symbol("x")
+        >>> a = 2*x
+        >>> a.iter_basic_args()
+        <tupleiterator object at 0x...>
+        >>> list(a.iter_basic_args())
+        [2, x]
+
+        """
         return iter(self.args)
 
-    def is_fraction(self, *syms):
+    def is_rational_function(self, *syms):
+        """
+        Test whether function is rational function - ratio of two polynomials.
+        When no arguments are present, Basic.atoms(Symbol) is used instead.
+
+        Example:
+
+        >>> from sympy import symbols, sin
+        >>> x, y = symbols('xy')
+
+        >>> (x/y).is_rational_function()
+        True
+
+        >>> (x**2).is_rational_function()
+        True
+
+        >>> (x/sin(y)).is_rational_function(y)
+        False
+
+        """
         p, q = self.as_numer_denom()
 
         if p.is_polynomial(*syms):
@@ -929,7 +1027,7 @@ class Basic(AssumeMeths):
             old, new = args
             return self._subs_old_new(old, new)
         else:
-            raise Exception("subs accept either 1 or 2 arguments")
+            raise TypeError("subs accepts either 1 or 2 arguments")
 
     @cacheit
     def _subs_old_new(self, old, new):
@@ -962,7 +1060,8 @@ class Basic(AssumeMeths):
             raise TypeError("Not an iterable container")
         result = self
         for old, new in sequence:
-            result = result.subs(old, new)
+            if hasattr(result, 'subs'):
+                result = result.subs(old, new)
         return result
 
     def _subs_dict(self, sequence):
@@ -1102,6 +1201,14 @@ class Basic(AssumeMeths):
     def has(self, *patterns):
         """
         Return True if self has any of the patterns.
+
+        Example:
+        >>> x = Symbol("x")
+        >>> (2*x).has(x)
+        True
+        >>> (2*x/x).has(x)
+        False
+
         """
         if len(patterns)>1:
             for p in patterns:
@@ -1293,6 +1400,24 @@ class Basic(AssumeMeths):
 
           pattern.subs(self.match(pattern)) == self
 
+        Example:
+
+        >>> from sympy import symbols
+        >>> x, y = symbols("x y")
+        >>> p = Wild("p")
+        >>> q = Wild("q")
+        >>> r = Wild("r")
+        >>> e = (x+y)**(x+y)
+        >>> e.match(p**p)
+        {p_: x + y}
+        >>> e.match(p**q)
+        {p_: x + y, q_: x + y}
+        >>> e = (2*x)**2
+        >>> e.match(p*q**r)
+        {p_: 4, q_: x, r_: 2}
+        >>> (p*q**r).subs(e.match(p*q**r))
+        4*x**2
+
         """
         pattern = sympify(pattern)
         return pattern.matches(self, {})
@@ -1349,90 +1474,61 @@ class Basic(AssumeMeths):
         return self.new(*terms)
 
     ###########################################################################
-    ################# EXPRESSION REPRESENTATION METHODS #######################
+    ###################### EXPRESSION EXPANSION METHODS #######################
     ###########################################################################
 
-    def _eval_expand_basic(self):
-        terms, rewrite = [], False
+    # These should be overridden in subclasses
 
-        for term in self.args:
-            if not isinstance(term, Basic) or \
-                   isinstance(term, Atom):
-                terms.append(term)
-            else:
-                T = term._eval_expand_basic()
+    def _eval_expand_basic(self, deep=True, **hints):
+        return self
 
-                if T is None:
-                    terms.append(term)
-                else:
-                    terms.append(T)
-                    rewrite = True
+    def _eval_expand_power_exp(self, deep=True, **hints):
+        return self
 
-        if rewrite:
-            return self.new(*terms)
-        else:
-            return None
+    def _eval_expand_power_base(self, deep=True, **hints):
+        return self
 
-    def _eval_expand_power(self, *args):
-        if self.is_Atom:
-            return self
-        if not isinstance(self, C.Apply):   # FIXME Apply -> Function
-            sargs = self[:]
-        else:
-            sargs = (self.func,)+self[:]
-        terms = [ term._eval_expand_power(*args) for term in sargs ]
-        return self.new(*terms)
+    def _eval_expand_mul(self, deep=True, **hints):
+        return self
 
-    def _eval_expand_complex(self, *args):
-        if self.is_Atom:
-            return self
-        sargs = self.args[:]
-        terms = [ term._eval_expand_complex(*args) for term in sargs ]
-        return self.new(*terms)
+    def _eval_expand_multinomial(self, deep=True, **hints):
+        return self
 
-    def _eval_expand_trig(self, *args):
-        if self.is_Atom:
-            return self
-        sargs = self.args[:]
-        terms = [ term._eval_expand_trig(*args) for term in sargs ]
-        return self.new(*terms)
+    def _eval_expand_log(self, deep=True, **hints):
+        return self
 
-    def _eval_expand_func(self, *args):
-        if self.is_Atom:
-            return self
-        sargs = self.args
-        terms = [ term._eval_expand_func(*args) for term in sargs ]
-        return self.new(*terms)
+    def _eval_expand_complex(self, deep=True, **hints):
+        return self
 
-    def expand(self, **hints):
-        """Expand an expression using hints.
+    def _eval_expand_trig(self, deep=True, **hints):
+        return self
 
-           Currently supported hints are basic, power, complex, trig
-           and func.  Hints are applied with arbitrary order so your
-           code shouldn't depend on the way hints are passed to this
-           method. Expand 'basic' is the default and run always,
-           provided that it isn't turned off by the user.
+    def _eval_expand_func(self, deep=True, **hints):
+        return self
 
-           >>> from sympy import *
-           >>> x,y = symbols('xy')
-
-           >>> (y*(x + y)**2).expand()
-           y*x**2 + 2*x*y**2 + y**3
-
-           >>> (x+y).expand(complex=True)
-           I*im(x) + I*im(y) + re(x) + re(y)
-
+    def expand(self, deep=True, power_base=True, power_exp=True, mul=True, \
+           log=True, multinomial=True, basic=True, **hints):
         """
+        Expand an expression using hints.
+
+        See the docstring in function.expand for more information.
+        """
+        hints['power_base'] = power_base
+        hints['power_exp'] = power_exp
+        hints['mul'] = mul
+        hints['log'] = log
+        hints['multinomial'] = multinomial
+        hints['basic'] = basic
+
         expr = self
 
         for hint in hints:
             if hints[hint] == True:
                 func = getattr(expr, '_eval_expand_'+hint, None)
-
                 if func is not None:
-                    expr = func()
+                    expr = func(deep=deep, **hints)
 
-        if not hints.has_key('basic'):
+        if not 'basic' in hints:
             if not expr.is_Atom:
                 result = expr._eval_expand_basic()
 
@@ -1645,7 +1741,7 @@ class Basic(AssumeMeths):
            (-im(w) + re(z), im(z) + re(w))
 
         """
-        expr = self.expand(complex=True)
+        expr = self.expand(complex=True, deep=False)
 
         if not expr.is_Add:
             expr = [expr]
@@ -1917,6 +2013,10 @@ class Basic(AssumeMeths):
                     return False
                 elif positive_args < negative_args:
                     return True
+            elif self.is_Mul:
+                num, den = self.as_numer_denom()
+                if den != 0:
+                    return num.could_extract_minus_sign()
 
             # As a last resort, we choose the one with greater hash
             return hash(self) < hash(negative_self)
@@ -1927,7 +2027,7 @@ class Basic(AssumeMeths):
 
     def diff(self, *symbols, **assumptions):
         new_symbols = map(sympify, symbols)
-        if not assumptions.has_key("evaluate"):
+        if not "evaluate" in assumptions:
             assumptions["evaluate"] = True
         ret = Derivative(self, *new_symbols, **assumptions)
         return ret
@@ -2108,7 +2208,7 @@ class Basic(AssumeMeths):
     def _eval_nseries(self, x, x0, n):
         """
         This is a method that should be overriden in subclasses. Users should
-        never call this method directl (use .nseries() instead), so you don't
+        never call this method directly (use .nseries() instead), so you don't
         have to write docstrings for _eval_nseries().
         """
         raise NotImplementedError("(%s).nseries(%s, %s, %s)" % (self, x, x0, n))
@@ -2136,7 +2236,7 @@ class Basic(AssumeMeths):
 
         self is assumed to be the result returned by Basic.series().
         """
-
+        from sympy import powsimp
         if len(symbols)>1:
             c = self
             for x in symbols:
@@ -2150,7 +2250,7 @@ class Basic(AssumeMeths):
             return self
         obj = self._eval_as_leading_term(x)
         if obj is not None:
-            return obj
+            return powsimp(obj, deep=True, combine='exp')
         raise NotImplementedError('as_leading_term(%s, %s)' % (self, x))
 
     def _eval_as_leading_term(self, x):
@@ -2186,9 +2286,10 @@ class Basic(AssumeMeths):
 
         self is assumed to be the result returned by Basic.series().
         """
-
+        from sympy import powsimp
         x = sympify(x)
         c,e = self.as_leading_term(x).as_coeff_exponent(x)
+        c = powsimp(c, deep=True, combine='exp')
         if not c.has(x):
             return c,e
         raise ValueError("cannot compute leadterm(%s, %s), got c=%s" % (self, x, c))
@@ -2200,7 +2301,7 @@ class Basic(AssumeMeths):
 
 class Atom(Basic):
     """
-    A parent class for atomic things.
+    A parent class for atomic things. An atom is an expression with no subexpressions.
 
     Examples: Symbol, Number, Rational, Integer, ...
     But not: Add, Mul, Pow, ...
@@ -2312,7 +2413,6 @@ class SingletonFactory:
 S = SingletonFactory()
 
 # S(...) = sympify(...)
-S.__call__ = sympify
 
 class ClassesRegistry:
     """Namespace for SymPy classes
@@ -2339,14 +2439,12 @@ class ClassesRegistry:
 
 C = ClassesRegistry()
 
-# XXX this is ugly, but needed for Memoizer('str', ...) to work
-import cache
-cache.C = C
-del cache
-
-# /cyclic/
-import sympify as _
-_.Basic     = Basic
-_.BasicType = BasicType
-_.S         = S
-del _
+from symbol import Wild, Symbol
+from sympify import _sympify, sympify, SympifyError
+S.__call__ = sympify
+from mul import Mul
+from power import Pow
+from add import Add
+from relational import Inequality, StrictInequality
+from function import FunctionClass, Derivative
+from numbers import Rational, Integer

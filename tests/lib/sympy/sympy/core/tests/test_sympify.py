@@ -1,8 +1,8 @@
 from sympy import Symbol, exp, Integer, Real, sin, cos, log, Poly, Lambda, \
         Function, I, S, sqrt,  raises
 from sympy.abc import x, y
-from sympy.core.sympify import sympify, _sympify, _sympifyit, SympifyError
-
+from sympy.core.sympify import sympify, _sympify, SympifyError
+from sympy.core.decorators import _sympifyit
 
 def test_439():
     v = sympify("exp(x)")
@@ -34,6 +34,12 @@ def test_sympify3():
 
     raises(SympifyError, "_sympify('x**3')")
     raises(SympifyError, "_sympify('1/2')")
+
+def test_sympify_bool():
+    """Test that sympify accepts boolean values
+    and that output leaves them unchanged"""
+    assert sympify(True) == True
+    assert sympify(False)== False
 
 def test_sympify4():
     class A:

@@ -66,6 +66,8 @@ class AssocOp(Basic):
 
     @classmethod
     def identity(cls):
+        from mul import Mul
+        from add import Add
         if cls is Mul: return S.One
         if cls is Add: return S.Zero
         if cls is C.Composition:
@@ -83,6 +85,7 @@ class AssocOp(Basic):
                 seq = list(o[:]) + seq
                 continue
             new_seq.append(o)
+        # c_part, nc_part, order_symbols
         return [], new_seq, None
 
     _eval_subs = Basic._seq_subs
@@ -104,6 +107,7 @@ class AssocOp(Basic):
         # eliminate exact part from pattern: (2+a+w1+w2).matches(expr) -> (w1+w2).matches(expr-a-2)
         wild_part = []
         exact_part = []
+        from function import WildFunction
         for p in pattern.args:
             if p.atoms(Wild, WildFunction):
                 # not all Wild should stay Wilds, for example:
@@ -147,3 +151,4 @@ class AssocOp(Basic):
         return r
 
     _eval_evalf = Basic._seq_eval_evalf
+

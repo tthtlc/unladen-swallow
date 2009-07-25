@@ -1,21 +1,16 @@
-import math
+from basic import Atom, SingletonMeta, S, Basic
+from decorators import _sympifyit
+from cache import Memoizer, MemoizerArg
 import sympy.mpmath as mpmath
 import sympy.mpmath.libmpf as mlib
-from sympy.mpmath.libmpf import mpf_abs
 import sympy.mpmath.libmpc as mlibc
-from sympy.mpmath.libelefun import mpf_pow, mpf_pi, phi_fixed
+from sympy.mpmath.libelefun import mpf_pow, mpf_pi, mpf_e, phi_fixed
 import decimal
 
 rnd = mlib.round_nearest
 
-from basic import Basic, Atom, S, C, SingletonMeta, Memoizer, MemoizerArg
-from sympify import _sympify, SympifyError, _sympifyit
-from power import integer_nthroot
 
-# from mul import Mul   /cyclic/
-# from power import Pow /cyclic/
-# from function import FunctionClass    /cyclic/
-
+# TODO: we should use the warnings module
 _errdict = {"divide": False}
 def seterr(divide=False):
     """
@@ -310,21 +305,22 @@ class Real(Number):
     def __neg__(self):
         return Real._new(mlib.mpf_neg(self._mpf_), self._prec)
 
+    @_sympifyit('other', NotImplemented)
     def __mul__(self, other):
-        try:
-            other = _sympify(other)
-        except SympifyError:
-            return NotImplemented
         if isinstance(other, Number):
             rhs, prec = other._as_mpf_op(self._prec)
             return Real._new(mlib.mpf_mul(self._mpf_, rhs, prec, rnd), prec)
         return Number.__mul__(self, other)
 
+    @_sympifyit('other', NotImplemented)
+    def __mod__(self, other):
+        if isinstance(other, Number):
+            rhs, prec = other._as_mpf_op(self._prec)
+            return Real._new(mlib.mpf_mod(self._mpf_, rhs, prec, rnd), prec)
+        return Number.__mod__(self, other)
+
+    @_sympifyit('other', NotImplemented)
     def __add__(self, other):
-        try:
-            other = _sympify(other)
-        except SympifyError:
-            return NotImplemented
         if (other is S.NaN) or (self is NaN):
             return S.NaN
         if isinstance(other, Number):
@@ -504,7 +500,7 @@ class Rational(Number):
         if q==0:
             if p==0:
                 if _errdict["divide"]:
-                    raise Exception("Indeterminate 0/0")
+                    raise ValueError("Indeterminate 0/0")
                 else:
                     return S.NaN
             if p<0: return S.NegativeInfinity
@@ -548,6 +544,15 @@ class Rational(Number):
             return Rational(self.p * other.p, self.q * other.q)
         return Number.__mul__(self, other)
 
+    @_sympifyit('other', NotImplemented)
+    def __mod__(self, other):
+        if isinstance(other, Rational):
+            n = (self.p*other.q) // (other.p*self.q)
+            return Rational(self.p*other.q - n*other.p*self.q, self.q*other.q)
+        if isinstance(other, Real):
+            return self.evalf() % other
+        return Number.__mod__(self, other)
+
     # TODO reorder
     @_sympifyit('other', NotImplemented)
     def __add__(self, other):
@@ -568,8 +573,8 @@ class Rational(Number):
         return Number.__add__(self, other)
 
     def _eval_power(b, e):
+        if (e is S.NaN): return S.NaN
         if isinstance(e, Number):
-            if (e is S.NaN): return S.NaN
             if isinstance(e, Real):
                 return b._eval_evalf(e._prec) ** e
             if e.is_negative:
@@ -577,7 +582,10 @@ class Rational(Number):
                 ne = -e
                 if (ne is S.One):
                     return Rational(b.q, b.p)
-                return Rational(b.q, b.p) ** ne
+                if b < 0:
+                    return -(S.NegativeOne) ** ((e.p % e.q) / S(e.q)) * Rational(b.q, -b.p) ** ne
+                else:
+                    return Rational(b.q, b.p) ** ne
             if (e is S.Infinity):
                 if b.p > b.q:
                     # (3/2)**oo -> oo
@@ -681,7 +689,7 @@ class Rational(Number):
             try: f[p] += -e
             except KeyError: f[p] = -e
 
-        if len(f)>1 and f.has_key(1): del f[1]
+        if len(f)>1 and 1 in f: del f[1]
         return f
 
     def as_numer_denom(self):
@@ -906,7 +914,7 @@ class Integer(Rational):
     def _eval_power(base, exp):
         """
         Tries to do some simplifications on base ** exp, where base is
-        an instance of Rational
+        an instance of Integer
 
         Returns None if no further simplifications can be done
 
@@ -914,97 +922,70 @@ class Integer(Rational):
         we try to find the simplest possible representation, so that
           - 4**Rational(1,2) becomes 2
           - (-4)**Rational(1,2) becomes 2*I
+        We will
         """
-
-        MAX_INT_FACTOR = 4294967296 # Prevent from factorizing too big integers
+        if exp is S.NaN: return S.NaN
+        if base is S.One: return S.One
+        if base is S.NegativeOne: return
+        if exp is S.Infinity:
+            if base.p > S.One: return S.Infinity
+            if base.p == -1: return S.NaN
+            # cases 0, 1 are done in their respective classes
+            return S.Infinity + S.ImaginaryUnit * S.Infinity
         if not isinstance(exp, Number):
+            # simplify when exp is even
+            # (-2) ** k --> 2 ** k
             c,t = base.as_coeff_terms()
             if exp.is_even and isinstance(c, Number) and c < 0:
                 return (-c * Mul(*t)) ** exp
-        if exp is S.NaN: return S.NaN
-        if isinstance(exp, Real):
-            return base._eval_evalf(exp._prec) ** exp
-        if exp.is_negative:
-            # (3/4)**-2 -> (4/3)**2
-            ne = -exp
-            if ne is S.One:
-                return Rational(1, base.p)
-            return Rational(1, base.p) ** ne
-        if exp is S.Infinity:
-            if base.p > 1:
-                # (3)**oo -> oo
-                return S.Infinity
-            if base.p < -1:
-                # (-3)**oo -> oo + I*oo
-                return S.Infinity + S.Infinity * S.ImaginaryUnit
-            return S.Zero
-        if isinstance(exp, Integer):
-            # (4/3)**2 -> 4**2 / 3**2
-            return Integer(base.p ** exp.p)
-        if exp == S.Half and base.is_negative:
-            # sqrt(-2) -> I*sqrt(2)
-            return S.ImaginaryUnit * ((-base)**exp)
-        if isinstance(exp, Rational):
-            # 4**Rational(1,2) -> 2
+        if not isinstance(exp, Rational): return
+        if exp is S.Half and base < 0:
+            # we extract I for this special case since everyone is doing so
+            return S.ImaginaryUnit * Pow(-base, exp)
+        if exp < 0:
+            # invert base and change sign on exponent
+            if base < 0:
+                return -(S.NegativeOne) ** ((exp.p % exp.q) / S(exp.q)) * Rational(1, -base) ** (-exp)
+            else:
+                return Rational(1, base.p) ** (-exp)
+        # see if base is a perfect root, sqrt(4) --> 2
+        x, xexact = integer_nthroot(abs(base.p), exp.q)
+        if xexact:
+            # if it's a perfect root we've finished
+            result = Integer(x ** abs(exp.p))
+            if exp < 0: result = 1/result
+            if base < 0: result *= (-1)**exp
+            return result
+        # The following is an algorithm where we collect perfect roots
+        # from the factors of base
+        if base > 4294967296:
+            # Prevent from factorizing too big integers
+            return None
+        dict = base.factors()
+        out_int = 1
+        sqr_int = 1
+        sqr_gcd = 0
+        sqr_dict = {}
+        for prime,exponent in dict.iteritems():
+            exponent *= exp.p
+            div_e = exponent // exp.q
+            div_m = exponent % exp.q
+            if div_e > 0:
+                out_int *= prime**div_e
+            if div_m > 0:
+                sqr_dict[prime] = div_m
+        for p,ex in sqr_dict.iteritems():
+            if sqr_gcd == 0:
+                sqr_gcd = ex
+            else:
+                sqr_gcd = igcd(sqr_gcd, ex)
+        for k,v in sqr_dict.iteritems():
+            sqr_int *= k**(v // sqr_gcd)
+        if sqr_int == base.p and out_int == 1:
             result = None
-            x, xexact = integer_nthroot(abs(base.p), exp.q)
-            if xexact:
-                res = Integer(x ** abs(exp.p))
-                if exp >= 0:
-                    result = res
-                else:
-                    result = 1/res
-            else:
-                if base > MAX_INT_FACTOR:
-                    for i in xrange(2, exp.q//2 + 1): #OLD CODE
-                        if exp.q % i == 0:
-                            x, xexact = integer_nthroot(abs(base.p), i)
-                            if xexact:
-                                result = Integer(x)**(exp * i)
-                                break
-                    # Try to get some part of the base out, if exponent > 1
-                    if exp.p > exp.q:
-                        i = exp.p // exp.q
-                        r = exp.p % exp.q
-                        result = base**i * base**Rational(r, exp.q)
-
-                    return
-
-                dict = base.factors()
-                out_int = 1
-                sqr_int = 1
-                sqr_gcd = 0
-                sqr_dict = {}
-                for prime,exponent in dict.iteritems():
-                    exponent *= exp.p
-                    div_e = exponent // exp.q
-                    div_m = exponent % exp.q
-                    if div_e > 0:
-                        out_int *= prime**div_e
-                    if div_m > 0:
-                        sqr_dict[prime] = div_m
-                for p,ex in sqr_dict.iteritems():
-                    if sqr_gcd == 0:
-                        sqr_gcd = ex
-                    else:
-                        sqr_gcd = igcd(sqr_gcd, ex)
-                for k,v in sqr_dict.iteritems():
-                    sqr_int *= k**(v // sqr_gcd)
-                if sqr_int == base.p and out_int == 1:
-                    result = None
-                else:
-                    result = out_int * Pow(sqr_int , Rational(sqr_gcd, exp.q))
-
-            if result is not None:
-                if base.is_positive:
-                    return result
-                elif exp.q == 2:
-                    return result * S.ImaginaryUnit
-                else:
-                    return result * ((-1)**exp)
-            else:
-                if exp == S.Half and base.is_negative:
-                    return S.ImaginaryUnit * Pow(-base, exp)
+        else:
+            result = out_int * Pow(sqr_int , Rational(sqr_gcd, exp.q))
+        return result
 
     def _eval_is_prime(self):
         if self.p < 0:
@@ -1081,9 +1062,6 @@ class One(Integer):
     @staticmethod
     def __neg__():
         return S.NegativeOne
-
-    def _eval_power(b, e):
-        return b
 
     def _eval_order(self, *symbols):
         return
@@ -1196,6 +1174,23 @@ class Infinity(Rational):
         import sage.all as sage
         return sage.oo
 
+    def __gt__(a, b):
+        if b is S.Infinity:
+            return False
+        return True
+
+    def __lt__(a, b):
+        return False
+
+    def __ge__(a, b):
+        return True
+
+    def __le__(a, b):
+        if b is S.Infinity:
+            return True
+        return False
+
+
 class NegativeInfinity(Rational):
     __metaclass__ = SingletonMeta
 
@@ -1245,6 +1240,23 @@ class NegativeInfinity(Rational):
 
     def _as_mpf_val(self, prec):
         return mlib.fninf
+
+    def __gt__(a, b):
+        return False
+
+    def __lt__(a, b):
+        if b is S.NegativeInfinity:
+            return False
+        return True
+
+    def __ge__(a, b):
+        if b is S.NegativeInfinity:
+            return True
+        return False
+
+    def __le__(a, b):
+        return True
+
 
 class NaN(Rational):
     __metaclass__ = SingletonMeta
@@ -1400,7 +1412,7 @@ class Exp1(NumberSymbol):
         return S.Exp1
 
     def _as_mpf_val(self, prec):
-        return mlib.fe(prec)
+        return mpf_e(prec)
 
     def approximation_interval(self, number_cls):
         if issubclass(number_cls,Integer):
@@ -1453,7 +1465,7 @@ class GoldenRatio(NumberSymbol):
     def _as_mpf_val(self, prec):
         return mlib.from_man_exp(phi_fixed(prec+10), -prec-10)
 
-    def _eval_expand_func(self, *args):
+    def _eval_expand_func(self, deep=True, **hints):
         return S.Half + S.Half*S.Sqrt(5)
 
     def approximation_interval(self, number_cls):
@@ -1566,37 +1578,6 @@ class ImaginaryUnit(Atom):
         import sage.all as sage
         return sage.I
 
-# /cyclic/
-import basic as _
-_.Number    = Number
-_.Integer   = Integer
-_.Rational  = Rational
-_.Real      = Real
-del _
-
-import add as _
-_.Number    = Number
-del _
-
-import mul as _
-_.Number    = Number
-_.Integer   = Integer
-_.Real      = Real
-del _
-
-import power as _
-_.Number    = Number
-_.Rational  = Rational
-_.Integer   = Integer
-del _
-
-import sympify as _
-_.Integer   = Integer
-_.Real      = Real
-del _
-
-# ----
-
 _intcache[0] = S.Zero
 _intcache[1] = S.One
 _intcache[-1]= S.NegativeOne
@@ -1613,3 +1594,9 @@ Basic.singleton['GoldenRatio'] = GoldenRatio
 Basic.singleton['EulerGamma'] = EulerGamma
 Basic.singleton['Catalan'] = Catalan
 
+from basic import Basic, Atom, S, C, SingletonMeta
+from cache import Memoizer, MemoizerArg
+from sympify import _sympify, SympifyError
+from function import FunctionClass
+from power import Pow, integer_nthroot
+from mul import Mul

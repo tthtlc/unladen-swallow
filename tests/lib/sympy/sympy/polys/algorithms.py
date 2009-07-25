@@ -240,7 +240,7 @@ def poly_groebner(f, *symbols, **flags):
         if h.is_zero:
             return None
         else:
-            if not F.has_key(h):
+            if not h in F:
                 F[h] = len(f)
                 f.append(h)
 
@@ -274,7 +274,7 @@ def poly_groebner(f, *symbols, **flags):
                 else:
                    k = (j, i)
 
-                if not B.has_key(k):
+                if k not in B:
                     B[k] = monomial_lcm(f[i].LM, f[j].LM)
 
         G = set([ normal(f[g], G - set([g]))[0] for g in G ])
@@ -306,10 +306,10 @@ def poly_groebner(f, *symbols, **flags):
             if g == i or g == j:
                 continue
 
-            if not B.has_key((min(i, g), max(i, g))):
+            if (min(i, g), max(i, g)) not in B:
                 continue
 
-            if not B.has_key((min(j, g), max(j, g))):
+            if (min(j, g), max(j, g)) not in B:
                 continue
 
             if not monomial_div(M, f[g].LM):
@@ -483,7 +483,7 @@ def poly_gcd(f, g, *symbols):
     if f.is_multivariate:
         h = poly_div(f*g, poly_lcm(f, g))[0]
     else:
-        h = poly_subresultants(f, g)[-1]
+        h = poly_subresultants(f, g, res=False)[-1]
 
     if gcd != 1:
         return h.mul_term(gcd / h.LC)
@@ -597,10 +597,10 @@ def poly_resultant(f, g, *symbols):
 
     for i in xrange(N):
         for j in xrange(i, N):
-            if p.has_key(i) and q.has_key(j+1):
+            if i in p and j+1 in q:
                 B[i, j] += p[i] * q[j+1]
 
-            if p.has_key(j+1) and q.has_key(i):
+            if j+1 in p and i in q:
                 B[i, j] -= p[j+1] * q[i]
 
     for i in xrange(1, N-1):
@@ -628,7 +628,7 @@ def poly_resultant(f, g, *symbols):
         else:
             return sign * Poly.cancel(det)
 
-def poly_subresultants(f, g, *symbols):
+def poly_subresultants(f, g, *symbols, **flags):
     """Computes subresultant PRS of two univariate polynomials.
 
        Polynomial remainder sequence (PRS) is a fundamental tool in
@@ -654,6 +654,13 @@ def poly_subresultants(f, g, *symbols):
        remainder sequence where R_0 = f, R_1 = g, R_k != 0 and R_k
        is similar to gcd(f, g).
 
+       The result is returned as tuple (res, R) where R is the PRS
+       sequence and res is the resultant of the input polynomials.
+
+       If only polynomial remainder sequence is important,  then by
+       setting res=False in keyword arguments expensive computation
+       of the resultant can be avoided (only PRS is returned).
+
        For more information on the implemented algorithm refer to:
 
        [1] M. Bronstein, Symbolic Integration I: Transcendental
@@ -673,8 +680,8 @@ def poly_subresultants(f, g, *symbols):
 
     if f.is_multivariate:
         raise MultivariatePolyError(f)
-
-    symbols, flags = f.symbols, f.flags
+    else:
+        symbols = f.symbols
 
     n, m = f.degree, g.degree
 
@@ -682,36 +689,65 @@ def poly_subresultants(f, g, *symbols):
         f, g = g, f
         n, m = m, n
 
-    prs = [f, g]
+    R = [f, g]
 
     d = n - m
 
-    b = (-1)**(d + 1)
+    b = S(-1)**(d + 1)
+    c = S(-1)
 
-    h = poly_pdiv(f, g)[1]
+    B, D = [b], [d]
+
+    h = poly_prem(f, g)
     h = h.mul_term(b)
 
-    k = h.degree
-
-    c = S.NegativeOne
-
     while not h.is_zero:
-        prs.append(h)
+        k = h.degree
+        R.append(h)
 
-        coeff = g.LC
+        lc = g.LC
 
-        c = (-coeff)**d / c**(d-1)
+        C = (-lc)**d / c**(d-1)
+        c = Poly.cancel(C)
 
-        b = -coeff * c**(m-k)
+        b = -lc * c**(m-k)
 
         f, g, m, d = g, h, k, m-k
 
-        h = poly_pdiv(f, g)[1]
+        B.append(b)
+        D.append(d)
+
+        h = poly_prem(f, g)
         h = h.div_term(b)
 
-        k = h.degree
+    if not flags.get('res', True):
+        return R
 
-    return prs
+    if R[-1].degree > 0:
+        return (Poly((), *symbols), R)
+    if R[-2].is_one:
+        return (R[-1], R)
+
+    s, c, i = 1, S(1), 1
+
+    for b, d in zip(B, D)[:-1]:
+        u = R[i-1].degree
+        v = R[i  ].degree
+        w = R[i+1].degree
+
+        if u % 2 and v % 2:
+            s = -s
+
+        lc = R[i].LC
+
+        C = c*(b/lc**(1 + d))**v * lc**(u - w)
+        c = Poly.cancel(C)
+
+        i += 1
+
+    j = R[-2].degree
+
+    return (R[-1]**j*s*c, R)
 
 def poly_sqf(f, *symbols):
     """Compute square-free decomposition of an univariate polynomial.
@@ -842,10 +878,10 @@ def poly_decompose(f, *symbols):
             coeff = S.Zero
 
             for j in xrange(0, k):
-                if not f.has_key(n+j-k):
+                if not n+j-k in f:
                     continue
 
-                if not q.has_key(s-j):
+                if not s-j in q:
                     continue
 
                 fc, qc = f[n+j-k], q[s-j]

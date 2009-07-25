@@ -9,16 +9,18 @@
 
     - transcendental, use tsolve()
 
-    - nonlinear (numerically), use msolve() (you will need a good starting point)
+    - nonlinear (numerically), use nsolve()
+      (you will need a good starting point)
 
 """
 
 from sympy.core.sympify import sympify
-from sympy.core.basic import Basic, S, C, Mul, Add
+from sympy.core.basic import Basic, S, C, Mul
+from sympy.core.add import Add
 from sympy.core.power import Pow
 from sympy.core.symbol import Symbol, Wild
 from sympy.core.relational import Equality
-from sympy.core.function import Derivative, diff
+from sympy.core.function import Derivative, diff, Function
 from sympy.core.numbers import ilcm
 
 from sympy.functions import sqrt, log, exp, LambertW
@@ -28,18 +30,20 @@ from sympy.polys import roots
 
 from sympy.utilities import any, all
 from sympy.utilities.lambdify import lambdify
-from sympy.solvers.numeric import newton
+from sympy.mpmath import findroot
 
 from sympy.solvers.polysys import solve_poly_system
+
+from warnings import warn
 
 # Codes for guess solve strategy
 GS_POLY = 0
 GS_RATIONAL = 1
-GS_POLY_CV_1 = 2 # can be converted to a polynomial equation via the change of variable y -> x**n
+GS_POLY_CV_1 = 2 # can be converted to a polynomial equation via the change of variable y -> x**a, a real
 GS_POLY_CV_2 = 3 # can be converted to a polynomial equation multiplying on both sides by x**m
                  # for example, x + 1/x == 0. Multiplying by x yields x**2 + x == 0
 GS_RATIONAL_CV_1 = 4 # can be converted to a rational equation via the change of variable y -> x**n
-GS_TRASCENDENTAL = 5
+GS_TRANSCENDENTAL = 5
 
 def guess_solve_strategy(expr, symbol):
     """
@@ -62,23 +66,7 @@ def guess_solve_strategy(expr, symbol):
     """
     eq_type = -1
     if expr.is_Add:
-        items = expr.args
-        for item in items:
-            if item.is_Number or item.is_Symbol:
-                eq_type = max(eq_type, GS_POLY)
-            elif item.is_Mul:
-                for arg in item.args:
-                    eq_type = max(guess_solve_strategy(arg, symbol), eq_type)
-            elif item.is_Pow and item.base.has(symbol):
-                if item.exp.is_Integer:
-                    if item.exp > 0:
-                        eq_type = max(eq_type, GS_POLY)
-                    else:
-                        eq_type = max(eq_type, GS_POLY_CV_2)
-                elif item.exp.is_Rational:
-                    eq_type = max(eq_type, GS_POLY_CV_1)
-            elif item.is_Function:
-                return GS_TRASCENDENTAL
+        return max([guess_solve_strategy(i, symbol) for i in expr.args])
 
     elif expr.is_Mul:
         # check for rational functions
@@ -93,22 +81,26 @@ def guess_solve_strategy(expr, symbol):
             else:
                 raise NotImplementedError
         else:
-            return max(map(guess_solve_strategy, expr.args, [symbol]*len(expr.args)))
+            return max([guess_solve_strategy(i, symbol) for i in expr.args])
 
     elif expr.is_Symbol:
         return GS_POLY
 
     elif expr.is_Pow:
         if expr.exp.has(symbol):
-            return GS_TRASCENDENTAL
-        elif expr.exp.is_Number and expr.base.has(symbol):
-            if expr.exp.is_Integer:
+            return GS_TRANSCENDENTAL
+        elif not expr.exp.has(symbol) and expr.base.has(symbol):
+            if expr.exp.is_Integer and expr.exp > 0:
                 eq_type = max(eq_type, GS_POLY)
-            else:
+            elif expr.exp.is_Integer and expr.exp < 0:
+                eq_type = max(eq_type, GS_POLY_CV_2)
+            elif expr.exp.is_Rational:
                 eq_type = max(eq_type, GS_POLY_CV_1)
+            else:
+                return GS_TRANSCENDENTAL
 
     elif expr.is_Function and expr.has(symbol):
-        return GS_TRASCENDENTAL
+        return GS_TRANSCENDENTAL
 
     elif not expr.has(symbol):
         return GS_POLY
@@ -155,12 +147,51 @@ def solve(f, *symbols, **flags):
             symbols = symbols[0]
 
     symbols = map(sympify, symbols)
+    result = list()
 
-    if any(not s.is_Symbol for s in symbols):
-        raise TypeError('not a Symbol')
+    # Begin code handling for Function and Derivative instances
+    # Basic idea:  store all the passed symbols in symbols_passed, check to see
+    # if any of them are Function or Derivative types, if so, use a dummy
+    # symbol in their place, and set symbol_swapped = True so that other parts
+    # of the code can be aware of the swap.  Once all swapping is done, the
+    # continue on with regular solving as usual, and swap back at the end of
+    # the routine, so that whatever was passed in symbols is what is returned.
+    symbols_new = []
+    symbol_swapped = False
+
+    if isinstance(symbols, (list, tuple)):
+        symbols_passed = symbols[:]
+    elif isinstance(symbols, set):
+        symbols_passed = list(symbols)
+
+    i = 0
+    for s in symbols:
+        if s.is_Symbol:
+            s_new = s
+        elif s.is_Function:
+            symbol_swapped = True
+            s_new = Symbol('F%d' % i, dummy=True)
+        elif s.is_Derivative:
+            symbol_swapped = True
+            s_new = Symbol('D%d' % i, dummy=True)
+        else:
+            raise TypeError('not a Symbol or a Function')
+        symbols_new.append(s_new)
+        i += 1
+
+        if symbol_swapped:
+            swap_back_dict = dict(zip(symbols_new, symbols))
+    # End code for handling of Function and Derivative instances
 
     if not isinstance(f, (tuple, list, set)):
         f = sympify(f)
+
+        # Create a swap dictionary for storing the passed symbols to be solved
+        # for, so that they may be swapped back.
+        if symbol_swapped:
+            swap_dict = zip(symbols, symbols_new)
+            f = f.subs(swap_dict)
+            symbols = symbols_new
 
         if isinstance(f, Equality):
             f = f.lhs - f.rhs
@@ -208,12 +239,10 @@ def solve(f, *symbols, **flags):
                 if guess_solve_strategy(f_, t) != GS_POLY:
                     raise TypeError("Could not convert to a polynomial equation: %s" % f_)
                 cv_sols = solve(f_, t)
-                result = list()
                 for sol in cv_sols:
                     result.append(sol**m)
 
             elif isinstance(f, Mul):
-                result = []
                 for mul_arg in args:
                     result.extend(solve(mul_arg, symbol))
 
@@ -237,16 +266,16 @@ def solve(f, *symbols, **flags):
             # TODO: we might have introduced unwanted solutions
             # when multiplied by x**-m
 
-        elif strategy == GS_TRASCENDENTAL:
+        elif strategy == GS_TRANSCENDENTAL:
             #a, b = f.as_numer_denom()
             # Let's throw away the denominator for now. When we have robust
             # assumptions, it should be checked, that for the solution,
             # b!=0.
             result = tsolve(f, *symbols)
         elif strategy == -1:
-            raise Exception('Could not parse expression %s' % f)
+            raise ValueError('Could not parse expression %s' % f)
         else:
-            raise NotImplementedError("No algorithms where implemented to solve equation %s" % f)
+            raise NotImplementedError("No algorithms are implemented to solve equation %s" % f)
 
         if flags.get('simplified', True):
             return map(simplify, result)
@@ -256,6 +285,13 @@ def solve(f, *symbols, **flags):
         if not f:
             return {}
         else:
+            # Create a swap dictionary for storing the passed symbols to be
+            # solved for, so that they may be swapped back.
+            if symbol_swapped:
+                swap_dict = zip(symbols, symbols_new)
+                f = [fi.subs(swap_dict) for fi in f]
+                symbols = symbols_new
+
             polys = []
 
             for g in f:
@@ -283,9 +319,22 @@ def solve(f, *symbols, **flags):
                         except ValueError:
                             matrix[i, m] = -coeff
 
-                return solve_linear_system(matrix, *symbols, **flags)
+                soln = solve_linear_system(matrix, *symbols, **flags)
             else:
-                return solve_poly_system(polys)
+                soln = solve_poly_system(polys)
+
+            # Use swap_dict to ensure we return the same type as what was
+            # passed
+            if symbol_swapped:
+                if isinstance(soln, dict):
+                    res = {}
+                    for k in soln.keys():
+                        res.update({swap_back_dict[k]: soln[k]})
+                    return res
+                else:
+                    return soln
+            else:
+                return soln
 
 def solve_linear_system(system, *symbols, **flags):
     """Solve system of N linear equations with M variables, which means
@@ -486,15 +535,16 @@ def dsolve(eq, funcs):
         @param y: indeterminate function of one variable
 
         - you can declare the derivative of an unknown function this way:
-        >>> from sympy import *
-        >>> x = Symbol('x') # x is the independent variable
+          >>> from sympy import *
+          >>> x = Symbol('x') # x is the independent variable
 
-        >>> f = Function("f")(x) # f is a function of x
-        >>> f_ = Derivative(f, x) # f_ will be the derivative of f with respect to x
+          >>> f = Function("f")(x) # f is a function of x
+          >>> f_ = Derivative(f, x) # f_ will be the derivative of f with respect to x
 
         - This function just parses the equation "eq" and determines the type of
-        differential equation by its order, then it determines all the coefficients and then
-        calls the particular solver, which just accepts the coefficients.
+          differential equation by its order, then it determines all the
+          coefficients and then calls the particular solver, which just accepts
+          the coefficients.
         - "eq" can be either an Equality, or just the left hand side (in which
           case the right hand side is assumed to be 0)
         - see test_ode.py for many tests, that serve also as a set of examples
@@ -569,6 +619,7 @@ def solve_ODE_first_order(eq, f):
     and Bernoulli cases are implemented.
     """
     from sympy.integrals.integrals import integrate
+    C1 = Symbol("C1")
     x = f.args[0]
     f = f.func
 
@@ -579,18 +630,21 @@ def solve_ODE_first_order(eq, f):
 
     r = eq.match(a*diff(f(x),x) + b*f(x) + c)
     if r:
-        t = C.exp(integrate(r[b]/r[a], x))
+        t = exp(integrate(r[b]/r[a], x))
         tt = integrate(t*(-r[c]/r[a]), x)
-        return (tt + Symbol("C1"))/t
+        return (tt + C1)/t
 
     #Bernoulli case: a(x)*f'(x)+b(x)*f(x)+c(x)*f(x)^n = 0
     n = Wild('n', exclude=[f(x)])
 
     r = eq.match(a*diff(f(x),x) + b*f(x) + c*f(x)**n)
     if r:
-        t = C.exp((1-r[n])*integrate(r[b]/r[a],x))
+        if r[n] == 1:
+            return C1*exp(integrate(-(r[b]+r[c]), x))
+        # r[n] != 1 ie, the real bernoulli case
+        t = exp((1-r[n])*integrate(r[b]/r[a],x))
         tt = (r[n]-1)*integrate(t*r[c]/r[a],x)
-        return ((tt + Symbol("C1"))/t)**(1/(1-r[n]))
+        return ((tt + C1)/t)**(1/(1-r[n]))
 
     #other cases of first order odes will be implemented here
 
@@ -630,13 +684,13 @@ def solve_ODE_second_order(eq, f):
 
     #special equations, that we know how to solve
     a = Wild('a')
-    t = x*C.exp(f(x))
+    t = x*exp(f(x))
     tt = a*t.diff(x, x)/t
     r = eq.match(tt.expand())
     if r:
         return -solve_ODE_1(f(x), x)
 
-    t = x*C.exp(-f(x))
+    t = x*exp(-f(x))
     tt = a*t.diff(x, x)/t
     r = eq.match(tt.expand())
     if r:
@@ -644,7 +698,7 @@ def solve_ODE_second_order(eq, f):
         #assert ( r[a]*t.diff(x,2)/t ) == eq.subs(f, t)
         return solve_ODE_1(f(x), x)
 
-    neq = eq*C.exp(f(x))/C.exp(-f(x))
+    neq = eq*exp(f(x))/exp(-f(x))
     r = neq.match(tt.expand())
     if r:
         #check, that we've rewritten the equation correctly:
@@ -713,11 +767,12 @@ def tsolve(eq, sym):
     eq2 = eq.subs(sym, x)
     # First see if the equation has a linear factor
     # In that case, the other factor can contain x in any way (as long as it
-    # is finite), and we have a direct solution
+    # is finite), and we have a direct solution to which we add others that
+    # may be found for the remaining portion.
     r = Wild('r')
     m = eq2.match((a*x+b)*r)
     if m and m[a]:
-        return [(-b/a).subs(m).subs(x, sym)]
+        return [(-b/a).subs(m).subs(x, sym)] + solve(m[r], x)
     for p, sol in patterns:
         m = eq2.match(p)
         if m:
@@ -791,57 +846,101 @@ def tsolve(eq, sym):
 
     raise NotImplementedError("Unable to solve the equation.")
 
-
-def msolve(args, f, x0, tol=None, maxsteps=None, verbose=False, norm=None,
-           modules=['mpmath', 'sympy']):
+def msolve(*args, **kwargs):
     """
-    Solves a nonlinear equation system numerically.
+    Compatibility wrapper pointing to nsolve().
+
+    msolve() has been renamed to nsolve(), please use nsolve() directly."""
+    warn('msolve() is has been renamed, please use nsolve() instead',
+         DeprecationWarning)
+    args[0], args[1] = args[1], args[0]
+    return nsolve(*args, **kwargs)
+
+# TODO: option for calculating J numerically
+def nsolve(*args, **kwargs):
+    """
+    Solve a nonlinear equation system numerically.
+
+    nsolve(f, [args,] x0, modules=['mpmath'], **kwargs)
 
     f is a vector function of symbolic expressions representing the system.
-    args are the variables.
+    args are the variables. If there is only one variable, this argument can be
+    omitted.
     x0 is a starting vector close to a solution.
 
-    Be careful with x0, not using floats might give unexpected results.
+    Use the modules keyword to specify which modules should be used to evaluate
+    the function and the Jacobian matrix. Make sure to use a module that
+    supports matrices. For more information on the syntax, please see the
+    docstring of lambdify.
 
-    Use modules to specify which modules should be used to evaluate the
-    function and the Jacobian matrix. Make sure to use a module that supports
-    matrices. For more information on the syntax, please see the docstring
-    of lambdify.
+    Overdetermined systems are supported.
 
-    Currently only fully determined systems are supported.
-
-    >>> from sympy import Symbol, Matrix
+    >>> from sympy import Symbol, nsolve
+    >>> import sympy
+    >>> sympy.mpmath.mp.dps = 15
     >>> x1 = Symbol('x1')
     >>> x2 = Symbol('x2')
     >>> f1 = 3 * x1**2 - 2 * x2**2 - 1
     >>> f2 = x1**2 - 2 * x1 + x2**2 + 2 * x2 - 8
-    >>> msolve((x1, x2), (f1, f2), (-1., 1.))
+    >>> print nsolve((f1, f2), (x1, x2), (-1, 1))
     [-1.19287309935246]
     [ 1.27844411169911]
+
+    For onedimensional functions the syntax is simplified:
+
+    >>> from sympy import sin
+    >>> nsolve(sin(x), x, 2)
+    3.14159265358979
+    >>> nsolve(sin(x), 2)
+    3.14159265358979
+
+    mpmath.findroot is used, you can find there more extensive documentation,
+    especially concerning keyword parameters and available solvers.
     """
+    # interpret arguments
+    if len(args) == 3:
+        f = args[0]
+        fargs = args[1]
+        x0 = args[2]
+    elif len(args) == 2:
+        f = args[0]
+        fargs = None
+        x0 = args[1]
+    elif len(args) < 2:
+        raise TypeError('nsolve expected at least 2 arguments, got %i'
+                        % len(args))
+    else:
+        raise TypeError('nsolve expected at most 3 arguments, got %i'
+                        % len(args))
+    modules = kwargs.get('modules', ['mpmath'])
     if isinstance(f,  (list,  tuple)):
         f = Matrix(f).T
-    if len(args) != f.cols:
-        raise NotImplementedError('need exactly as many variables as equations')
+    if not isinstance(f, Matrix):
+        # assume it's a sympy expression
+        if isinstance(f, Equality):
+            f = f.lhs - f.rhs
+        f = f.evalf()
+        atoms = set(s for s in f.atoms() if isinstance(s, Symbol))
+        if fargs is None:
+            fargs = atoms.copy().pop()
+        if not (len(atoms) == 1 and (fargs in atoms or fargs[0] in atoms)):
+            raise ValueError('expected a onedimensional and numerical function')
+        f = lambdify(fargs, f, modules)
+        return findroot(f, x0, **kwargs)
+    if len(fargs) > f.cols:
+        raise NotImplementedError('need at least as many equations as variables')
+    verbose = kwargs.get('verbose', False)
     if verbose:
         print 'f(x):'
         print f
     # derive Jacobian
-    J = f.jacobian(args)
+    J = f.jacobian(fargs)
     if verbose:
         print 'J(x):'
         print J
     # create functions
-    f = lambdify(args, f.T, modules)
-    J = lambdify(args, J, modules)
-    # solve system using Newton's method
-    kwargs = {}
-    if tol:
-        kwargs['tol'] = tol
-    if maxsteps:
-        kwargs['maxsteps'] = maxsteps
-    kwargs['verbose'] = verbose
-    if norm:
-        kwargs['norm'] = norm
-    x = newton(f, x0, J, **kwargs)
+    f = lambdify(fargs, f.T, modules)
+    J = lambdify(fargs, J, modules)
+    # solve the system numerically
+    x = findroot(f, x0, J=J, **kwargs)
     return x

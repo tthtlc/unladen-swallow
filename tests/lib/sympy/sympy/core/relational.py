@@ -1,8 +1,6 @@
 
-from basic import Basic, C
+from basic import Basic
 from sympify import _sympify
-
-from numbers import Number
 
 def Rel(a, b, op):
     """
@@ -181,12 +179,3 @@ class Inequality(Relational):
                 return self.lhs <= self.rhs
             return self.lhs.evalf()<=self.rhs.evalf()
         return self.lhs.compare(self.rhs)<=0
-
-
-# /cyclic/
-import basic as _
-_.Equality      = Equality
-_.Unequality    = Unequality
-_.Inequality    = Inequality
-_.StrictInequality = StrictInequality
-del _

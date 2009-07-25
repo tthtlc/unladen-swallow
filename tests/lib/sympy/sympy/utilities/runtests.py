@@ -18,6 +18,7 @@ import traceback
 import pdb
 from glob import glob
 from timeit import default_timer as clock
+import doctest as pdoctest # avoid clashing with our doctest() function
 
 def isgeneratorfunction(object):
     """
@@ -34,6 +35,23 @@ def isgeneratorfunction(object):
         object.func_code.co_flags & CO_GENERATOR:
         return True
     return False
+
+def setup_pprint():
+    from sympy import pprint_use_unicode
+    # force pprint to be in ascii mode in doctests
+    pprint_use_unicode(False)
+
+    # hook our nice, hash-stable strprinter
+    from sympy.interactive import init_printing
+    from sympy.printing import sstrrepr
+    init_printing(sstrrepr)
+
+def convert_to_native_paths(lst):
+    """
+    Converts a list of '/' separated paths into a list of
+    native (os.sep separated) paths.
+    """
+    return [os.path.join(*x.split("/")) for x in lst]
 
 def test(*paths, **kwargs):
     """
@@ -109,8 +127,24 @@ def doctest(*paths, **kwargs):
         t.add_paths(paths)
     else:
         t.add_paths(["sympy"])
-    return t.test()
+    dtest = t.test()
+    return dtest # skip testing docs under doc/. See issue 1521
 
+    if len(paths) == 0 and sys.version_info[:2] > (2,4):
+        # test documentation under doc/src/ only if we are running the full
+        # test suite and this is python2.5 or newer:
+        excluded = convert_to_native_paths(['doc/src/modules/plotting.txt'])
+        doc_globs = convert_to_native_paths(['doc/src/*.txt',
+                'doc/src/modules/*.txt'])
+        doc_files = sum([glob(x) for x in doc_globs], [])
+        setup_pprint()
+        for ex in excluded:
+            doc_files.remove(ex)
+        for doc_file in doc_files:
+            out = pdoctest.testfile(doc_file, module_relative=False)
+            print "Testing ", doc_file
+            print "Failed %s, tested %s" % out
+    return dtest
 
 class SymPyTests(object):
 
@@ -157,7 +191,7 @@ class SymPyTests(object):
             self._reporter.import_error(filename, sys.exc_info())
             return
         pytestfile = ""
-        if gl.has_key("XFAIL"):
+        if "XFAIL" in gl:
             pytestfile = inspect.getsourcefile(gl["XFAIL"])
         disabled = gl.get("disabled", False)
         if disabled:
@@ -273,7 +307,7 @@ class SymPyDocTests(object):
         self._reporter = reporter
         self._reporter.root_dir(self._root_dir)
         self._tests = []
-        self._blacklist = blacklist
+        self._blacklist = convert_to_native_paths(blacklist)
 
     def add_paths(self, paths):
         for path in paths:
@@ -299,22 +333,13 @@ class SymPyDocTests(object):
         return self._reporter.finish()
 
     def test_file(self, filename):
-        def setup_pprint():
-            from sympy import pprint_use_unicode
-            # force pprint to be in ascii mode in doctests
-            pprint_use_unicode(False)
-
-            # hook our nice, hash-stable strprinter
-            from sympy.interactive import init_printing
-            from sympy.printing import sstrrepr
-            init_printing(sstrrepr)
 
         import doctest
         import unittest
         from StringIO import StringIO
 
         rel_name = filename[len(self._root_dir)+1:]
-        module = rel_name.replace('/', '.')[:-3]
+        module = rel_name.replace(os.sep, '.')[:-3]
         setup_pprint()
         try:
             module = doctest._normalize_module(module)
@@ -328,7 +353,8 @@ class SymPyDocTests(object):
         self._reporter.entering_filename(filename, len(tests))
         for test in tests:
             assert len(test.examples) != 0
-            runner = doctest.DocTestRunner()
+            runner = doctest.DocTestRunner(optionflags=doctest.ELLIPSIS | \
+                    doctest.NORMALIZE_WHITESPACE)
             old = sys.stdout
             new = StringIO()
             sys.stdout = new
@@ -486,6 +512,9 @@ class PyTestReporter(Reporter):
             # output is piped to less, e.g. "bin/test | less". In this case,
             # the terminal control sequences would be printed verbatim, so
             # don't use any colors.
+            color = ""
+        if sys.platform == "win32":
+            # Windows consoles don't support ANSI escape sequences
             color = ""
 
         if self._line_wrap:

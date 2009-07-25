@@ -1,8 +1,6 @@
 
-from basic import Basic, Atom, S, C, sympify
+from basic import Atom
 from cache import cacheit
-
-# from function import Function, WildFunction   /cyclic/
 
 import re
 
@@ -68,8 +66,8 @@ class Symbol(Atom):
     def __call__(self, *args):
         return Function(self.name, nargs=len(args))(*args, **self.assumptions0)
 
-    def _eval_expand_complex(self, *args):
-        return C.re(self) + C.im(self)*S.ImaginaryUnit
+    def _eval_expand_complex(self, deep=True, **hints):
+            return C.re(self) + C.im(self)*S.ImaginaryUnit
 
     def _sage_(self):
         import sage.all as sage
@@ -283,9 +281,6 @@ def var(*names, **kwargs):
         # doc
         del frame
 
-# /cyclic/
-import basic as _
-_.Symbol    = Symbol
-_.Wild      = Wild
-_.Temporary = Temporary
-del _
+from basic import Basic, Atom, S, C
+from sympify import sympify
+from function import Function

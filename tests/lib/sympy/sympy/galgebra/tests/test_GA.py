@@ -5,6 +5,8 @@
 The reference D&L is "Geomertric Algebra for Physicists" by Doran and Lasenby
 """
 
+import sys
+
 try:
     import numpy
     disabled = False
@@ -13,11 +15,12 @@ except ImportError:
     disabled = True
 
 if not disabled:
-    from sympy.galgebra.GA import set_main, MV, make_symbols, types, ZERO, ONE, HALF
+    sys.path.append('../')
+    from sympy.galgebra.GA import set_main, MV, make_symbols, types, ZERO, ONE, HALF, S
     import sympy
     from sympy import collect, sympify
 
-    import sys
+
     set_main(sys.modules[__name__])
 
 def F(x):
@@ -52,133 +55,29 @@ def test_rmul():
     assert HALF*x == x*HALF
     assert a*x == x*a
 
-def test_noneuclidian():
+def test_contraction():
     """
-    Test of complex geometric algebra manipulation to derive distance function
-    for 2-D hyperbolic non-euclidian space.  See D&L Section 10.6.2
+    Test for inner product and left and right contraction
     """
-    metric = '0 # #,'+ \
-             '# 0 #,'+ \
-             '# # 1,'
-    MV.setup('X Y e',metric,debug=0)
-    MV.set_str_format(1)
-    L = X^Y^e
-    B = L*e
-    Bsq = (B*B)()
-    BeBr =B*e*B.rev()
-    (s,c,Binv,M,S,C,alpha) = sympy.symbols('s','c','Binv','M','S','C','alpha')
-    Bhat = Binv*B # Normalize translation generator
-    R = c+s*Bhat # Rotor R = exp(alpha*Bhat/2)
-    Z = R*X*R.rev()
-    Z.expand()
-    Z.collect([Binv,s,c,XdotY])
-    W = Z|Y
-    W.expand()
-    W.collect([s*Binv])
-    M = 1/Bsq
-    W.subs(Binv**2,M)
-    W.simplify()
-    Bmag = sympy.sqrt(XdotY**2-2*XdotY*Xdote*Ydote)
-    W.collect([Binv*c*s,XdotY])
-    W.subs(2*XdotY**2-4*XdotY*Xdote*Ydote,2/(Binv**2))
-    W.subs(2*c*s,S)
-    W.subs(c**2,(C+1)/2)
-    W.subs(s**2,(C-1)/2)
-    W.simplify()
-    W.subs(1/Binv,Bmag)
 
-    W = W().expand()
-    #print '(R*X*R.rev()).Y =',W
-    Wd = collect(W,[C,S],exact=True,evaluate=False)
-    #print 'Wd =',Wd
-    Wd_1 = Wd[ONE]
-    Wd_C = Wd[C]
-    Wd_S = Wd[S]
-    #print '|B| =',Bmag
-    Wd_1 = Wd_1.subs(Bmag,1/Binv)
-    Wd_C = Wd_C.subs(Bmag,1/Binv)
-    Wd_S = Wd_S.subs(Bmag,1/Binv)
-    #print 'Wd[ONE] =',Wd_1
-    #print 'Wd[C] =',Wd_C
-    #print 'Wd[S] =',Wd_S
-    lhs = Wd_1+Wd_C*C
-    rhs = -Wd_S*S
-    lhs = lhs**2
-    rhs = rhs**2
-    W = (lhs-rhs).expand()
-    W = (W.subs(1/Binv**2,Bmag**2)).expand()
-    #print 'W =',W
-    W = (W.subs(S**2,C**2-1)).expand()
-    W = collect(W,[C**2,C],evaluate=False)
-    #print 'W =',W
-    a = W[C**2]
-    b = W[C]
-    c = W[ONE]
-    #print 'a =',a
-    #print 'b =',b
-    #print 'c =',c
-    D = (b**2-4*a*c).expand()
-    #print 'Setting to 0 and solving for C gives:'
-    #print 'Descriminant D = b^2-4*a*c =',D
-    C = (-b/(2*a)).expand()
-    #print 'C = cosh(alpha) = -b/(2*a) =',C
+    MV.setup('e_1 e_2 e_3','1 0 0, 0 1 0, 0 0 1',offset=1)
 
-    #cosh(alpha) = 1-X.Y/((X.e)(Y.e))
-    #alpha is noneuclidian distance
-    assert C == 1-XdotY/(Xdote*Ydote)
+    assert ((e_1^e_3)|e_1) == -e_3
+    assert ((e_1^e_3)>e_1) == -e_3
+    assert (e_1|(e_1^e_3)) == e_3
+    assert (e_1<(e_1^e_3)) == e_3
+    assert ((e_1^e_3)<e_1) == 0
+    assert (e_1>(e_1^e_3)) == 0
 
-def test_reciprocal_frame():
-    """
-    Test of fromula for general reciprocal frame of three vectors.
-    Let three independent vectors be e1, e2, and e3. The reciprocal
-    vectors E1, E2, and E3 obey the relations:
+def test_substitution():
 
-    e_i.E_j = delta_ij*(e1^e2^e3)**2
-    """
-    metric = '1 # #,'+ \
-             '# 1 #,'+ \
-             '# # 1,'
+    MV.setup('e_x e_y e_z','1 0 0, 0 1 0, 0 0 1',offset=1)
+    make_symbols('x y z')
 
-    MV.setup('e1 e2 e3',metric)
-    E = e1^e2^e3
-    Esq = (E*E)()
-    Esq_inv = 1/Esq
-    E1 = (e2^e3)*E
-    E2 = (-1)*(e1^e3)*E
-    E3 = (e1^e2)*E
-    w = (E1|e2)
-    w.collect(MV.g)
-    w = w().expand()
-    w = (E1|e3)
-    w.collect(MV.g)
-    w = w().expand()
-    assert w == 0
-    w = (E2|e1)
-    w.collect(MV.g)
-    w = w().expand()
-    assert w == 0
-    w = (E2|e3)
-    w.collect(MV.g)
-    w = w().expand()
-    assert w == 0
-    w = (E3|e1)
-    w.collect(MV.g)
-    w = w().expand()
-    assert w == 0
-    w = (E3|e2)
-    w.collect(MV.g)
-    w = w().expand()
-    assert w == 0
-    w = (E1|e1)
-    w = w().expand()
-    Esq = Esq.expand()
-    assert w/Esq == 1
-    w = (E2|e2)
-    w = w().expand()
-    assert w/Esq == 1
-    w = (E3|e3)
-    w = w().expand()
-    assert w/Esq == 1
+    X = x*e_x+y*e_y+z*e_z
+    Y = X.subs([(x,2),(y,3),(z,4)])
+    assert Y == 2*e_x+3*e_y+4*e_z
+
 
 def test_vector_extraction():
     """
@@ -301,3 +200,100 @@ def test_extract_plane_and_line():
     diff = delta-delta_test
     diff.compact()
     assert diff == ZERO_MV
+
+def test_reciprocal_frame():
+    """
+    Test of fromula for general reciprocal frame of three vectors.
+    Let three independent vectors be e1, e2, and e3. The reciprocal
+    vectors E1, E2, and E3 obey the relations:
+
+    e_i.E_j = delta_ij*(e1^e2^e3)**2
+    """
+    metric = '1 # #,'+ \
+             '# 1 #,'+ \
+             '# # 1,'
+
+    MV.setup('e1 e2 e3',metric)
+    E = e1^e2^e3
+    Esq = (E*E)()
+    Esq_inv = 1/Esq
+    E1 = (e2^e3)*E
+    E2 = (-1)*(e1^e3)*E
+    E3 = (e1^e2)*E
+    w = (E1|e2)
+    w.collect(MV.g)
+    w = w().expand()
+    w = (E1|e3)
+    w.collect(MV.g)
+    w = w().expand()
+    assert w == 0
+    w = (E2|e1)
+    w.collect(MV.g)
+    w = w().expand()
+    assert w == 0
+    w = (E2|e3)
+    w.collect(MV.g)
+    w = w().expand()
+    assert w == 0
+    w = (E3|e1)
+    w.collect(MV.g)
+    w = w().expand()
+    assert w == 0
+    w = (E3|e2)
+    w.collect(MV.g)
+    w = w().expand()
+    assert w == 0
+    w = (E1|e1)
+    w = w().expand()
+    Esq = Esq.expand()
+    assert w/Esq == 1
+    w = (E2|e2)
+    w = w().expand()
+    assert w/Esq == 1
+    w = (E3|e3)
+    w = w().expand()
+    assert w/Esq == 1
+
+def test_derivative():
+    coords = make_symbols('x y z')
+    MV.setup('e','1 0 0, 0 1 0, 0 0 1',coords=coords)
+    X = x*e_x+y*e_y+z*e_z
+    a = MV('a','vector')
+
+    assert ((X|a).grad()) == a
+    assert ((X*X).grad()) == 2*X
+    assert (X*X*X).grad() == 5*X*X
+    assert X.grad_int() == 3
+
+def test_str():
+    MV.setup('e_1 e_2 e_3','1 0 0, 0 1 0, 0 0 1')
+
+    X = MV('x')
+    assert str(X) == 'x+x__0*e_1+x__1*e_2+x__2*e_3+x__01*e_1e_2+x__02*e_1e_3+x__12*e_2e_3+x__012*e_1e_2e_3'
+    Y = MV('y','spinor')
+    assert str(Y) == 'y+y__01*e_1e_2+y__02*e_1e_3+y__12*e_2e_3'
+    Z = X+Y
+    assert str(Z) == 'x+y+x__0*e_1+x__1*e_2+x__2*e_3+(x__01+y__01)*e_1e_2+(x__02+y__02)*e_1e_3+(x__12+y__12)*e_2e_3+x__012*e_1e_2e_3'
+    assert str(e_1|e_1) == '1'
+
+def test_metric():
+    MV.setup('e_1 e_2 e_3','[1,1,1]')
+    assert str(MV.metric) == '[[1 0 0]\n [0 1 0]\n [0 0 1]]'
+
+def test_constructor():
+    """
+    Test various multivector constructors
+    """
+    MV.setup('e_1 e_2 e_3','[1,1,1]')
+    make_symbols('x')
+    assert str(S(1)) == '1'
+    assert str(S(x)) == 'x'
+    assert str(MV('a','scalar')) == 'a'
+    assert str(MV('a','vector')) == 'a__0*e_1+a__1*e_2+a__2*e_3'
+    assert str(MV('a','pseudo')) == 'a*e_1e_2e_3'
+    assert str(MV('a','spinor')) == 'a+a__01*e_1e_2+a__02*e_1e_3+a__12*e_2e_3'
+    assert str(MV('a')) == 'a+a__0*e_1+a__1*e_2+a__2*e_3+a__01*e_1e_2+a__02*e_1e_3+a__12*e_2e_3+a__012*e_1e_2e_3'
+    assert str(MV([2,'a'],'grade')) == 'a__01*e_1e_2+a__02*e_1e_3+a__12*e_2e_3'
+    assert str(MV('a','grade2')) == 'a__01*e_1e_2+a__02*e_1e_3+a__12*e_2e_3'
+
+

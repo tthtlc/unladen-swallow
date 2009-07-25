@@ -7,23 +7,14 @@ The relevant references for this module are:
     1. "Geometric Algebra for Physicists" by C. Doran and A. Lazenby,
        Cambridge University Press, 2003.
 
-    2. GiNaC 1.4.1, An open framwork for symbolic computation with the
-       C++ programming language, 9/5/2007, http://www.ginac.de
+    2. "Geometric Algebra for Computer Science" by Leo Dorst, Daniel Fontijne,
+       and Stephen Mann, Morgan Kaufmann Publishers, 2007
 
-    3. Symbolic Computation with GiNaC and Python 1.3.5, 2007-02-01,
-       http://swiginac.berlios.de/ginac-tutorial.py.html
-
-    4. Sympy Tutorial, http://code.google.com/p/sympy/wiki/Tutorial
-
-    5. "Design of a Python Module for Symbolic Geometric Algebra
-       Calculations" by Alan Bromborsky, included as symbolGA.pdf
+    3. Sympy Tutorial, http://docs.sympy.org/
 """
 import sys
-#if sys.version.find('Stackless') >= 0:
-#    sys.path.append('/usr/lib/python2.5/site-packages')
-
 import os, string, types, copy
-import numpy, sympy
+import numpy,sympy
 import re as regrep
 import sympy.galgebra.latex_ex
 
@@ -44,6 +35,10 @@ add_type = sympy.core.add.Add
 global MAIN_PROGRAM
 
 MAIN_PROGRAM = ''
+
+@sympy.vectorize(0)
+def substitute_array(array,*args):
+    return(array.subs(*args))
 
 def is_quasi_unit_numpy_array(array):
     """
@@ -735,13 +730,67 @@ class MV(object):
         return
 
     @staticmethod
-    def str_rep(mv,lst_mode=0):
+    def str_rep(mv):
         """
-        Converts internal representation of a multivector to a string
-        for outputing.  If lst_mode = 1, str_rep outputs a list of
-        strings where each string contains one multivector coefficient
-        concatenated with the corressponding base or blade symbol.
+         Converts internal representation of a multivector to a string
+         for outputing.  If lst_mode = 1, str_rep outputs a list of
+         strings where each string contains one multivector coefficient
+         concatenated with the corresponding base or blade symbol.
+
+            MV.str_mode     Effect
+                0           Print entire multivector on one line (default)
+                1           Print each grade on a single line
+                2           Print each base on a single line
+         """
+
+        if MV.bladeprint:
+            mv.convert_to_blades()
+            labels = MV.bladelabel
+        else:
+            if not mv.bladeflg:
+                labels = MV.basislabel
+            else:
+                labels = MV.bladelabel
+        mv.compact()
+        if isinstance(mv.mv[0],types.IntType):
+            value = ''
+        else:
+            value = (mv.mv[0][0]).__str__()
+            value = value.replace(' ','')
+        dummy = sympy.Symbol('dummy')
+        for igrade in MV.n1rg[1:]:
+            if isinstance(mv.mv[igrade],numpy.ndarray):
+                j = 0
+                for x in mv.mv[igrade]:
+                    if x != ZERO:
+                        xstr = (x*dummy).__str__()
+                        xstr = xstr.replace(' ','')
+                        if xstr[0] != '-' and len(value) > 0:
+                            xstr = '+'+xstr
+                        if xstr.find('dummy') < 2 and xstr[-5:] != 'dummy':
+                            xstr = xstr.replace('dummy*','')+'*'+labels[igrade][j]
+                        else:
+                            xstr = xstr.replace('dummy',labels[igrade][j])
+                        if MV.str_mode == 2:
+                            xstr += '\n'
+                        value += xstr
+                    j += 1
+                if MV.str_mode == 1:
+                    value += '\n'
+        if value == '':
+            value = '0'
+        #value = value.replace(' ','')
+        value = value.replace('dummy','1')
+        return(value)
+
+    @staticmethod
+    def xstr_rep(mv,lst_mode=0):
         """
+         Converts internal representation of a multivector to a string
+         for outputing.  If lst_mode = 1, str_rep outputs a list of
+         strings where each string contains one multivector coefficient
+         concatenated with the corressponding base or blade symbol.
+         """
         if lst_mode:
             outlst = []
         if MV.bladeprint:
@@ -757,22 +806,23 @@ class MV(object):
             tmp = []
             if isinstance(mv.mv[igrade],numpy.ndarray):
                 j = 0
+                xsum = 0
                 for x in mv.mv[igrade]:
                     if x != ZERO:
                         xstr = x.__str__()
                         if xstr == '+1' or xstr == '1' or xstr == '-1':
-                            if xstr == '+1' or xstr == '1':
-                                xstr = '+'
-                            else:
-                                xstr = '-'
+                           if xstr == '+1' or xstr == '1':
+                               xstr = '+'
+                           else:
+                               xstr = '-'
                         else:
-                            if xstr[0] != '+':
-                                xstr = '+('+xstr+')'
-                            else:
-                                xstr = '+('+xstr[1:]+')'
+                           if xstr[0] != '+':
+                               xstr = '+('+xstr+')'
+                           else:
+                               xstr = '+('+xstr[1:]+')'
                         value += xstr+labels[igrade][j]
                         if MV.str_mode and not lst_mode:
-                            value += '\n'
+                            value += value+'\n'
                         if lst_mode:
                             tmp.append(value)
                     j += 1
@@ -790,7 +840,7 @@ class MV(object):
         return(value)
 
     @staticmethod
-    def setup(basis,metric='',rframe=False,coords=None,debug=False):
+    def setup(basis,metric='',rframe=False,coords=None,debug=False,offset=0):
         """
         MV.setup initializes the MV class by calculating the static
         multivector tables required for geometric algebra operations
@@ -805,6 +855,7 @@ class MV(object):
         MV.tables_flg = 0
         MV.str_mode  = 0
         MV.basisroot = ''
+        MV.index_offset = offset
         if coords == None:
             MV.coords = None
         else:
@@ -821,14 +872,25 @@ class MV(object):
         if type(metric) == types.StringType:
             MV.metric_str = True
             if len(metric) > 0:
-                tmps = metric.split(',')
-                metric = []
-                for tmp in tmps:
-                    xlst = tmp.split()
-                    xtmp = []
-                    for x in xlst:
-                        xtmp.append(x)
-                    metric.append(xtmp)
+                if metric[0] == '[' and metric[-1] == ']':
+                    tmps = metric[1:-1].split(',')
+                    N = len(tmps)
+                    metric = []
+                    itmp = 0
+                    for tmp in tmps:
+                        xtmp = N*['0']
+                        xtmp[itmp] = tmp
+                        itmp += 1
+                        metric.append(xtmp)
+                else:
+                    tmps = metric.split(',')
+                    metric = []
+                    for tmp in tmps:
+                        xlst = tmp.split()
+                        xtmp = []
+                        for x in xlst:
+                            xtmp.append(x)
+                        metric.append(xtmp)
 
         MV.define_metric(metric)
         MV.multiplication_table()
@@ -846,6 +908,9 @@ class MV(object):
         if rframe:
             MV.define_reciprocal_frame()
         MV.I = MV(ONE,'pseudo','I')
+        MV.ZERO = MV()
+        Isq = (MV.I*MV.I)()
+        MV.Iinv = (1/Isq)*MV.I
         return('Setup of '+basis+' complete!')
 
     @staticmethod
@@ -1487,6 +1552,10 @@ class MV(object):
         product of the multivectors mv1 and mv2 (mv1^mv2). See
         reference 5 section 6.
         """
+        if type(mv1) == type(MV) and type(mv2) == type(MV):
+            if mv1.is_scalar() and mv2.is_scalar():
+                return(mv1*mv2)
+
         if isinstance(mv1,MV) and isinstance(mv2,MV):
             product = MV()
             product.bladeflg = 1
@@ -1505,33 +1574,54 @@ class MV(object):
         else:
             if isinstance(mv1,MV):
                 product = mv1.scalar_mul(mv2)
-            else:
+            if isinstance(mv2,MV):
                 product = mv2.scalar_mul(mv1)
         return(product)
 
     @staticmethod
-    def inner_product(mv1,mv2):
+    def inner_product(mv1,mv2,mode='s'):
         """
-        MV.inner_product(mv1,mv2) calculates the inner (scalar,dot)
-        product of the multivectors mv1 and mv2 (mv1|mv2).  See
-        reference 5 section 6.
+        MV.inner_product(mv1,mv2) calculates the inner
+
+        mode = 's' - symmetic (Doran & Lasenby)
+        mode = 'l' - left contraction (Dorst)
+        mode = 'r' - right contraction (Dorst)
         """
+        if type(mv1) == type(MV) and type(mv2) == type(MV):
+            if mv1.is_scalar() and mv2.is_scalar():
+                return(mv1*mv2)
+
         if isinstance(mv1,MV) and isinstance(mv2,MV):
             product = MV()
             product.bladeflg = 1
             mv1.convert_to_blades()
             mv2.convert_to_blades()
-            for igrade1 in range(1,MV.n1):
+            for igrade1 in range(MV.n1):
                 if isinstance(mv1.mv[igrade1],numpy.ndarray):
                     pg1 = mv1.project(igrade1)
-                    for igrade2 in range(1,MV.n1):
-                        igrade = (igrade1-igrade2).__abs__()
-                        if isinstance(mv2.mv[igrade2],numpy.ndarray):
-                            pg2 = mv2.project(igrade2)
-                            pg1pg2 = pg1*pg2
-                            product.add_in_place(pg1pg2.project(igrade))
+                    for igrade2 in range(MV.n1):
+                        igrade = igrade1-igrade2
+                        if mode == 's':
+                            igrade = igrade.__abs__()
+                        else:
+                            if mode == 'l':
+                                igrade = -igrade
+                        if igrade >= 0:
+                            if isinstance(mv2.mv[igrade2],numpy.ndarray):
+                                pg2 = mv2.project(igrade2)
+                                pg1pg2 = pg1*pg2
+                                product.add_in_place(pg1pg2.project(igrade))
             return(product)
-        return(MV())
+        else:
+            if mode == 's':
+                if isinstance(mv1,MV):
+                    product = mv1.scalar_mul(mv2)
+                if isinstance(mv2,MV):
+                    product = mv2.scalar_mul(mv1)
+            else:
+                product = None
+        return(product)
+
 
     @staticmethod
     def addition(mv1,mv2):
@@ -1554,20 +1644,12 @@ class MV(object):
                     else:
                         if isinstance(mv2.mv[i],numpy.ndarray) and not isinstance(mv1.mv[i],numpy.ndarray):
                             sum.mv[i] = +mv2.mv[i]
+            return(sum)
         else:
             if isinstance(mv1,MV):
-                sum = mv1.copy()
-                if isinstance(sum.mv[0],numpy.ndarray):
-                    sum.mv[0] += numpy.array([mv2],dtype=numpy.object)
-                else:
-                    sum.mv[0] = numpy.array([mv2],dtype=numpy.object)
+                return(mv1+MV(mv2,'scalar'))
             else:
-                sum = mv2.copy()
-                if isinstance(sum.mv[0],numpy.ndarray):
-                    sum.mv[0] += numpy.array([mv1],dtype=numpy.object)
-                else:
-                    sum.mv[0] = numpy.array([mv1],dtype=numpy.object)
-        return(sum)
+                return(MV(mv1,'scalar')+mv2)
 
     @staticmethod
     def subtraction(mv1,mv2):
@@ -1590,20 +1672,12 @@ class MV(object):
                     else:
                         if not isinstance(mv1.mv[i],numpy.ndarray) and isinstance(mv2.mv[i],numpy.ndarray):
                             diff.mv[i] = -mv2.mv[i]
+            return(diff)
         else:
             if isinstance(mv1,MV):
-                diff = mv1.copy()
-                if isinstandce(diff.mv[0],numpy.ndarray):
-                    diff.mv[0] -= numpy.array([mv2],dtype=numpy.object)
-                else:
-                    diff.mv[0] = -numpy.array([mv2],dtype=numpy.object)
+                return(mv1-MV(mv2,'scalar'))
             else:
-                diff = mv2.copy(1)
-                if isinstance(diff.mv[0],numpy.ndarray):
-                    diff.mv[0] += numpy.array([mv1],dtype=numpy.object)
-                else:
-                    diff.mv[0] = +numpy.array([mv1],dtype=numpy.object)
-        return(diff)
+                return(MV(mv1,'scalar')-mv2)
 
     @staticmethod
     def vdiff(vec,x):
@@ -1625,7 +1699,7 @@ class MV(object):
             return(sym)
         return(scalar)
 
-    def __init__(self,value='',mvtype='',mvname='',fct=False):
+    def __init__(self,value='',mvtype='',mvname='',fct=False,vars=None):
         """
         Initialization of multivector X. Inputs are as follows
 
@@ -1635,12 +1709,17 @@ class MV(object):
         'basisvector'   int i                    ith basis vector
         'basisbivector' int i                    ith basis bivector
         'scalar'        symbol x                 scalar of value x
+                        string s
         'grade'         [int i, symbol array A]  X.grade(i) = A
+                        [int i, string s]
         'vector'        symbol array A           X.grade(1) = A
+                        string s
         'grade2'        symbol array A           X.grade(2) = A
+                        string s
         'pseudo'        symbol x                 X.grade(n) = x
-        'spinor'        string A                 spinor with coefficients
-                                                 A__indices and name Abm
+                        string s
+        'spinor'        string s                 spinor with coefficients
+                                                 s__indices and name sbm
 
         mvname is name of multivector.
         If fct is 'True' and MV.coords is defined in MV.setup then a
@@ -1659,21 +1738,20 @@ class MV(object):
             self.mv[2][value] = ONE
         if mvtype == 'scalar':
             if isinstance(value,types.StringType):
-                value = make_symbols(value)
-            self.mv[0] = numpy.array(value,dtype=numpy.object)
+                value = sympy.Symbol(value)
+            if isinstance(value,types.IntType):
+                value = sympy.Rational(value)
+            self.mv[0] = numpy.array([value],dtype=numpy.object)
         if mvtype == 'pseudo':
-            self.mv[MV.n] = numpy.array([value],dtype=numpy.object)
-        if mvtype == 'grade':
-            igrade          = value[0]
-            coefs           = value[1]
-            #coefs = MV.pad_zeros(coefs,MV.nbasis[igrade])
-            self.mv[igrade] = numpy.array(coefs,dtype=numpy.object)
-        if mvtype == 'vector':
             if isinstance(value,types.StringType):
+                value = sympy.Symbol(value)
+            self.mv[MV.n] = numpy.array([value],dtype=numpy.object)
+        if mvtype == 'vector':
+            if isinstance(value,types.StringType): #Most general vector
                 symbol_str = ''
                 for ibase in MV.nrg:
                     if MV.coords == None:
-                        symbol = value+'__'+str(ibase)
+                        symbol = value+'__'+str(ibase+MV.index_offset)
                         symbol_str += symbol+' '
                     else:
                         symbol = value+'__'+(MV.coords[ibase]).name
@@ -1685,13 +1763,39 @@ class MV(object):
                 value = MV.pad_zeros(value,MV.nbasis[1])
                 self.mv[1] = numpy.array(value,dtype=numpy.object)
         if mvtype == 'grade2':
-            value = MV.pad_zeros(value,MV.nbasis[2])
-            self.mv[2]    = numpy.array(value,dtype=numpy.object)
+            if isinstance(value,types.StringType): #Most general grade-2 multivector
+                if value != '':
+                    symbol_str = ''
+                    for base in MV.basis[2]:
+                        symbol = value+MV.construct_index(base)
+                        symbol_str += symbol+' '
+                    symbol_lst = make_symbols(symbol_str)
+                    self.mv[2] = numpy.array(symbol_lst,dtype=numpy.object)
+            else:
+                value = MV.pad_zeros(value,MV.nbasis[2])
+                self.mv[2] = numpy.array(value,dtype=numpy.object)
+        if mvtype == 'grade':
+            igrade = value[0]
+            coefs  = value[1]
+            if isinstance(coefs,types.StringType): #Most general pure grade multivector
+                base_symbol = coefs
+                coefs = []
+                bases = MV.basis[igrade]
+                if igrade == 0:
+                    self.mv[0] = numpy.array([sympy.Symbol(base_symbol)],dtype=numpy.object)
+                else:
+                    for base in bases:
+                        coef = base_symbol+MV.construct_index(base)
+                        coef = sympy.Symbol(coef)
+                        coefs.append(coef)
+                    self.mv[igrade] = numpy.array(coefs,dtype=numpy.object)
+            else:
+                self.mv[igrade] = coefs
         if mvtype == 'base':
             self.mv[value[0]] = numpy.array(MV.nbasis[value[0]]*[ZERO],dtype=numpy.object)
             self.mv[value[0]][value[1]] = ONE
         if mvtype == 'spinor':
-            if isinstance(value,types.StringType):
+            if isinstance(value,types.StringType): #Most general spinor
                 for grade in MV.n1rg:
                     if grade%2 == 0:
                         symbol_str = ''
@@ -1702,18 +1806,39 @@ class MV(object):
                             symbol_lst = make_symbols(symbol_str)
                             self.mv[grade] = numpy.array(symbol_lst,dtype=numpy.object)
                         else:
-                            self.mv[0] = numpy.array([value],dtype=numpy.object)
+                            self.mv[0] = numpy.array([sympy.Symbol(value)],dtype=numpy.object)
                 self.name = value+'bm'
-        if fct and MV.coords != None:
+        if isinstance(value,types.StringType) and mvtype == '': #Most general multivector
+            if value != '':
+                for grade in MV.n1rg:
+                    symbol_str = ''
+                    if grade != 0:
+                        for base in MV.basis[grade]:
+                            symbol = value+MV.construct_index(base)
+                            symbol_str += symbol+' '
+                        symbol_lst = make_symbols(symbol_str)
+                        self.mv[grade] = numpy.array(symbol_lst,dtype=numpy.object)
+                    else:
+                        self.mv[0] = numpy.array([sympy.Symbol(value)],dtype=numpy.object)
+                self.name = value+'bm'
+        if fct:
+            if vars != None:
+                vars = tuple(vars)
             for grade in MV.n1rg:
                 if not isinstance(self.mv[grade],types.IntType):
                     if grade == 0:
                         coef = sympy.galgebra.latex_ex.LatexPrinter.str_basic(self.mv[0][0])
-                        self.mv[0]= numpy.array([sympy.Function(coef)(*MV.coords)],dtype=numpy.object)
+                        if vars == None and MV.coords != None:
+                            self.mv[0]= numpy.array([sympy.Function(coef)(*MV.coords)],dtype=numpy.object)
+                        else:
+                            self.mv[0]= numpy.array([sympy.Function(coef)(*vars)],dtype=numpy.object)
                     else:
                         for base in range(MV.nbasis[grade]):
                             coef = sympy.galgebra.latex_ex.LatexPrinter.str_basic(self.mv[grade][base])
-                            self.mv[grade][base] = sympy.Function(coef)(*MV.coords)
+                            if vars == None and MV.coords != None:
+                                self.mv[grade][base] = sympy.Function(coef)(*MV.coords)
+                            else:
+                                self.mv[grade][base] = sympy.Function(coef)(*vars)
 
     @staticmethod
     def construct_index(base):
@@ -1722,7 +1847,7 @@ class MV(object):
             return('')
         if MV.coords == None:
             for ix in base:
-                index_str += str(ix)
+                index_str += str(ix+MV.index_offset)
         else:
             for ix in base:
                 index_str += (MV.coords[ix]).name
@@ -1887,6 +2012,36 @@ class MV(object):
         """See MV.inner_product(mv,self)"""
         return(MV.inner_product(mv,self))
 
+    def __lt__(self,mv):
+        """See MV.inner_product(self,mv)"""
+        return(MV.inner_product(self,mv,'l'))
+
+    def __lshift__(self,mv):
+        """See MV.inner_product(self,mv)"""
+        return(MV.inner_product(self,mv,'l'))
+
+    def __rlshift__(self,mv):
+        """See MV.inner_product(self,mv)"""
+        return(MV.inner_product(mv,self,'l'))
+
+    def lc(self,mv):
+        return(MV.inner_product(self,mv,'l'))
+
+    def __gt__(self,mv):
+        """See MV.inner_product(self,mv)"""
+        return(MV.inner_product(self,mv,'r'))
+
+    def __rshift__(self,mv):
+        """See MV.inner_product(self,mv)"""
+        return(MV.inner_product(self,mv,'r'))
+
+    def __rrshift__(self,mv):
+        """See MV.inner_product(self,mv)"""
+        return(MV.inner_product(mv,self,'r'))
+
+    def rc(self,mv):
+        return(MV.inner_product(self,mv,'r'))
+
     def scalar_mul(self,c):
         """
         Y = X.scalar_mul(c), multiply multivector X by scalar c and return
@@ -1897,6 +2052,8 @@ class MV(object):
         mv.puregrade = self.puregrade
         for i in MV.n1rg:
             if isinstance(self.mv[i],numpy.ndarray):
+                #print self.mv[i]
+                #print c,type(c)
                 mv.mv[i] = self.mv[i]*c
         return(mv)
 
@@ -1941,10 +2098,20 @@ class MV(object):
             return(ZERO)
         return(self.mv[igrade][ibase])
 
-    def __eq__(self,mv):
-        if not isinstance(mv,MV):
+    @staticmethod
+    def equal(mv1,mv2):
+        mv1.compact()
+        if isinstance(mv2,MV):
+            mv2.compact()
+        pure_grade = mv1.is_pure()
+        if not isinstance(mv2,MV) and pure_grade != 0:
             return(False)
-        for (mvi,mvj) in zip(self.mv,mv.mv):
+        if not isinstance(mv2,MV) and pure_grade == 0:
+            if isinstance(mv1.mv[0],types.IntType):
+                return(mv2 == 0)
+            else:
+                return(mv1.mv[0][0] == mv2)
+        for (mvi,mvj) in zip(mv1.mv,mv2.mv):
             if isint(mvi) ^ isint(mvj):
                 return(False)
             if isinstance(mvi,numpy.ndarray) and isinstance(mvj,numpy.ndarray):
@@ -1952,6 +2119,9 @@ class MV(object):
                     if x != y:
                         return(False)
         return(True)
+
+    def __eq__(self,mv):
+        return(MV.equal(self,mv))
 
     def copy(self,sub=0):
         """
@@ -2022,18 +2192,34 @@ class MV(object):
     def project(self,r):
         """
         Grade projection operator. For multivector X, X.project(r)
-        returns multivector of grade r components of X.
+        returns multivector of grade r components of X if r is an
+        integer. If r is a multivector X.project(r) returns a
+        mutivector consisting of the grade of X for which r has non-
+        zero grades. For example if X is a general multvector and
+        r is a general spinor then X.project(r) will return the even
+        grades of X.
         """
-        grade_r = MV()
-        if r > MV.n:
+        if isinstance(r,types.IntType):
+            grade_r = MV()
+            if r > MV.n:
+                return(grade_r)
+            self.convert_to_blades()
+            if not isinstance(self.mv[r],numpy.ndarray):
+                return(grade_r)
+            grade_r.bladeflg = 1
+            grade_r.puregrade = 1
+            grade_r.mv[r] = +self.mv[r]
             return(grade_r)
-        self.convert_to_blades()
-        if not isinstance(self.mv[r],numpy.ndarray):
-            return(grade_r)
-        grade_r.bladeflg = 1
-        grade_r.puregrade = 1
-        grade_r.mv[r] = +self.mv[r]
-        return(grade_r)
+        if isinstance(r,MV):
+            self.convert_to_blades()
+            r.convert_to_blades()
+            proj = MV()
+            for i in MV.n1rg:
+                if not isinstance(r.mv[i],types.IntType):
+                    proj.mv[i] = self.mv[i]
+            proj.bladeflg = self.bladeflg
+            return(proj)
+        return(None)
 
     def even(self):
         """
@@ -2140,18 +2326,14 @@ class MV(object):
                     flst.append(coef)
         return(flst)
 
-    def subs(self,var,substitute):
-        """
-        Applies sympy subs function
-        to each component of multivector.
-        """
+    def subs(self,*args):
+        X = MV()
+        X.bladeflg  = self.bladeflg
+        X.puregrade = self.puregrade
         for igrade in MV.n1rg:
             if isinstance(self.mv[igrade],numpy.ndarray):
-                for ibase in range(MV.nbasis[igrade]):
-                    if self.mv[igrade][ibase] != ZERO:
-                        self.mv[igrade][ibase] = \
-                        self.mv[igrade][ibase].subs(var,substitute)
-        return
+                X.mv[igrade] = numpy.array(substitute_array(self.mv[igrade],*args))
+        return(X)
 
     def sub_mv(self,mv1,mv2):
         mv1_flat = mv1.flatten()
@@ -2250,7 +2432,14 @@ class MV(object):
                         break
                 if ngrade > 1:
                     return(-1)
+        if igrade == -1:
+            return(0)
         return(igrade)
+
+    def is_scalar(self):
+        if self.is_pure() == 0:
+            return(True)
+        return(False)
 
     def compact(self):
         """
@@ -2289,8 +2478,8 @@ class MV(object):
         dxdt = self.diff(MV.coords[0])
         for ibase in MV.nrg:
             dxdt += self.mv[1][ibase]*MV.dedt[ibase]
-        dxdt.simplify()
-        dxdt.trigsimp()
+        #dxdt.simplify()
+        #dxdt.trigsimp()
         return(dxdt)
 
     def grad(self):
@@ -2342,6 +2531,9 @@ class MV(object):
                 igrade += 1
         return(dD)
 
+    def curl(self):
+        return(self.grad_ext())
+
     def grad_int(self):
         """
         Calculate inner (interior,div) derivative of multivector function.
@@ -2365,6 +2557,9 @@ class MV(object):
                         dD.add_in_place(coef*connect.project(igrade-1))
                 igrade += 1
         return(dD)
+
+    def div(self):
+        return(self.grad_int())
 
     def mag2(self):
         """
@@ -2428,4 +2623,9 @@ def reciprocal_frame(vlst,names=''):
             recp[i].set_name(name_lst[i])
             i += 1
     return(recp)
+
+def S(value):
+    return(MV(value,'scalar'))
+
+
 

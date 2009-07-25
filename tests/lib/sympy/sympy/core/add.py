@@ -1,12 +1,7 @@
-
 from basic import Basic, S, C
 from operations import AssocOp
 from cache import cacheit
-
-from symbol import Symbol, Wild, Temporary
-# from numbers import Number    /cyclic/
-# from mul import Mul    /cyclic/
-# from function import FunctionClass    /cyclic/
+from symbol import Symbol
 
 class Add(AssocOp):
 
@@ -363,8 +358,116 @@ class Add(AssocOp):
             return Add(*[e for (e,f) in lst])
         return s.as_leading_term(x)
 
+    def _eval_power(self, other):
+        #         n          n          n
+        # (-3 + y)   ->  (-1)  * (3 - y)
+        # similar to Mul.flatten()
+        c, t = self.as_coeff_terms()
+        if c.is_negative and not other.is_integer:
+            if c is not S.NegativeOne:
+                coeff = (-c) ** other
+                assert len(t) == 1, 't'
+                b = -t[0]
+                return coeff*b**other
+        elif c is not S.One:
+            coeff = c ** other
+            assert len(t) == 1, 't'
+            b = t[0]
+            return coeff*b**other
+        return
+
     def _eval_conjugate(self):
         return Add(*[t.conjugate() for t in self.args])
+
+    def _eval_expand_basic(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_basic'):
+                newterm = term._eval_expand_basic(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_power_exp(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_power_exp'):
+                newterm = term._eval_expand_power_exp(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_power_base(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_power_base'):
+                newterm = term._eval_expand_power_base(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_mul(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_mul'):
+                newterm = term._eval_expand_mul(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_multinomial(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_multinomial'):
+                newterm = term._eval_expand_multinomial(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_log(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_log'):
+                newterm = term._eval_expand_log(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_complex(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_complex'):
+                newterm = term._eval_expand_complex(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_trig(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_trig'):
+                newterm = term._eval_expand_trig(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_func(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_func'):
+                newterm = term._eval_expand_func(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
 
     def __neg__(self):
         return Add(*[-t for t in self.args])
@@ -375,20 +478,5 @@ class Add(AssocOp):
             s += x._sage_()
         return s
 
-
-# /cyclic/
-import basic as _
-_.Add       = Add
-del _
-
-import mul as _
-_.Add       = Add
-del _
-
-import power as _
-_.Add       = Add
-del _
-
-import operations as _
-_.Add       = Add
-del _
+from mul import Mul
+from function import FunctionClass

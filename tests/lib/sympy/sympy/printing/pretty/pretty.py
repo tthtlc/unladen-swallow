@@ -21,20 +21,21 @@ class PrettyPrinter(Printer):
         self._settings = {
                 "full_prec" : "auto",
                 "use_unicode" : True,
+                "wrap_line" : True,
         }
 
         if profile is not None:
             self._settings.update(profile)
 
     def doprint(self, expr):
-        return self._print(expr).terminal_string()
+        return self._print(expr).render(**self._settings)
 
     # empty op so _print(stringPict) returns the same
     def _print_stringPict(self, e):
         return e
 
     def _print_basestring(self, e):
-        return prettyForm(repr(e))
+        return prettyForm(e)
 
     def _print_Symbol(self, e):
         symb = pretty_symbol(e.name)
@@ -317,7 +318,7 @@ class PrettyPrinter(Printer):
         P = {}
         for n, ec in enumerate(pexpr.args):
             P[n,0] = self._print(ec.expr)
-            if ec.cond is S.One:
+            if ec.cond == True:
                 P[n,1] = prettyForm('otherwise')
             else:
                 P[n,1] = prettyForm(*prettyForm('for ').right(self._print(ec.cond)))
@@ -591,9 +592,15 @@ class PrettyPrinter(Printer):
 
 def pretty(expr, profile=None, **kargs):
     """
-    Returns a string containing the prettified form of expr. If use_unicode
-    is set to True then certain expressions will use unicode characters,
-    such as the greek letter pi for Pi instances.
+    Returns a string containing the prettified form of expr.
+
+    Arguments
+    ---------
+    expr: the expression to print
+    wrap_line: line wrapping enabled/disabled, should be a boolean value (default to True)
+    use_unicode: use unicode characters, such as the greek letter pi instead of
+        the string pi. Values should be boolean or None
+    full_prec: use full precission. Default to "auto"
     """
     if profile is not None:
         profile.update(kargs)

@@ -1,6 +1,6 @@
 from sympy import symbols, Matrix, eye, I, Symbol, Rational, wronskian, cos, \
         sin, exp, hessian, sqrt, zeros, ones, randMatrix, Poly, S, pi, \
-        integrate, oo, raises, trigsimp
+        integrate, oo, raises, trigsimp, Integer
 from sympy.matrices.matrices import ShapeError, MatrixError
 from sympy.printing import srepr
 from sympy.utilities.pytest import XFAIL
@@ -65,6 +65,7 @@ def test_power():
     assert A**1 == A
     assert (Matrix([[2]]) ** 100)[0,0] == 2**100
     assert eye(2)**10000000 == eye(2)
+    assert Matrix([[1, 2], [3, 4]])**Integer(2) == Matrix([[7, 10], [15, 22]])
 
 def test_creation():
     raises(MatrixError, 'Matrix(5,5,range(20))')
@@ -969,3 +970,61 @@ def test_jacobian_metrics():
     g = J.T*eye(J.shape[0])*J
     g = g.applyfunc(trigsimp)
     assert g == Matrix([[1, 0], [0, rho**2]])
+
+def test_jacobian2():
+    rho, phi = symbols("rho phi")
+    X = Matrix([rho*cos(phi), rho*sin(phi), rho**2])
+    Y = Matrix([rho, phi])
+    J = Matrix([
+            [cos(phi), -rho*sin(phi)],
+            [sin(phi),  rho*cos(phi)],
+            [   2*rho,             0],
+        ])
+    assert X.jacobian(Y) == J
+
+def test_issue1465():
+    x, y, z = symbols('x', 'y', 'z')
+    X = Matrix([exp(x + y + z), exp(x + y + z), exp(x + y + z)])
+    Y = Matrix([x, y, z])
+    for i in range(1, 3):
+        for j in range(1, 3):
+            X_slice = X[:i,:]
+            Y_slice = Y[:j,:]
+            J = X_slice.jacobian(Y_slice)
+            assert J.lines == i
+            assert J.cols == j
+            for k in range(j):
+                assert J[:,k] == X_slice
+
+def test_nonvectorJacobian():
+    x, y, z = symbols('x', 'y', 'z')
+    X = Matrix([ [exp(x + y + z), exp(x + y + z)],
+                 [exp(x + y + z), exp(x + y + z)] ])
+    Y = Matrix([x, y, z])
+    raises(TypeError, 'X.jacobian(Y)')
+    X = X[0,:]
+    Y = Matrix([ [x, y], [x,z] ])
+    raises(TypeError, 'X.jacobian(Y)')
+
+def test_vec():
+    m = Matrix([ [1,3], [2,4] ])
+    m_vec = m.vec()
+    assert m_vec.cols == 1
+    for i in xrange(4):
+        assert m_vec[i] == i + 1
+
+def test_vech():
+    m = Matrix([ [1,2], [2,3] ])
+    m_vech = m.vech()
+    assert m_vech.cols == 1
+    for i in xrange(3):
+        assert m_vech[i] == i + 1
+    m_vech = m.vech(diagonal = False)
+    assert m_vech[0] == 2
+
+def test_vech_TypeError():
+    m = Matrix([ [1,3] ])
+    raises(TypeError, 'm.vech()')
+    m = Matrix([ [1,3], [2,4] ])
+    raises(TypeError, 'm.vech()')
+

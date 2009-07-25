@@ -152,7 +152,9 @@ class Sum(Basic):
         return s + iterm, abs(term)
 
     def _eval_subs(self, old, new):
-        return Sum(self.args[0].subs(old, new), *self.args[1])
+        newargs = (self.args[1][0][0], self.args[1][0][1].subs(old,new),
+                   self.args[1][0][2].subs(old,new))
+        return Sum(self.args[0].subs(old, new), newargs)
 
 
 def sum(*args, **kwargs):
@@ -198,7 +200,7 @@ def telescopic(L, R, (i, a, b)):
     #Maybe this should go inside solve
     k = Wild("k")
     sol = (-R).match(L.subs(i, i + k))
-    if sol and sol.has_key(k):
+    if sol and k in sol:
         if L.subs(i,i + sol[k]) == -R:
             #sometimes match fail(f(x+2).match(-f(x+k))->{k: -2 - 2x}))
             s = sol[k]

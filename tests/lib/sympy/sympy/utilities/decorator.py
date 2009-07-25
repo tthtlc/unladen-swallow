@@ -1,5 +1,4 @@
 import warnings
-from sympy.core.add import Add
 from sympy.core.sympify import sympify
 from sympy.core.relational import Relational
 
@@ -39,6 +38,8 @@ def threaded(**flags):
         def threaded_decorator(expr, *args, **kwargs):
             if isinstance(expr, Matrix):
                 return expr.applyfunc(lambda f: func(f, *args, **kwargs))
+            elif isinstance(expr, bool):
+                    return expr
             elif hasattr(expr, '__iter__'):
                 return expr.__class__([ func(f, *args, **kwargs) for f in expr ])
             else:
@@ -47,9 +48,9 @@ def threaded(**flags):
                 if isinstance(expr, Relational):
                     lhs = func(expr.lhs, *args, **kwargs)
                     rhs = func(expr.rhs, *args, **kwargs)
-
                     return Relational(lhs, rhs, expr.rel_op)
                 elif expr.is_Add and use_add:
+                    from sympy.core.add import Add
                     return Add(*[ func(f, *args, **kwargs) for f in expr.args ])
                 else:
                     return func(expr, *args, **kwargs)

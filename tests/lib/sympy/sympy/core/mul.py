@@ -1,17 +1,10 @@
-
-from basic import Basic, S, sympify
+from basic import Basic, S
 from operations import AssocOp
 from cache import cacheit
 
 from logic import fuzzy_not
 
-from symbol import Symbol, Wild
-# from function import FunctionClass, WildFunction /cyclic/
-# from numbers import Number, Integer, Real /cyclic/
-# from add   import Add /cyclic/
-# from power import Pow /cyclic/
-
-import sympy.mpmath as mpmath
+from symbol import Symbol
 
 # internal marker to indicate:
 #   "there are still non-commutative objects -- don't forget to processe them"
@@ -31,6 +24,7 @@ class Mul(AssocOp):
 
     @classmethod
     def flatten(cls, seq):
+
         # apply associativity, separate commutative part of seq
         c_part = []         # out: commutative factors
         nc_part = []        # out: non-commutative factors
@@ -40,13 +34,14 @@ class Mul(AssocOp):
         coeff = S.One       # standalone term
                             # e.g. 3 * ...
 
-        c_powers = {}       # base -> exp                      z
-                            # e.g. (x+y) -> z  for  ... * (x+y)  * ...
+        c_powers = []       # (base,exp)      n
+                            # e.g. (x,n) for x
 
-        exp_dict = {}       # num-base -> exp           y
-                            # e.g.  3 -> y  for  ... * 3  * ...
+        num_exp = []        # (num-base, exp)           y
+                            # e.g.  (3, y)  for  ... * 3  * ...
 
         order_symbols = None
+
 
 
         # --- PART 1 ---
@@ -55,7 +50,7 @@ class Mul(AssocOp):
         #
         # o coeff
         # o c_powers
-        # o exp_dict
+        # o num_exp
         #
         # NOTE: this is optimized for all-objects-are-commutative case
 
@@ -97,12 +92,9 @@ class Mul(AssocOp):
                 #  y
                 # 3
                 if o.is_Pow and b.is_Number:
-
-                    # let's collect factors with numeric base
-                    if b in exp_dict:
-                        exp_dict[b] += e
-                    else:
-                        exp_dict[b]  = e
+                    # get all the factors with numeric base so they can be
+                    # combined below
+                    num_exp.append((b,e))
                     continue
 
 
@@ -127,16 +119,11 @@ class Mul(AssocOp):
                         b = t[0]
                     #else: c is One, so pass
 
-                # let's collect factors with the same base, so e.g.
-                #  y    z     y+z
-                # x  * x  -> x
-                if b in c_powers:
-                    c_powers[b] += e
-                else:
-                    c_powers[b] = e
+                c_powers.append((b,e))
 
 
             # NON-COMMUTATIVE
+            # TODO: Make non-commutative exponents not combine automatically
             else:
                 if o is not NC_Marker:
                     nc_seq.append(o)
@@ -167,22 +154,69 @@ class Mul(AssocOp):
                     else:
                         nc_part.append(o1)
                         nc_part.append(o)
+        # We do want a combined exponent if it would not be an Add, such as
+        #  y    2y     3y
+        # x  * x   -> x
+        # We determine this if two exponents have the same term in as_coeff_terms
+        #
+        # Unfortunately, this isn't smart enough to consider combining into
+        # exponents that might already be adds, so thing like:
+        #  z - y    y
+        # x      * x  will be left alone.  This is because checking every possible
+        # combination can slow things down.
+        new_c_powers = []
+        common_b = {} # b:e
+
+        # First gather exponents of common bases
+        for b, e in c_powers:
+            co = e.as_coeff_terms()
+            if b in common_b:
+                if  co[1] in common_b[b]:
+                    common_b[b][co[1]] += co[0]
+                else:
+                    common_b[b][co[1]] = co[0]
+            else:
+                common_b[b] = {co[1]:co[0]}
+
+        for b,e, in common_b.items():
+            for t, c in e.items():
+                new_c_powers.append((b,c*Mul(*t)))
+        c_powers = new_c_powers
+
+        # And the same for numeric bases
+        new_num_exp = []
+        common_b = {} # b:e
+        for b, e in num_exp:
+            co = e.as_coeff_terms()
+            if b in common_b:
+                if  co[1] in common_b[b]:
+                    common_b[b][co[1]] += co[0]
+                else:
+                    common_b[b][co[1]] = co[0]
+            else:
+                common_b[b] = {co[1]:co[0]}
+
+        for b,e, in common_b.items():
+            for t, c in e.items():
+                new_num_exp.append((b,c*Mul(*t)))
+        num_exp = new_num_exp
 
 
         # --- PART 2 ---
         #
         # o process collected powers  (x**0 -> 1; x**1 -> x; otherwise Pow)
         # o combine collected powers  (2**x * 3**x -> 6**x)
+        #   with numeric base
 
         # ................................
         # now we have:
         # - coeff:
-        # - c_powers:   b -> e
-        # - exp_dict:   3 -> e
+        # - c_powers:    (b, e)
+        # - num_exp:     (2, e)
 
         #  0             1
         # x  -> 1       x  -> x
-        for b, e in c_powers.items():
+        for b, e in c_powers:
             if e is S.Zero:
                 continue
 
@@ -198,9 +232,9 @@ class Mul(AssocOp):
 
         #  x    x     x
         # 2  * 3  -> 6
-        inv_exp_dict = {}   # exp -> Mul(num-bases)     x    x
-                            # e.g.  x -> 6  for  ... * 2  * 3  * ...
-        for b,e in exp_dict.items():
+        inv_exp_dict = {}   # exp:Mul(num-bases)     x    x
+                            # e.g.  x:6  for  ... * 2  * 3  * ...
+        for b,e in num_exp:
             if e in inv_exp_dict:
                 inv_exp_dict[e] *= b
             else:
@@ -255,7 +289,7 @@ class Mul(AssocOp):
             if coeff == Real(0):
                 c_part, nc_part = [coeff], []
             elif coeff == Real(1):
-                # change it to One, so it don't get inserted to slot0
+                # change it to One, so it doesn't get inserted to slot0
                 coeff = S.One
 
 
@@ -370,11 +404,43 @@ class Mul(AssocOp):
                 terms = [added]
         return terms
 
-    def _eval_expand_basic(self):
-        plain, sums, rewrite = [], [], False
+    def _eval_expand_basic(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_basic'):
+                newterm = term._eval_expand_basic(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
 
+    def _eval_expand_power_exp(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_power_exp'):
+                newterm = term._eval_expand_power_exp(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_power_base(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_power_base'):
+                newterm = term._eval_expand_power_base(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_mul(self, deep=True, **hints):
+        plain, sums, rewrite = [], [], False
         for factor in self.args:
-            terms = factor._eval_expand_basic()
+            if deep:
+                terms = factor.expand(deep=deep, **hints)
+            else:
+                terms = factor
 
             if terms is not None:
                 factor = terms
@@ -405,6 +471,56 @@ class Mul(AssocOp):
                 return Add(*(Mul(plain, term) for term in terms), **self.assumptions0)
             else:
                 return Mul(*plain, **self.assumptions0)
+
+    def _eval_expand_multinomial(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_multinomial'):
+                newterm = term._eval_expand_multinomial(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_log(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_log'):
+                newterm = term._eval_expand_log(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_complex(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_complex'):
+                newterm = term._eval_expand_complex(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_trig(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_trig'):
+                newterm = term._eval_expand_trig(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
+
+    def _eval_expand_func(self, deep=True, **hints):
+        sargs, terms = self.args[:], []
+        for term in sargs:
+            if hasattr(term, '_eval_expand_func'):
+                newterm = term._eval_expand_func(deep=deep, **hints)
+            else:
+                newterm = term
+            terms.append(newterm)
+        return self.new(*terms)
 
     def _eval_derivative(self, s):
         terms = list(self.args)
@@ -632,8 +748,9 @@ class Mul(AssocOp):
         return self.__class__(*[s._eval_subs(old, new) for s in self.args])
 
     def _eval_nseries(self, x, x0, n):
+        from sympy import powsimp
         terms = [t.nseries(x, x0, n) for t in self.args]
-        return Mul(*terms).expand()
+        return powsimp(Mul(*terms).expand(), combine='exp', deep=True)
 
 
     def _eval_as_leading_term(self, x):
@@ -649,23 +766,8 @@ class Mul(AssocOp):
         return s
 
 
-# /cyclic/
-import basic as _
-_.Mul       = Mul
-del _
-
-import add as _
-_.Mul       = Mul
-del _
-
-import power as _
-_.Mul       = Mul
-del _
-
-import numbers as _
-_.Mul       = Mul
-del _
-
-import operations as _
-_.Mul       = Mul
-del _
+from power import Pow
+from numbers import Real
+from function import FunctionClass
+from sympify import sympify
+from add import Add

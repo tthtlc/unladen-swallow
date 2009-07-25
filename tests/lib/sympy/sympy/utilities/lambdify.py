@@ -4,7 +4,7 @@ lambda functions which can be used to calculate numerical values very fast.
 """
 
 from __future__ import division
-from sympy.core import sympify
+from sympy.core.sympify import sympify
 
 # These are the namespaces the lambda functions will use.
 MATH = {}
@@ -31,6 +31,7 @@ MPMATH_TRANSLATIONS = {
     "oo":"inf",
     #"uppergamma":"upper_gamma",
     "LambertW":"lambertw",
+    "Matrix":"matrix",
 }
 
 NUMPY_TRANSLATIONS = {
@@ -72,7 +73,7 @@ def _import(module, reload="False"):
     These dictionaries map names of python functions to their equivalent in
     other modules.
     """
-    if not MODULES.has_key(module):
+    if not module in MODULES:
         raise NameError("This module can't be used for lambdification.")
     namespace, translations, import_commands = MODULES[module]
     # Clear namespace or exit
