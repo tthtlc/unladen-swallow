@@ -60,6 +60,6 @@ Unladen Swallow exposes knobs for tuning which code objects are run through LLVM
 
   * *python -j never*: run all code through the bytecode interpreter.
   * *python -j whenhot*: the default; only run hot code though JIT compilation.
-  * *python -j always*: compile every piece of Python code to machine code.
+  * *python -j always*: compile all executed Python functions to machine code.
 
 There is also a dedicated test in the Unladen Swallow standard library test suite, `test_llvm`, that attempts to test code generation. This alone isn't a sufficient guarantee of correctness, so we use these `-j` flags to give code generation more of a stress test.
