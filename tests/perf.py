@@ -1163,26 +1163,29 @@ def MeasureRegexPerformance(python, bm_path, options):
     return times, mem_usage
 
 
-def BM_regex_v8(base_python, changed_python, options):
-    cmd = ["performance/bm_regex_v8.py", options]
+def RegexBenchmark(base_python, changed_python, options, bm_path):
     try:
-        changed_data = MeasureRegexPerformance(changed_python, *cmd)
-        base_data = MeasureRegexPerformance(base_python, *cmd)
+        changed_data = MeasureRegexPerformance(changed_python, bm_path, options)
+        base_data = MeasureRegexPerformance(base_python, bm_path, options)
     except subprocess.CalledProcessError, e:
         return str(e)
 
     return CompareBenchmarkData(base_data, changed_data, options)
+
+
+def BM_regex_v8(base_python, changed_python, options):
+    bm_path = "performance/bm_regex_v8.py"
+    return RegexBenchmark(base_python, changed_python, options, bm_path)
 
 
 def BM_regex_effbot(base_python, changed_python, options):
-    cmd = ["performance/bm_regex_effbot.py", options]
-    try:
-        changed_data = MeasureRegexPerformance(changed_python, *cmd)
-        base_data = MeasureRegexPerformance(base_python, *cmd)
-    except subprocess.CalledProcessError, e:
-        return str(e)
+    bm_path = "performance/bm_regex_effbot.py"
+    return RegexBenchmark(base_python, changed_python, options, bm_path)
 
-    return CompareBenchmarkData(base_data, changed_data, options)
+
+def BM_regex_compile(base_python, changed_python, options):
+    bm_path = "performance/bm_regex_compile.py"
+    return RegexBenchmark(base_python, changed_python, options, bm_path)
 
 
 def MeasureThreading(python, bm_name, options):
@@ -1286,7 +1289,7 @@ def _FindAllBenchmarks():
 BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "slowpickle",
                             "slowunpickle"],
                 "startup": ["normal_startup", "startup_nosite"],
-                "regex": ["regex_v8", "regex_effbot"],
+                "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
                 "all": _FindAllBenchmarks().keys(),
