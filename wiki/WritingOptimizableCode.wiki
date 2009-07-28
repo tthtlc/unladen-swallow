@@ -1,0 +1,31 @@
+#summary How to write Python code we can optimize
+
+No matter how many optimizations we implement for Unladen Swallow, it can all be defeated by antagonistic code. This code may not even be malicious: it may simply be poor style, or poor coding practices that we've chosen not to optimize for. Below we collect a number of tips, tricks and pitfalls for writing Python code that our optimizations can pick up and run with.
+
+<ul>
+<li>*Don't pass state via globals.* Using a module's global namespace as a write-heavy scratchpad for your function is a bad idea, not just for readability's sake, but because it defeats caching of globals and builtins that Unladen Swallow would otherwise perform. Reading globals is fine: writing globals slows things down.
+
+Bad code (reduced from Python's `Lib/test/test_mutants.py`):
+{{{
+def test_one(n):
+    global mutate
+
+    mutate = 0
+    maybe_mutate()
+    mutate = 1
+    # More code follows
+
+def maybe_mutate():
+    global mutate
+    if mutate == 0:
+       return
+    # More code follows
+    mutate = 0
+    # Code code code
+    mutate = 1
+}}}
+
+Storing this state in an object with `test_one()` and `maybe_mutate()` methods would be cleaner and allow more aggressive optimization of Python's globals and builtins.</li>
+</ul>
+
+This list will be expanded as we find new ways of pessimizing Python code or as we build additional optimizations.
