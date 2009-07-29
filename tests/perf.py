@@ -770,8 +770,10 @@ def CallAndCaptureOutput(command, env=None, track_memory=False):
     return result, mem_usage
 
 
+DJANGO_DIR = Relative("lib/django")
+
+
 def MeasureDjango(python, options):
-    DJANGO_DIR = Relative("lib/django")
     TEST_PROG = Relative("performance/bm_django.py")
 
     django_env = {"PYTHONPATH": DJANGO_DIR}
@@ -794,6 +796,45 @@ def BM_Django(base_python, changed_python, options):
     try:
         changed_data = MeasureDjango(changed_python, options)
         base_data = MeasureDjango(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
+def MeasureRietveld(python, options):
+    PYTHONPATH = ":".join([DJANGO_DIR,
+                           # These paths are lifted from
+                           # lib/google_appengine.appcfg.py.  Note that we use
+                           # our own version of Django instead of Appengine's.
+                           Relative("lib/google_appengine"),
+                           Relative("lib/google_appengine/lib/antlr3"),
+                           Relative("lib/google_appengine/lib/webob"),
+                           Relative("lib/google_appengine/lib/yaml/lib"),
+                           Relative("lib/rietveld")])
+    TEST_PROG = Relative("performance/bm_rietveld.py")
+
+    rietveld_env = {"PYTHONPATH": PYTHONPATH,
+                    "DJANGO_SETTINGS_MODULE": "settings"}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = python + [TEST_PROG, "-n", trials]
+    result, mem_usage = CallAndCaptureOutput(command, rietveld_env,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
+def BM_Rietveld(base_python, changed_python, options):
+    try:
+        changed_data = MeasureRietveld(changed_python, options)
+        base_data = MeasureRietveld(base_python, options)
     except subprocess.CalledProcessError, e:
         return str(e)
 
