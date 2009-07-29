@@ -32,6 +32,7 @@ This will run the 2to3 and Django template benchmarks in rigorous mode (lots of 
     * *regex_compile* - stress the performance of Python's regex compiler, rather than the regex execution speed.
     * *regex_effbot* - some of the original benchmarks used to tune mainline Python's current regex engine.
     * *regex_v8* - Python port of [http://code.google.com/p/v8/source/browse/trunk/benchmarks/regexp.js V8's regex benchmark].
+  * *rietveld* - macrobenchmark for Django using the [http://code.google.com/p/rietveld/ Rietveld] code review app.
   * *slowpickle* - use the pure-Python `pickle` module to pickle a variety of datasets.
   * *slowspitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table. Unlike the `spitfire` benchmark listed below, `slowspitfire` does not use Psyco.
   * *slowunpickle* - use the pure-Python `pickle` module to unpickle a variety of datasets.
