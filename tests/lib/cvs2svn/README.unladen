@@ -1,15 +1,5 @@
-This is cvs2svn trunk r4825, minus some tests. No released version of cvs2svn
+This is cvs2svn trunk r4833. No released version of cvs2svn
 worked well with mainline Python 2.6.1.
 
-The following tests are disabled because of an incompatibility with
-Subversion 1.6 (http://cvs2svn.tigris.org/issues/show_bug.cgi?id=124):
-
-68: eol settings and mime types together...variant 1
-69: eol settings and mime types together...variant 2
-70: eol settings and mime types together...variant 3
-71: eol settings and mime types together...variant 4
-72: test non-setting of cvs2svn:cvs-rev property
-73: test setting of cvs2svn:cvs-rev property
-74: test setting of svn:keywords property among others
-75: test setting of svn:ignore property
-90: test auto-props
+The svntest directory is an external in the original repository.
+The version here is r38520.
