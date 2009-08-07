@@ -1318,6 +1318,45 @@ def BM_unpack_sequence(base_python, changed_python, options):
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
+def MeasureCallSimple(python, options):
+    """Test the performance of simple function calls.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run the threading benchmark once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    TEST_PROG = Relative("performance/bm_call_simple.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = python + ["-E", TEST_PROG, "-n", trials]
+    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
+def BM_call_simple(base_python, changed_python, options):
+    try:
+        changed_data = MeasureCallSimple(changed_python, options)
+        base_data = MeasureCallSimple(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
 def _FindAllBenchmarks():
     return dict((name[3:].lower(), func)
                 for (name, func) in sorted(globals().iteritems())
@@ -1333,6 +1372,7 @@ BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "slowpickle",
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
+                "micro": ["unpack_sequence", "call_simple"],
                 "all": _FindAllBenchmarks().keys(),
                }
 
