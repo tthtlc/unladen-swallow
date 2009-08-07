@@ -186,7 +186,7 @@ def main(argv):
         usage="%prog [options] [test]",
         description=("Test the performance of simple Python-to-Python function"
                      " calls."))
-    parser.add_option("-n", action="store", type="int", default=100000,
+    parser.add_option("-n", action="store", type="int", default=100,
                       dest="num_runs", help="Number of times to run the test.")
     options, _ = parser.parse_args(argv)
 
