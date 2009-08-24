@@ -30,7 +30,7 @@ svn merge -c $LLVM_REV https://unladen-swallow.googlecode.com/svn/vendor/llvm .
 cd ~/unladen-swallow/src/trunk/Util/llvm/tools/clang
 svn merge -c $CLANG_REV https://unladen-swallow.googlecode.com/svn/vendor/clang .
 }}}
-Now back up to `~/unladen-swallow/src/trunk/` and run all of Python's tests before committing the merger.
+Now back up to `~/unladen-swallow/src/trunk/`, apply any necessary compatibility patches to Unladen Swallow and run `make test` before committing the merger.
 
 Example revisions:
   * r530: update LLVM vendor branch.
