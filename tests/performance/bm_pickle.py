@@ -245,6 +245,7 @@ LIST = [[range(10), range(10)] for _ in xrange(10)]
 def test_pickle_list(pickle, options, loops):
     # Warm-up runs.
     pickle.dumps(LIST, options.protocol)
+    pickle.dumps(LIST, options.protocol)
 
     loops = loops / 5  # Scale to compensate for the workload.
     times = []
@@ -270,6 +271,7 @@ def test_unpickle_list(pickle, options, loops):
     pickled_list = pickle.dumps(LIST, options.protocol)
 
     # Warm-up runs.
+    pickle.loads(pickled_list)
     pickle.loads(pickled_list)
 
     loops = loops / 5  # Scale to compensate for the workload.
@@ -297,6 +299,7 @@ MICRO_DICT = dict((key, dict.fromkeys(range(10))) for key in xrange(100))
 def test_pickle_dict(pickle, options, loops):
     # Warm-up runs.
     pickle.dumps(MICRO_DICT, options.protocol)
+    pickle.dumps(MICRO_DICT, options.protocol)
 
     loops = max(1, loops / 10)
     times = []
@@ -323,6 +326,8 @@ if __name__ == "__main__":
                       help="Use the C version of pickle.")
     parser.add_option("--protocol", action="store", default=2, type="int",
                       help="Which protocol to use (0, 1, 2).")
+    parser.add_option("--profile", action="store_true",
+                      help="Run the benchmark through cProfile.")
     options, args = parser.parse_args()
 
     benchmarks = ["pickle", "unpickle", "pickle_list", "unpickle_list",
@@ -344,5 +349,11 @@ if __name__ == "__main__":
     if options.protocol > 0:
         num_obj_copies *= 2  # Compensate for faster protocols.
 
-    for t in benchmark(pickle, options, num_obj_copies):
-        print t
+    if options.profile:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.runcall(benchmark, pickle, options, num_obj_copies)
+        prof.print_stats(sort='time')
+    else:
+        for t in benchmark(pickle, options, num_obj_copies):
+            print t

@@ -4,7 +4,9 @@
 
 bm_ai.py runs the following little solvers:
     - N-Queens
-    - alphametics (e.g., "SEND + MORE = MONEY")
+
+This used to contain an alphametics solver, but that was found to be bound
+primarily by eval() performance.
 """
 
 # Wanted by the alphametics solver.
@@ -44,27 +46,6 @@ def permutations(iterable, r=None):
             return
 
 
-# From http://code.activestate.com/recipes/576615/
-def alphametics(s):
-    """Find solutions to alphametic equations.
-
-    >>> solve('SEND + MORE == MONEY')
-    9567 + 1085 == 10652
-    """
-    words = re.findall("[A-Za-z]+", s)
-    chars = set("".join(words))         # Characters to be substituted.
-    assert len(chars) <= 10             # There are only ten possible digits.
-    firsts = set(w[0] for w in words)   # First letters of each of word.
-    chars = "".join(firsts) + "".join(chars - firsts)
-    n = len(firsts)                     # chars[:n] cannot be assigned zero.
-    for perm in permutations("0123456789", len(chars)):
-        if "0" not in perm[:n]:
-            trans = string.maketrans(chars, "".join(perm))
-            equation = s.translate(trans)
-            if eval(equation):
-                yield equation
-
-
 # From http://code.activestate.com/recipes/576647/
 def n_queens(queen_count):
     """N-Queens solver.
@@ -86,7 +67,8 @@ def n_queens(queen_count):
 
 
 def test_n_queens(iterations):
-    # Warm-up run.
+    # Warm-up runs.
+    list(n_queens(8))
     list(n_queens(8))
 
     times = []
@@ -98,32 +80,21 @@ def test_n_queens(iterations):
     return times
 
 
-def test_alphametics(iterations):
-    # This is a fairly simple equation. More interesting ones like
-    # SEND + MORE = MONEY take forever to solve, though.
-    equation = "EED + BE == CCCC"
-
-    # Warm-up run.
-    list(alphametics(equation))
-
-    times = []
-    for _ in xrange(iterations):
-        t0 = time.time()
-        list(alphametics(equation))
-        t1 = time.time()
-        times.append(t1 - t0)
-    return times
-
 if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options]",
         description=("Test the performance of simple AI solvers."))
     parser.add_option("-n", action="store", type="int", default=100,
                       dest="num_runs", help="Number of times to run the test.")
+    parser.add_option("--profile", action="store_true",
+                      help="Run the benchmark through cProfile.")
     options, args = parser.parse_args()
 
-    n_queens_times = test_n_queens(options.num_runs)
-    alphametics_times = test_alphametics(options.num_runs)
-
-    for x, y in zip(n_queens_times, alphametics_times):
-        print x + y
+    if options.profile:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.runcall(test_n_queens, options.num_runs)
+        prof.print_stats(sort='time')
+    else:
+        for x in test_n_queens(options.num_runs):
+            print x

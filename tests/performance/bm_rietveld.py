@@ -84,6 +84,7 @@ def test_rietveld(count):
 
     # Warm up Django.
     tmpl.render(context)
+    tmpl.render(context)
 
     times = []
     for _ in xrange(count):
@@ -130,10 +131,17 @@ if __name__ == "__main__":
         usage="%prog [options]",
         description=("Test the performance of Django templates using "
                      "Rietveld's front page template."))
-    parser.add_option("-n",
-                      action="store", type="int", default=100,
+    parser.add_option("-n", action="store", type="int", default=100,
                       dest="num_runs", help="Number of times to run the test.")
+    parser.add_option("--profile", action="store_true",
+                      help="Run the benchmark through cProfile.")
     options, args = parser.parse_args()
 
-    for t in test_rietveld(options.num_runs):
-        print t
+    if options.profile:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.runcall(test_rietveld, options.num_runs)
+        prof.print_stats(sort='time')
+    else:
+        for t in test_rietveld(options.num_runs):
+            print t

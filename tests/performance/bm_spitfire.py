@@ -50,7 +50,8 @@ def test_spitfire(count):
 
     table = [xrange(1000) for _ in xrange(1000)]
 
-    # Warm up Psyco.
+    # Warm up Spitfire.
+    spitfire_tmpl_o4(search_list=[{"table": table}]).main()
     spitfire_tmpl_o4(search_list=[{"table": table}]).main()
 
     times = []
@@ -79,11 +80,19 @@ if __name__ == "__main__":
                       dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--disable_psyco", action="store_true",
                       help="Turn off Psyco integration.")
+    parser.add_option("--profile", action="store_true",
+                      help="Run the benchmark through cProfile.")
     options, args = parser.parse_args()
 
     benchmark = test_spitfire
     if options.disable_psyco:
         benchmark = test_spitfire_without_psyco
 
-    for t in benchmark(options.num_runs):
-        print t
+    if options.profile:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.runcall(benchmark, options.num_runs)
+        prof.print_stats(sort='time')
+    else:
+        for t in benchmark(options.num_runs):
+            print t

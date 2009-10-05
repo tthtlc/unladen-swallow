@@ -35,6 +35,7 @@ def test_django(count):
 
     # Warm up Django.
     DJANGO_TMPL.render(context)
+    DJANGO_TMPL.render(context)
 
     times = []
     for _ in xrange(count):
@@ -51,7 +52,15 @@ if __name__ == "__main__":
         description=("Test the performance of Django templates."))
     parser.add_option("-n", action="store", type="int", default=100,
                       dest="num_runs", help="Number of times to run the test.")
+    parser.add_option("--profile", action="store_true",
+                      help="Run the benchmark through cProfile.")
     options, args = parser.parse_args()
 
-    for t in test_django(options.num_runs):
-        print t
+    if options.profile:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.runcall(test_django, options.num_runs)
+        prof.print_stats(sort='time')
+    else:
+        for t in test_django(options.num_runs):
+            print t
