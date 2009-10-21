@@ -1,5 +1,4 @@
 #summary Details on the 2009Q2 release
-#labels Featured
 
 = Unladen Swallow 2009Q2 =
 
