@@ -8,7 +8,7 @@
 Setting up Unladen Swallow uses the same procedure as setting up CPython:
 
 {{{
-> svn checkout http://unladen-swallow.googlecode.com/svn/branches/release-2009Q2-maint unladen
+> svn checkout http://unladen-swallow.googlecode.com/svn/branches/release-2009Q3-maint unladen
 ...
 > cd unladen
 > ./configure
@@ -16,23 +16,24 @@ Setting up Unladen Swallow uses the same procedure as setting up CPython:
 > make
 ...
 > ./python.exe
-Python 2.6.1 (r261:311:312M, Jul 14 2009, 23:24:25) 
+Python 2.6.1 (r261:311:312M, Oct 14 2009, 23:24:25) 
 [GCC 4.0.1 (Apple Inc. build 5490)] on darwin
-[Unladen Swallow 2009Q2]
+[Unladen Swallow 2009Q3]
 Type "help", "copyright", "credits" or "license" for more information.
 >>>
 }}}
 
-This will checkout and build [Release2009Q2 our 2009Q2 release]. Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher].
+This will checkout and build [Release2009Q3 our 2009Q3 release]. Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher].
 
 Other interesting checkout targets:
   * Release2009Q1: http://unladen-swallow.googlecode.com/svn/branches/release-2009Q1-maint
   * Release2009Q2: http://unladen-swallow.googlecode.com/svn/branches/release-2009Q2-maint
+  * Release2009Q3: http://unladen-swallow.googlecode.com/svn/branches/release-2009Q3-maint
   * Trunk: http://unladen-swallow.googlecode.com/svn/trunk
 
 Active development is being done in `trunk/`. We try to keep trunk stable and correct at all times, but there may be bugs that have yet to be addressed. Caveat downloader.
 
-If your system is a 32/64-bit hybrid (say, a 64-bit kernel but a 32-bit userspace), you'll need to run a different `./configure` command. In the case of a 32-bit userspace, something like this should work:
+If you're building the 2009Q2 release on a 32/64-bit hybrid system (say, a 64-bit kernel but a 32-bit userspace), you'll need to run a different `./configure` command. In the case of a 32-bit userspace, something like this should work:
 {{{
 CFLAGS=-m32 CXXFLAGS=-m32 ./configure --build=i386-unknown-linux-gnu
 }}}
