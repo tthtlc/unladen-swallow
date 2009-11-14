@@ -88,13 +88,15 @@ if __name__ == "__main__":
                       dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--profile", action="store_true",
                       help="Run the benchmark through cProfile.")
+    parser.add_option("--profile_sort", action="store", type="str",
+                      default="time", help="Column to sort cProfile output by.")
     options, args = parser.parse_args()
 
     if options.profile:
         import cProfile
         prof = cProfile.Profile()
         prof.runcall(test_n_queens, options.num_runs)
-        prof.print_stats(sort='time')
+        prof.print_stats(sort=options.profile_sort)
     else:
         for x in test_n_queens(options.num_runs):
             print x

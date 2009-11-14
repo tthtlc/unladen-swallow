@@ -73,7 +73,7 @@ def setup():
         add_to_builtins(library_name)
 
 
-def test_rietveld(count):
+def get_benchmark_data():
     # Load data.
     data_file = rel_path("rietveld_data.pickle")
     templ_name, canned_data = cPickle.load(open(data_file))
@@ -81,7 +81,10 @@ def test_rietveld(count):
 
     # Load template.
     tmpl = loader.get_template(templ_name)
+    return tmpl, context
 
+
+def test_rietveld(tmpl, context, count):
     # Warm up Django.
     tmpl.render(context)
     tmpl.render(context)
@@ -135,13 +138,16 @@ if __name__ == "__main__":
                       dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--profile", action="store_true",
                       help="Run the benchmark through cProfile.")
+    parser.add_option("--profile_sort", action="store", type="str",
+                      default="time", help="Column to sort cProfile output by.")
     options, args = parser.parse_args()
 
+    tmpl, context = get_benchmark_data()
     if options.profile:
         import cProfile
         prof = cProfile.Profile()
-        prof.runcall(test_rietveld, options.num_runs)
-        prof.print_stats(sort='time')
+        prof.runcall(test_rietveld, tmpl, context, options.num_runs)
+        prof.print_stats(sort=options.profile_sort)
     else:
-        for t in test_rietveld(options.num_runs):
+        for t in test_rietveld(tmpl, context, options.num_runs):
             print t

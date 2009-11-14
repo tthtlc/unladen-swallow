@@ -82,6 +82,8 @@ if __name__ == "__main__":
                       help="Turn off Psyco integration.")
     parser.add_option("--profile", action="store_true",
                       help="Run the benchmark through cProfile.")
+    parser.add_option("--profile_sort", action="store", type="str",
+                      default="time", help="Column to sort cProfile output by.")
     options, args = parser.parse_args()
 
     benchmark = test_spitfire
@@ -92,7 +94,7 @@ if __name__ == "__main__":
         import cProfile
         prof = cProfile.Profile()
         prof.runcall(benchmark, options.num_runs)
-        prof.print_stats(sort='time')
+        prof.print_stats(sort=options.profile_sort)
     else:
         for t in benchmark(options.num_runs):
             print t

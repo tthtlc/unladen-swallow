@@ -328,6 +328,8 @@ if __name__ == "__main__":
                       help="Which protocol to use (0, 1, 2).")
     parser.add_option("--profile", action="store_true",
                       help="Run the benchmark through cProfile.")
+    parser.add_option("--profile_sort", action="store", type="str",
+                      default="time", help="Column to sort cProfile output by.")
     options, args = parser.parse_args()
 
     benchmarks = ["pickle", "unpickle", "pickle_list", "unpickle_list",
@@ -353,7 +355,7 @@ if __name__ == "__main__":
         import cProfile
         prof = cProfile.Profile()
         prof.runcall(benchmark, pickle, options, num_obj_copies)
-        prof.print_stats(sort='time')
+        prof.print_stats(sort=options.profile_sort)
     else:
         for t in benchmark(pickle, options, num_obj_copies):
             print t
