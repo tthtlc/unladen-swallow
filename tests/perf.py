@@ -27,7 +27,9 @@ Positive benchmarks are parsed before the negative benchmarks are subtracted.
 If --track_memory is passed, perf.py will continuously sample the benchmark's
 memory usage, then give you the maximum usage and a link to a Google Chart of
 the benchmark's memory usage over time. This currently only works on Linux
-2.6.16 and higher or Windows with PyWin32.
+2.6.16 and higher or Windows with PyWin32. Because --track_memory introduces
+performance jitter while collecting memory measurements, only memory usage is
+reported in the final report.
 
 If --args is passed, it specifies extra arguments to pass to the test
 python binaries. For example,
@@ -388,7 +390,7 @@ def CompareMemoryUsage(base_usage, changed_usage, options):
 
     return (("Mem max: %(max_base).3f -> %(max_changed).3f:" +
              " %(delta_max)s\n" +
-             "Usage over time: %(chart_link)s\n")
+             "Usage over time: %(chart_link)s")
              % locals())
 
 
@@ -554,6 +556,9 @@ def MungePyBenchTotals(line):
 
 
 def BM_PyBench(base_python, changed_python, options):
+    if options.track_memory:
+        return "Benchmark does not report memory usage yet"
+
     warp = "10"
     if options.rigorous:
         warp = "1"
@@ -709,7 +714,7 @@ def CompareMultipleRuns(base_times, changed_times, options):
              "Avg: %(avg_base)f -> %(avg_changed)f:" +
              " %(delta_avg)s\n" + t_msg +
              "Stddev: %(std_base).5f -> %(std_changed).5f:" +
-             " %(delta_std)s\n")
+             " %(delta_std)s")
              % locals())
 
 
@@ -730,11 +735,14 @@ def CompareBenchmarkData(base_data, changed_data, options):
     base_times, base_mem = base_data
     changed_times, changed_mem = changed_data
 
-    comp = CompareMultipleRuns(base_times, changed_times, options)
-    if base_mem is not None:  # Some benchmarks don't yet report memory usage.
-        assert changed_mem is not None
-        comp += "\n" + CompareMemoryUsage(base_mem, changed_mem, options)
-    return comp
+    # We suppress performance data when running with --track_memory.
+    if options.track_memory:
+        if base_mem is not None:
+            assert changed_mem is not None
+            return CompareMemoryUsage(base_mem, changed_mem, options)
+        return "Benchmark does not report memory usage yet"
+
+    return CompareMultipleRuns(base_times, changed_times, options)
 
 
 def CallAndCaptureOutput(command, env=None, track_memory=False):
@@ -1137,8 +1145,6 @@ def MeasureStartup(python, cmd_opts, num_loops, track_memory):
 
 
 def BM_normal_startup(base_python, changed_python, options):
-    if options.track_memory:
-        logging.warning("startup time is inaccurate with --track_memory")
     if options.rigorous:
         num_loops = 100
     elif options.fast:
@@ -1156,8 +1162,6 @@ def BM_normal_startup(base_python, changed_python, options):
 
 
 def BM_startup_nosite(base_python, changed_python, options):
-    if options.track_memory:
-        logging.warning("startup time is inaccurate with --track_memory")
     if options.rigorous:
         num_loops = 200
     elif options.fast:
@@ -1497,13 +1501,15 @@ if __name__ == "__main__":
     base_cmd_prefix = [base] + base_args
     changed_cmd_prefix = [changed] + changed_args
 
+    logging.basicConfig(level=logging.INFO)
+
     if options.track_memory:
-        if not CanGetMemoryUsage():
+        if CanGetMemoryUsage():
+            info("Suppressing performance data due to --track_memory")
+        else:
             # TODO(collinwinter): make this work on other platforms.
             parser.error("--track_memory requires Windows with PyWin32 or " +
                          "Linux 2.6.16 or above")
-
-    logging.basicConfig(level=logging.INFO)
 
     should_run = ParseBenchmarksOption(options.benchmarks)
 
