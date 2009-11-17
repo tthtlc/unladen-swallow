@@ -43,6 +43,9 @@ import optparse
 import os
 import time
 
+# Local imports
+import util
+
 # Django imports
 from django.template import Context, loader, libraries, add_to_builtins
 
@@ -84,7 +87,7 @@ def get_benchmark_data():
     return tmpl, context
 
 
-def test_rietveld(tmpl, context, count):
+def test_rietveld(count, tmpl, context):
     # Warm up Django.
     tmpl.render(context)
     tmpl.render(context)
@@ -134,20 +137,8 @@ if __name__ == "__main__":
         usage="%prog [options]",
         description=("Test the performance of Django templates using "
                      "Rietveld's front page template."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
-    parser.add_option("--profile", action="store_true",
-                      help="Run the benchmark through cProfile.")
-    parser.add_option("--profile_sort", action="store", type="str",
-                      default="time", help="Column to sort cProfile output by.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
     tmpl, context = get_benchmark_data()
-    if options.profile:
-        import cProfile
-        prof = cProfile.Profile()
-        prof.runcall(test_rietveld, tmpl, context, options.num_runs)
-        prof.print_stats(sort=options.profile_sort)
-    else:
-        for t in test_rietveld(tmpl, context, options.num_runs):
-            print t
+    util.run_benchmark(options, options.num_runs, test_rietveld, tmpl, context)

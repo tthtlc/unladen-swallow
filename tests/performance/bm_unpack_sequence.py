@@ -6,6 +6,9 @@
 import optparse
 import time
 
+# Local imports
+import util
+
 
 def do_unpacking(iterations, to_unpack):
     times = []
@@ -429,12 +432,17 @@ def test_list_unpacking(iterations):
     return do_unpacking(iterations, x)
 
 
+def test_all(iterations):
+    tuple_data = test_tuple_unpacking(iterations)
+    list_data = test_list_unpacking(iterations)
+    return [x + y for (x, y) in zip(tuple_data, list_data)]
+
+
 if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options] [test]",
         description=("Test the performance of sequence unpacking."))
-    parser.add_option("-n", action="store", type="int", default=100000,
-                      dest="num_runs", help="Number of times to run the test.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
     tests = {"tuple": test_tuple_unpacking, "list": test_list_unpacking}
@@ -445,10 +453,6 @@ if __name__ == "__main__":
         func = tests.get(args[0])
         if func is None:
             parser.error("Invalid test name")
-        for x in func(options.num_runs):
-            print x
+        util.run_benchmark(options, options.num_runs, func)
     else:
-        results = [func(options.num_runs) for func in tests.values()]
-
-        for row in zip(*results):
-            print sum(row)
+        util.run_benchmark(options, options.num_runs, test_all)

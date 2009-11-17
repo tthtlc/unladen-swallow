@@ -16,6 +16,9 @@ __author__ = "collinwinter@google.com (Collin Winter)"
 import optparse
 import time
 
+# Local imports
+import util
+
 # Django imports
 from django.conf import settings
 settings.configure()
@@ -50,19 +53,7 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options]",
         description=("Test the performance of Django templates."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
-    parser.add_option("--profile", action="store_true",
-                      help="Run the benchmark through cProfile.")
-    parser.add_option("--profile_sort", action="store", type="str",
-                      default="time", help="Column to sort cProfile output by.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
-    if options.profile:
-        import cProfile
-        prof = cProfile.Profile()
-        prof.runcall(test_django, options.num_runs)
-        prof.print_stats(sort=options.profile_sort)
-    else:
-        for t in test_django(options.num_runs):
-            print t
+    util.run_benchmark(options, options.num_runs, test_django)

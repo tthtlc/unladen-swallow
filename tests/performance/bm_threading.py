@@ -18,6 +18,9 @@ import sys
 import threading
 import time
 
+# Local imports
+import util
+
 
 def count(iterations=1000000):
     """Count down from a given starting point."""
@@ -60,14 +63,13 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options] benchmark_name",
         description="Test the performance of Python's threads.")
-    parser.add_option("-n", action="store", type="int", default=50,
-                      dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--num_threads", action="store", type="int", default=2,
                       dest="num_threads", help="Number of threads to test.")
     parser.add_option("--check_interval", action="store", type="int",
                       default=sys.getcheckinterval(),
                       dest="check_interval",
                       help="Value to pass to sys.setcheckinterval().")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
     if len(args) != 1:
@@ -79,5 +81,4 @@ if __name__ == "__main__":
         parser.error("unknown benchmark: %s" % bm_name)
 
     sys.setcheckinterval(options.check_interval)
-    for x in func(options.num_runs, options.num_threads):
-        print x
+    util.run_benchmark(options, options.num_runs, func, options.num_threads)

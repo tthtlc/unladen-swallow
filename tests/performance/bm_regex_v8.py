@@ -39,9 +39,13 @@
 # Ported to Python for Unladen Swallow. The original JS version can be found at
 # http://code.google.com/p/v8/source/browse/trunk/benchmarks/regexp.js, r1243.
 
+# Python imports
 import optparse
 import re
 import time
+
+# Local imports
+import util
 
 
 # The precompiled regexs that were in vars in the V8 code, split into
@@ -1676,10 +1680,7 @@ if __name__ == '__main__':
     parser = optparse.OptionParser(
         usage="%prog [options]",
         description=("Test the performance of regexps using V8's benchmarks."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
-    for t in test_regex_v8(options.num_runs):
-        print t
-
+    util.run_benchmark(options, options.num_runs, test_regex_v8)

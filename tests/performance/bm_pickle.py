@@ -23,6 +23,9 @@ import random
 import sys
 import time
 
+# Local imports
+import util
+
 gc.disable()  # Minimize jitter.
 
 DICT = {
@@ -83,7 +86,7 @@ random_source = random.Random(5)  # Fixed seed.
 DICT_GROUP = [mutate_dict(DICT, random_source) for _ in range(3)]
 
 
-def test_pickle(pickle, options, num_obj_copies):
+def test_pickle(num_obj_copies, pickle, options):
     # Warm-up runs.
     pickle.dumps(DICT, options.protocol)
     pickle.dumps(TUPLE, options.protocol)
@@ -159,7 +162,7 @@ def test_pickle(pickle, options, num_obj_copies):
     return times
 
 
-def test_unpickle(pickle, options, num_obj_copies):
+def test_unpickle(num_obj_copies, pickle, options):
     pickled_dict = pickle.dumps(DICT, options.protocol)
     pickled_tuple = pickle.dumps(TUPLE, options.protocol)
     pickled_dict_group = pickle.dumps(DICT_GROUP, options.protocol)
@@ -242,7 +245,7 @@ def test_unpickle(pickle, options, num_obj_copies):
 LIST = [[range(10), range(10)] for _ in xrange(10)]
 
 
-def test_pickle_list(pickle, options, loops):
+def test_pickle_list(loops, pickle, options):
     # Warm-up runs.
     pickle.dumps(LIST, options.protocol)
     pickle.dumps(LIST, options.protocol)
@@ -267,7 +270,7 @@ def test_pickle_list(pickle, options, loops):
     return times
 
 
-def test_unpickle_list(pickle, options, loops):
+def test_unpickle_list(loops, pickle, options):
     pickled_list = pickle.dumps(LIST, options.protocol)
 
     # Warm-up runs.
@@ -296,7 +299,7 @@ def test_unpickle_list(pickle, options, loops):
 
 MICRO_DICT = dict((key, dict.fromkeys(range(10))) for key in xrange(100))
 
-def test_pickle_dict(pickle, options, loops):
+def test_pickle_dict(loops, pickle, options):
     # Warm-up runs.
     pickle.dumps(MICRO_DICT, options.protocol)
     pickle.dumps(MICRO_DICT, options.protocol)
@@ -320,16 +323,11 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [pickle|unpickle] [options]",
         description=("Test the performance of pickling."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--use_cpickle", action="store_true",
                       help="Use the C version of pickle.")
     parser.add_option("--protocol", action="store", default=2, type="int",
                       help="Which protocol to use (0, 1, 2).")
-    parser.add_option("--profile", action="store_true",
-                      help="Run the benchmark through cProfile.")
-    parser.add_option("--profile_sort", action="store", type="str",
-                      default="time", help="Column to sort cProfile output by.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
     benchmarks = ["pickle", "unpickle", "pickle_list", "unpickle_list",
@@ -351,11 +349,4 @@ if __name__ == "__main__":
     if options.protocol > 0:
         num_obj_copies *= 2  # Compensate for faster protocols.
 
-    if options.profile:
-        import cProfile
-        prof = cProfile.Profile()
-        prof.runcall(benchmark, pickle, options, num_obj_copies)
-        prof.print_stats(sort=options.profile_sort)
-    else:
-        for t in benchmark(pickle, options, num_obj_copies):
-            print t
+    util.run_benchmark(options, num_obj_copies, benchmark, pickle, options)

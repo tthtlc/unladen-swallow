@@ -7,9 +7,13 @@ stubbing out the re module, then compile those regexes repeatedly. We muck with
 the re module's caching to force it to recompile every regex we give it.
 """
 
+# Python imports
 import optparse
 import re
 import time
+
+# Local imports
+import util
 
 
 class EmptyCache(object):
@@ -82,9 +86,7 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options]",
         description=("Test regex compilation performance"))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
-    for t in test_regex_compile(options.num_runs):
-        print t
+    util.run_benchmark(options, options.num_runs, test_regex_compile)

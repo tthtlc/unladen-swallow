@@ -20,6 +20,9 @@ import re
 import string
 import time
 
+# Local imports
+import util
+
 
 # Pure-Python implementation of itertools.permutations().
 def permutations(iterable, r=None):
@@ -84,19 +87,7 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options]",
         description=("Test the performance of simple AI solvers."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
-    parser.add_option("--profile", action="store_true",
-                      help="Run the benchmark through cProfile.")
-    parser.add_option("--profile_sort", action="store", type="str",
-                      default="time", help="Column to sort cProfile output by.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
-    if options.profile:
-        import cProfile
-        prof = cProfile.Profile()
-        prof.runcall(test_n_queens, options.num_runs)
-        prof.print_stats(sort=options.profile_sort)
-    else:
-        for x in test_n_queens(options.num_runs):
-            print x
+    util.run_benchmark(options, options.num_runs, test_n_queens)

@@ -18,6 +18,9 @@ import optparse
 import sys
 import time
 
+# Local imports
+import util
+
 # Spitfire imports
 import spitfire
 import spitfire.compiler.analyzer
@@ -76,25 +79,13 @@ if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options]",
         description=("Test the performance of Spitfire."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
     parser.add_option("--disable_psyco", action="store_true",
                       help="Turn off Psyco integration.")
-    parser.add_option("--profile", action="store_true",
-                      help="Run the benchmark through cProfile.")
-    parser.add_option("--profile_sort", action="store", type="str",
-                      default="time", help="Column to sort cProfile output by.")
+    util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 
     benchmark = test_spitfire
     if options.disable_psyco:
         benchmark = test_spitfire_without_psyco
 
-    if options.profile:
-        import cProfile
-        prof = cProfile.Profile()
-        prof.runcall(benchmark, options.num_runs)
-        prof.print_stats(sort=options.profile_sort)
-    else:
-        for t in benchmark(options.num_runs):
-            print t
+    util.run_benchmark(options, options.num_runs, benchmark)

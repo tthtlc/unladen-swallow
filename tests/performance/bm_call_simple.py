@@ -10,6 +10,9 @@ kwargs, and do not use tuple unpacking.
 import optparse
 import time
 
+# Local imports
+import util
+
 
 def foo(a, b, c, d):
     # 20 calls
@@ -181,22 +184,15 @@ def test_calls(iterations):
     return times
 
 
-def main(argv):
+if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options] [test]",
         description=("Test the performance of simple Python-to-Python function"
                      " calls."))
-    parser.add_option("-n", action="store", type="int", default=100,
-                      dest="num_runs", help="Number of times to run the test.")
-    options, _ = parser.parse_args(argv)
+    util.add_standard_options_to(parser)
+    options, _ = parser.parse_args()
 
     # Priming run.
     test_calls(1)
 
-    for x in test_calls(options.num_runs):
-        print x
-
-
-if __name__ == "__main__":
-    import sys
-    main(sys.argv)
+    util.run_benchmark(options, options.num_runs, test_calls)
