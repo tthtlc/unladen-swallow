@@ -24,7 +24,7 @@ The Unladen Swallow team does not recommend wide adoption of the 2009Q2 release.
 
 2009Q2 uses a very simple function to determine whether to compile a given function to machine code. Accordingly, we use Unladen Swallow's `-j always` flag to force all functions through LLVM, which gives us a more accurate picture of how our native code generation facility is performing.
 
-[Benchmarks Benchmarking] was done on an Intel Core 2 Duo 6600 @ 2.40GHz with 4GB RAM.
+[Benchmarks Benchmarking] was done on an Intel Core 2 Duo 6600 @ 2.40GHz with 4GB RAM. The performance degradation/improvement is calculated using `((new - old) / new)`.
 
 *2009Q1 vs 2009Q2*<br>
 (32-bit; gcc 4.0.3; perf.py -r --args ",-j always -O2")
