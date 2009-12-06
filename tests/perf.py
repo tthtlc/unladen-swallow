@@ -495,19 +495,21 @@ def TemporaryFilename(prefix):
 
 
 def TimeDelta(old, new):
-    delta = ((new - old) / new) * 100
-    if delta > 0:
-        return "%.2f%% slower" % delta
+    if new > old:
+        return "%.4fx slower" % (new / old)
+    elif new < old:
+        return "%.4fx faster" % (old / new)
     else:
-        return "%.2f%% faster" % -delta
+        return "no change"
 
 
 def QuantityDelta(old, new):
-    delta = ((new - old) / new) * 100
-    if delta > 0:
-        return "%.2f%% larger" % delta
+    if new > old:
+        return "%.4fx larger" % (new / old)
+    elif new < old:
+        return "%.4fx smaller" % (old / new)
     else:
-        return "%.2f%% smaller" % -delta
+        return "no change"
 
 
 def BuildEnv(env):
