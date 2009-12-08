@@ -12,7 +12,7 @@ as the baseline and `experiment/python` as the experiment. The --fast and
 --help to get a full list of options that can be passed to -b.
 
 Omitting the -b option will result in the default group of benchmarks being run
-This currently consists of: 2to3, django, slowspitfire, slowpickle,
+This currently consists of: 2to3, django, nbody, slowspitfire, slowpickle,
 slowunpickle. Omitting -b is the same as specifying `-b default`.
 
 To run every benchmark perf.py knows about, use `-b all`. To see a full list of
@@ -1363,6 +1363,45 @@ def BM_call_simple(base_python, changed_python, options):
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
+def MeasureNbody(python, options):
+    """Test the performance of math operations using an n-body benchmark.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run the benchmark loop once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    TEST_PROG = Relative("performance/bm_nbody.py")
+    CLEAN_ENV = {"PYTHONPATH": ""}
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+
+    RemovePycs()
+    command = python + ["-E", TEST_PROG, "-n", trials]
+    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
+def BM_nbody(base_python, changed_python, options):
+    try:
+        changed_data = MeasureNbody(changed_python, options)
+        base_data = MeasureNbody(base_python, options)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
 def _FindAllBenchmarks():
     return dict((name[3:].lower(), func)
                 for (name, func) in sorted(globals().iteritems())
@@ -1372,8 +1411,8 @@ def _FindAllBenchmarks():
 # Benchmark groups. The "default" group is what's run if no -b option is
 # specified. The "all" group includes every benchmark perf.py knows about.
 # If you update the default group, be sure to update the module docstring, too.
-BENCH_GROUPS = {"default": ["2to3", "django", "slowspitfire", "slowpickle",
-                            "slowunpickle"],
+BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
+                            "slowpickle", "slowunpickle"],
                 "startup": ["normal_startup", "startup_nosite"],
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
