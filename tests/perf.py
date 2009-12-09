@@ -396,6 +396,40 @@ def CompareMemoryUsage(base_usage, changed_usage, options):
 
 ### Utility functions
 
+def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
+                    *args, **kwargs):
+    """Abstract out the body for most simple benchmarks.
+
+    Example usage:
+        def BenchmarkSomething(*args, **kwargs):
+            return SimpleBenchmark(MeasureSomething, *args, **kwargs)
+
+    The *args, **kwargs style is recommended so as to minimize the number of
+    places that have to be changed if we update benchmark arguments.
+
+    Args:
+        benchmark_function: callback that takes (python_path, options) and
+            returns a (times, memory_usage) 2-tuple.
+        base_python: path to the reference Python binary.
+        changed_python: path to the experimental Python binary.
+        options: optparse.Values instance.
+        *args, **kwargs: will be passed through to benchmark_function. 
+
+    Returns:
+        String summarizing the differences between the two benchmark runs,
+        suitable for human consumption.
+    """
+    try:
+        changed_data = benchmark_function(changed_python, options,
+                                          *args, **kwargs)
+        base_data = benchmark_function(base_python, options,
+                                       *args, **kwargs)
+    except subprocess.CalledProcessError, e:
+        return str(e)
+
+    return CompareBenchmarkData(base_data, changed_data, options)
+
+
 def ShortenUrl(url):
     """Shorten a given URL using tinyurl.com.
 
@@ -534,6 +568,154 @@ def BuildEnv(env):
     return fixed_env
 
 
+def CompareMultipleRuns(base_times, changed_times, options):
+    """Compare multiple control vs experiment runs of the same benchmark.
+
+    Args:
+        base_times: iterable of float times (control).
+        changed_times: iterable of float times (experiment).
+        options: optparse.Values instance.
+
+    Returns:
+        A string summarizing the difference between the runs, suitable for
+        human consumption.
+    """
+    assert len(base_times) == len(changed_times)
+    if len(base_times) == 1:
+        # With only one data point, we can't do any of the interesting stats
+        # below.
+        base_time, changed_time = base_times[0], changed_times[0]
+        time_delta = TimeDelta(base_time, changed_time)
+        return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
+                % locals())
+
+    base_times = sorted(base_times)
+    changed_times = sorted(changed_times)
+
+    min_base, min_changed = base_times[0], changed_times[0]
+    avg_base, avg_changed = avg(base_times), avg(changed_times)
+    std_base = SampleStdDev(base_times)
+    std_changed = SampleStdDev(changed_times)
+    delta_min = TimeDelta(min_base, min_changed)
+    delta_avg = TimeDelta(avg_base, avg_changed)
+    delta_std = QuantityDelta(std_base, std_changed)
+
+    t_msg = "Not significant\n"
+    significant, t_score = IsSignificant(base_times, changed_times)
+    if significant:
+        t_msg = "Significant (t=%f, a=0.95)\n" % t_score
+
+    return (("Min: %(min_base)f -> %(min_changed)f:" +
+             " %(delta_min)s\n" +
+             "Avg: %(avg_base)f -> %(avg_changed)f:" +
+             " %(delta_avg)s\n" + t_msg +
+             "Stddev: %(std_base).5f -> %(std_changed).5f:" +
+             " %(delta_std)s")
+             % locals())
+
+
+def CompareBenchmarkData(base_data, changed_data, options):
+    """Compare performance and memory usage.
+
+    Args:
+        base_data: 2-tuple of (times, mem_usage) where times is an iterable
+            of floats; mem_usage is a list of memory usage samples.
+        changed_data: 2-tuple of (times, mem_usage) where times is an iterable
+            of floats; mem_usage is a list of memory usage samples.
+        options: optparse.Values instance.
+
+    Returns:
+        Human-readable summary of the difference between the base and changed
+        binaries.
+    """
+    base_times, base_mem = base_data
+    changed_times, changed_mem = changed_data
+
+    # We suppress performance data when running with --track_memory.
+    if options.track_memory:
+        if base_mem is not None:
+            assert changed_mem is not None
+            return CompareMemoryUsage(base_mem, changed_mem, options)
+        return "Benchmark does not report memory usage yet"
+
+    return CompareMultipleRuns(base_times, changed_times, options)
+
+
+def CallAndCaptureOutput(command, env=None, track_memory=False):
+    """Run the given command, capturing stdout.
+
+    Args:
+        command: the command to run as a list, one argument per element.
+        env: optional; environment variables to set.
+        track_memory: optional; whether to continuously sample the subprocess's
+            memory usage.
+
+    Returns:
+        (stdout, mem_usage), where stdout is the captured stdout as a string;
+        mem_usage is a list of memory usage samples in kilobytes (if
+        track_memory is False, mem_usage is None). 
+
+    Raises:
+        RuntimeError: if the command failed. The value of the exception will
+        be the error message from the command.
+    """
+    mem_usage = None
+    subproc = subprocess.Popen(LogCall(command),
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,
+                               env=BuildEnv(env))
+    if track_memory:
+        future = MemoryUsageFuture(subproc.pid)
+    result, err = subproc.communicate()
+    if subproc.returncode != 0:
+        raise RuntimeError("Benchmark died: " + err)
+    if track_memory:
+        mem_usage = future.GetMemoryUsage()
+    return result, mem_usage
+
+
+def MeasureGeneric(python, options, bm_path, bm_env=None,
+                   extra_args=[], iteration_scaling=1):
+    """Abstract measurement function for Unladen's bm_* scripts.
+
+    Based on the values of options.fast/rigorous, will pass -n {5,50,100} to
+    the benchmark script. MeasureGeneric takes care of parsing out the running
+    times from the memory usage data.
+
+    Args:
+        python: start of the argv list for running Python.
+        options: optparse.Values instance.
+        bm_path: path to the benchmark script.
+        bm_env: optional environment dict. If this is unspecified or None, "-E"
+            will be passed to Python so the environment is ignored.
+        extra_args: optional list of command line args to be given to the
+            benchmark script.
+        iteration_scaling: optional multiple by which to scale the -n argument
+            to the benchmark.
+
+    Returns:
+        (times, mem_usage) 2-tuple, where times is a list of floats giving the
+        running time of the benchmark iterations; and mem_usage is a list of
+        floats giving memory usage samples.
+    """
+    if bm_env is None:
+        python = python + ["-E"]
+
+    trials = 50
+    if options.rigorous:
+        trials = 100
+    elif options.fast:
+        trials = 5
+    trials *= iteration_scaling
+
+    RemovePycs()
+    command = python + [bm_path, "-n", trials] + extra_args
+    result, mem_usage = CallAndCaptureOutput(command, bm_env,
+                                             track_memory=options.track_memory)
+    times = [float(line) for line in result.splitlines()]
+    return times, mem_usage
+
+
 ### Benchmarks
 
 _PY_BENCH_TOTALS_LINE = re.compile("""
@@ -664,152 +846,21 @@ def Measure2to3(python, options):
     return times, mem_usage
 
 
-def BM_2to3(base_python, changed_python, options):
-    try:
-        changed_data = Measure2to3(changed_python, options)
-        base_data = Measure2to3(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
-
-
-def CompareMultipleRuns(base_times, changed_times, options):
-    """Compare multiple control vs experiment runs of the same benchmark.
-
-    Args:
-        base_times: iterable of float times (control).
-        changed_times: iterable of float times (experiment).
-        options: optparse.Values instance.
-
-    Returns:
-        A string summarizing the difference between the runs, suitable for
-        human consumption.
-    """
-    assert len(base_times) == len(changed_times)
-    if len(base_times) == 1:
-        # With only one data point, we can't do any of the interesting stats
-        # below.
-        base_time, changed_time = base_times[0], changed_times[0]
-        time_delta = TimeDelta(base_time, changed_time)
-        return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
-                % locals())
-
-    base_times = sorted(base_times)
-    changed_times = sorted(changed_times)
-
-    min_base, min_changed = base_times[0], changed_times[0]
-    avg_base, avg_changed = avg(base_times), avg(changed_times)
-    std_base = SampleStdDev(base_times)
-    std_changed = SampleStdDev(changed_times)
-    delta_min = TimeDelta(min_base, min_changed)
-    delta_avg = TimeDelta(avg_base, avg_changed)
-    delta_std = QuantityDelta(std_base, std_changed)
-
-    t_msg = "Not significant\n"
-    significant, t_score = IsSignificant(base_times, changed_times)
-    if significant:
-        t_msg = "Significant (t=%f, a=0.95)\n" % t_score
-
-    return (("Min: %(min_base)f -> %(min_changed)f:" +
-             " %(delta_min)s\n" +
-             "Avg: %(avg_base)f -> %(avg_changed)f:" +
-             " %(delta_avg)s\n" + t_msg +
-             "Stddev: %(std_base).5f -> %(std_changed).5f:" +
-             " %(delta_std)s")
-             % locals())
-
-
-def CompareBenchmarkData(base_data, changed_data, options):
-    """Compare performance and memory usage.
-
-    Args:
-        base_data: 2-tuple of (times, mem_usage) where times is an iterable
-            of floats; mem_usage is a list of memory usage samples.
-        changed_data: 2-tuple of (times, mem_usage) where times is an iterable
-            of floats; mem_usage is a list of memory usage samples.
-        options: optparse.Values instance.
-
-    Returns:
-        Human-readable summary of the difference between the base and changed
-        binaries.
-    """
-    base_times, base_mem = base_data
-    changed_times, changed_mem = changed_data
-
-    # We suppress performance data when running with --track_memory.
-    if options.track_memory:
-        if base_mem is not None:
-            assert changed_mem is not None
-            return CompareMemoryUsage(base_mem, changed_mem, options)
-        return "Benchmark does not report memory usage yet"
-
-    return CompareMultipleRuns(base_times, changed_times, options)
-
-
-def CallAndCaptureOutput(command, env=None, track_memory=False):
-    """Run the given command, capturing stdout.
-
-    Args:
-        command: the command to run as a list, one argument per element.
-        env: optional; environment variables to set.
-        track_memory: optional; whether to continuously sample the subprocess's
-            memory usage.
-
-    Returns:
-        (stdout, mem_usage), where stdout is the captured stdout as a string;
-        mem_usage is a list of memory usage samples in kilobytes (if
-        track_memory is False, mem_usage is None). 
-
-    Raises:
-        RuntimeError: if the command failed. The value of the exception will
-        be the error message from the command.
-    """
-    mem_usage = None
-    subproc = subprocess.Popen(LogCall(command),
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE,
-                               env=BuildEnv(env))
-    if track_memory:
-        future = MemoryUsageFuture(subproc.pid)
-    result, err = subproc.communicate()
-    if subproc.returncode != 0:
-        raise RuntimeError("Benchmark died: " + err)
-    if track_memory:
-        mem_usage = future.GetMemoryUsage()
-    return result, mem_usage
+def BM_2to3(*args, **kwargs):
+    return SimpleBenchmark(Measure2to3, *args, **kwargs)
 
 
 DJANGO_DIR = Relative("lib/django")
 
 
 def MeasureDjango(python, options):
-    TEST_PROG = Relative("performance/bm_django.py")
-
-    django_env = {"PYTHONPATH": DJANGO_DIR}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + [TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, django_env,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_django.py")
+    bm_env = {"PYTHONPATH": DJANGO_DIR}
+    return MeasureGeneric(python, options, bm_path, bm_env)
 
 
-def BM_Django(base_python, changed_python, options):
-    try:
-        changed_data = MeasureDjango(changed_python, options)
-        base_data = MeasureDjango(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def BM_Django(*args, **kwargs):
+    return SimpleBenchmark(MeasureDjango, *args, **kwargs)
 
 
 def MeasureRietveld(python, options):
@@ -822,36 +873,17 @@ def MeasureRietveld(python, options):
                            Relative("lib/google_appengine/lib/webob"),
                            Relative("lib/google_appengine/lib/yaml/lib"),
                            Relative("lib/rietveld")])
-    TEST_PROG = Relative("performance/bm_rietveld.py")
+    bm_path = Relative("performance/bm_rietveld.py")
+    bm_env = {"PYTHONPATH": PYTHONPATH, "DJANGO_SETTINGS_MODULE": "settings"}
 
-    rietveld_env = {"PYTHONPATH": PYTHONPATH,
-                    "DJANGO_SETTINGS_MODULE": "settings"}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + [TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, rietveld_env,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    return MeasureGeneric(python, options, bm_path, bm_env)
 
 
-def BM_Rietveld(base_python, changed_python, options):
-    try:
-        changed_data = MeasureRietveld(changed_python, options)
-        base_data = MeasureRietveld(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def BM_Rietveld(*args, **kwargs):
+    return SimpleBenchmark(MeasureRietveld, *args, **kwargs)
 
 
-def ComesWithPsyco(python):
+def _ComesWithPsyco(python):
     """Determine whether the given Python binary already has Psyco.
 
     If the answer is no, we should build it (see BuildPsyco()).
@@ -871,7 +903,7 @@ def ComesWithPsyco(python):
         return False
 
 
-def BuildPsyco(python):
+def _BuildPsyco(python):
     """Build Psyco against the given Python binary.
 
     Args:
@@ -907,19 +939,8 @@ def MeasureSpitfire(python, options, env=None, extra_args=[]):
         time it took to run the Spitfire test once; mem_usage is a list of
         memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_spitfire.py")
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + [TEST_PROG, "-n", trials] + extra_args
-    result, mem_usage = CallAndCaptureOutput(command, env, options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_spitfire.py")
+    return MeasureGeneric(python, options, bm_path, env, extra_args)
 
 
 def MeasureSpitfireWithPsyco(python, options):
@@ -937,8 +958,8 @@ def MeasureSpitfireWithPsyco(python, options):
     SPITFIRE_DIR = Relative("lib/spitfire")
 
     psyco_dir = ""
-    if not ComesWithPsyco(python):
-        psyco_dir = BuildPsyco(python)
+    if not _ComesWithPsyco(python):
+        psyco_dir = _BuildPsyco(python)
 
     env_dirs = filter(bool, [SPITFIRE_DIR, psyco_dir])
     spitfire_env = {"PYTHONPATH": os.pathsep.join(env_dirs)}
@@ -952,19 +973,14 @@ def MeasureSpitfireWithPsyco(python, options):
             pass
 
 
-def BM_Spitfire(base_python, changed_python, options):
-    try:
-        changed_data = MeasureSpitfireWithPsyco(changed_python, options)
-        base_data = MeasureSpitfireWithPsyco(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def BM_Spitfire(*args, **kwargs):
+    return SimpleBenchmark(MeasureSpitfireWithPsyco, *args, **kwargs)
 
 
 def BM_SlowSpitfire(base_python, changed_python, options):
     extra_args = ["--disable_psyco"]
     spitfire_env = {"PYTHONPATH": Relative("lib/spitfire")}
+
     try:
         changed_data = MeasureSpitfire(changed_python, options,
                                        spitfire_env, extra_args)
@@ -989,21 +1005,8 @@ def MeasurePickle(python, options, extra_args):
         time it took to run the pickle test once; mem_usage is a list of
         memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_pickle.py")
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + [TEST_PROG, "-n", trials] + extra_args
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_pickle.py")
+    return MeasureGeneric(python, options, bm_path, extra_args=extra_args)
 
 
 def _PickleBenchmark(base_python, changed_python, options, extra_args):
@@ -1021,13 +1024,8 @@ def _PickleBenchmark(base_python, changed_python, options, extra_args):
         Summary of whether the experiemental Python is better/worse than the
         baseline.
     """
-    try:
-        changed_data = MeasurePickle(changed_python, options, extra_args)
-        base_data = MeasurePickle(base_python, options, extra_args)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+    return SimpleBenchmark(MeasurePickle,
+                           base_python, changed_python, options, extra_args)
 
 
 def BM_Pickle(base_python, changed_python, options):
@@ -1069,31 +1067,12 @@ def MeasureAi(python, options):
         time it took to run the ai routine once; mem_usage is a list of
         memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_ai.py")
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + ["-E", TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_ai.py")
+    return MeasureGeneric(python, options, bm_path)
 
 
-def BM_Ai(base_python, changed_python, options):
-    try:
-        changed_data = MeasureAi(changed_python, options)
-        base_data = MeasureAi(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def BM_Ai(*args, **kwargs):
+    return SimpleBenchmark(MeasureAi, *args, **kwargs)
 
 
 def _StartupPython(command, mem_usage, track_memory):
@@ -1105,6 +1084,7 @@ def _StartupPython(command, mem_usage, track_memory):
         if subproc.wait() != 0:
             raise RuntimeError("Startup benchmark died")
         mem_usage.extend(future.GetMemoryUsage())
+
 
 def MeasureStartup(python, cmd_opts, num_loops, track_memory):
     times = []
@@ -1180,44 +1160,25 @@ def BM_startup_nosite(base_python, changed_python, options):
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
-def MeasureRegexPerformance(python, bm_path, options):
+def MeasureRegexPerformance(python, options, bm_path):
     """Test the performance of Python's regex engine.
 
     Args:
         python: prefix of a command line for the Python binary.
-        bm_path: relative path; which benchmark script to run.
         options: optparse.Values instance.
+        bm_path: relative path; which benchmark script to run.
 
     Returns:
         (perf_data, mem_usage), where perf_data is a list of floats, each the
         time it took to run all the regexes routines once; mem_usage is a list
         of memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative(bm_path)
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + ["-E", TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    return MeasureGeneric(python, options, Relative(bm_path))
 
 
 def RegexBenchmark(base_python, changed_python, options, bm_path):
-    try:
-        changed_data = MeasureRegexPerformance(changed_python, bm_path, options)
-        base_data = MeasureRegexPerformance(base_python, bm_path, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+    return SimpleBenchmark(MeasureRegexPerformance,
+                           base_python, changed_python, options, bm_path)
 
 
 def BM_regex_v8(base_python, changed_python, options):
@@ -1235,54 +1196,36 @@ def BM_regex_compile(base_python, changed_python, options):
     return RegexBenchmark(base_python, changed_python, options, bm_path)
 
 
-def MeasureThreading(python, bm_name, options):
+def MeasureThreading(python, options, bm_name):
     """Test the performance of Python's threading support.
 
     Args:
         python: prefix of a command line for the Python binary.
-        bm_name: name of the threading benchmark to run.
         options: optparse.Values instance.
+        bm_name: name of the threading benchmark to run.
 
     Returns:
         (perf_data, mem_usage), where perf_data is a list of floats, each the
         time it took to run the threading benchmark once; mem_usage is a list
         of memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_threading.py")
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + ["-E", TEST_PROG, "-n", trials, bm_name]
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_threading.py")
+    return MeasureGeneric(python, options, bm_path, extra_args=[bm_name])
 
 
-def ThreadingBenchmark(base_python, changed_python, bm_name, options):
-    try:
-        changed_data = MeasureThreading(changed_python, bm_name, options)
-        base_data = MeasureThreading(base_python, bm_name, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def ThreadingBenchmark(base_python, changed_python, options, bm_name):
+    return SimpleBenchmark(MeasureThreading,
+                           base_python, changed_python, options, bm_name)
 
 
 def BM_threaded_count(base_python, changed_python, options):
     bm_name = "threaded_count"
-    return ThreadingBenchmark(base_python, changed_python, bm_name, options)
+    return ThreadingBenchmark(base_python, changed_python, options, bm_name)
 
 
 def BM_iterative_count(base_python, changed_python, options):
     bm_name = "iterative_count"
-    return ThreadingBenchmark(base_python, changed_python, bm_name, options)
+    return ThreadingBenchmark(base_python, changed_python, options, bm_name)
 
 
 def MeasureUnpackSequence(python, options):
@@ -1297,31 +1240,12 @@ def MeasureUnpackSequence(python, options):
         time it took to run the threading benchmark once; mem_usage is a list
         of memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_unpack_sequence.py")
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50000
-    if options.rigorous:
-        trials = 100000
-    elif options.fast:
-        trials = 500
-
-    RemovePycs()
-    command = python + ["-E", TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_unpack_sequence.py")
+    return MeasureGeneric(python, options, bm_path, iteration_scaling=1000)
 
 
-def BM_unpack_sequence(base_python, changed_python, options):
-    try:
-        changed_data = MeasureUnpackSequence(changed_python, options)
-        base_data = MeasureUnpackSequence(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def BM_unpack_sequence(*args, **kwargs):
+    return SimpleBenchmark(MeasureUnpackSequence, *args, **kwargs)
 
 
 def MeasureCallSimple(python, options):
@@ -1336,31 +1260,12 @@ def MeasureCallSimple(python, options):
         time it took to run the threading benchmark once; mem_usage is a list
         of memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_call_simple.py")
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + ["-E", TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_call_simple.py")
+    return MeasureGeneric(python, options, bm_path)
 
 
-def BM_call_simple(base_python, changed_python, options):
-    try:
-        changed_data = MeasureCallSimple(changed_python, options)
-        base_data = MeasureCallSimple(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
-
-    return CompareBenchmarkData(base_data, changed_data, options)
+def BM_call_simple(*args, **kwargs):
+    return SimpleBenchmark(MeasureCallSimple, *args, **kwargs)
 
 
 def MeasureNbody(python, options):
@@ -1375,32 +1280,15 @@ def MeasureNbody(python, options):
         time it took to run the benchmark loop once; mem_usage is a list
         of memory usage samples in kilobytes.
     """
-    TEST_PROG = Relative("performance/bm_nbody.py")
-    CLEAN_ENV = {"PYTHONPATH": ""}
-
-    trials = 50
-    if options.rigorous:
-        trials = 100
-    elif options.fast:
-        trials = 5
-
-    RemovePycs()
-    command = python + ["-E", TEST_PROG, "-n", trials]
-    result, mem_usage = CallAndCaptureOutput(command, env=CLEAN_ENV,
-                                             track_memory=options.track_memory)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    bm_path = Relative("performance/bm_nbody.py")
+    return MeasureGeneric(python, options, bm_path)
 
 
-def BM_nbody(base_python, changed_python, options):
-    try:
-        changed_data = MeasureNbody(changed_python, options)
-        base_data = MeasureNbody(base_python, options)
-    except subprocess.CalledProcessError, e:
-        return str(e)
+def BM_nbody(*args, **kwargs):
+    return SimpleBenchmark(MeasureNbody, *args, **kwargs)
 
-    return CompareBenchmarkData(base_data, changed_data, options)
 
+### End benchmarks, begin main entry point support.
 
 def _FindAllBenchmarks():
     return dict((name[3:].lower(), func)
