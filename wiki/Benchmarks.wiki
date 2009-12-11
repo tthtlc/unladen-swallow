@@ -16,7 +16,7 @@ Example `perf.py` command:
 python2.5 unladen-bmarks/perf.py -r --benchmarks=2to3,django control/python experiment/python
 }}}
 
-This will run the 2to3 and Django template benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with. `perf.py` will take care of comparing the performance and running statistics on the result to determine statistical significance. The performance degradation/improvement is calculated using `((new - old) / new)`.
+This will run the 2to3 and Django template benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with. `perf.py` will take care of comparing the performance and running statistics on the result to determine statistical significance.
 
 
 ==Benchmarks==
@@ -24,6 +24,7 @@ This will run the 2to3 and Django template benchmarks in rigorous mode (lots of 
   * *ai* - small "AI" solvers for the N-Queens problem and for alphametics.
   * *2to3* - have [http://svn.python.org/view/sandbox/trunk/2to3/ the 2to3 tool] translate itself.
   * *django* - use the [http://www.djangoproject.com/ Django template system] to build a 150x150-cell HTML table.
+  * *nbody* - the [http://shootout.alioth.debian.org/u64q/benchmark.php?test=nbody&lang=python&id=4 N-body Shootout benchmark]. Microbenchmark for floating point operations.
   * *pickle* - use the `cPickle` module to pickle a variety of datasets.
   * *pickle_dict* - microbenchmark; use the `cPickle` module to pickle a lot of dicts.
   * *pickle_list* - microbenchmark; use the `cPickle` module to pickle a lot of lists.
