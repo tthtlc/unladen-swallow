@@ -145,10 +145,6 @@ class TestRefactoringTool(unittest.TestCase):
         test_file = os.path.join(FIXER_DIR, "parrot_example.py")
         self.check_file_refactoring(test_file, _DEFAULT_FIXERS)
 
-    def test_file_encoding(self):
-        fn = os.path.join(TEST_DATA_DIR, "different_encoding.py")
-        self.check_file_refactoring(fn)
-
     def test_crlf_newlines(self):
         old_sep = os.linesep
         os.linesep = "\r\n"
