@@ -96,8 +96,36 @@ Goals:
 
 The 2009Q2 release can be found in the [http://code.google.com/p/unladen-swallow/source/browse/branches/release-2009Q2-maint release-2009Q2-maint branch]. See [Release2009Q2] for our performance relative to 2009Q1.
 
+== 2009 Q3 ==
 
-== 2009 Q3 and Beyond ==
+Q3's development process did not go as originally expected. We had planned that, with the Python->LLVM JIT compiler in place, we could begin optimizing aggressively, exploiting type feedback in all sorts of wonderful ways. That proved somewhat optimistic. We found serious deficiencies in LLVM's just-in-time infrastructure that required a major detour away from our earlier, performance-centric goals. The two most serious problems were, a) a hard limit of 16MB of machine code over the lifetime of the process, and b) a bug in LLVM's x86-64 code generation that led to difficult-to-diagnose segfaults ([http://llvm.org/PR5201 LLVM PR5201]).
+
+Given those obstacles, we were relatively happy with the outcome of the 2009Q3 release:
+
+  * Unladen Swallow 2009Q3 uses up to 930% less memory than the 2009Q2 release.
+  * Execution performance has improved by 15-70%, depending on benchmark.
+  * Unladen Swallow 2009Q3 integrates with [http://www.gnu.org/software/gdb/download/ANNOUNCEMENT gdb 7.0] to better support debugging of JIT-compiled code.
+  * Unladen Swallow 2009Q3 integrates with [http://oprofile.sourceforge.net/news/ OProfile 0.9.4] and later to provide seemless profiling across Python and C code, if configured with `--with-oprofile=<oprofile-prefix>`.
+  * Many bugs and restrictions in LLVM's JIT have been fixed. In particular, the 2009Q2 limitation of 16MB of machine code has been lifted.
+  * Unladen Swallow 2009Q3 passes the tests for all the third-party tools and libraries listed on the [Testing] page. Significantly for many projects, this includes compatibility with Twisted, Django, NumPy and Swig.
+
+The 2009Q3 release can be found in the [http://code.google.com/p/unladen-swallow/source/browse/branches/release-2009Q3-maint release-2009Q3-maint branch]. See [Release2009Q3] for our performance relative to 2009Q2. Hearty congratulations go out to our intern, Reid Kleckner, for his vital contributions to the Q3 release.
+
+
+== 2009Q4 ==
+
+Based on the relative immaturity of LLVM's just-in-time infrastructure, we anticipate spending more time fixing fundamental problems with this area of LLVM. (We note that the rest of LLVM is a paradise by comparison.) We anticipate a modest performance increase over Q3, though most of our time will go toward ensuring a high-quality, ultra-stable product so that we have a solid footing for merger with CPython in 2010. We are choosing to shift our focus in this way -- stability now, performance later -- so that all our necessary changes can be incorporated into LLVM 2.7, which will then form the baseline for an LLVM-based CPython 3.x.
+
+Areas for performance improvement (non-exhaustive):
+  * Binary operations via type feedback.
+  * Attribute/method lookup via type feedback.
+  * Moving compilation to a non-block background thread.
+  * Import optimizations (surprisingly important to some benchmarks).
+
+We intend to tag the 2009Q4 release in early January 2010 (to allow for holidays in the United States).
+
+
+== Long-Term Plans ==
 
 The plan for Q3 onwards is to simply iterate over [RelevantPapers the literature]. We aspire to do no original work, instead using as much of the last 30 years of research as possible. See RelevantPapers for a partial (by no means complete) list of the papers we plan to implement or draw upon.
 
@@ -105,7 +133,6 @@ We plan to address performance considerations in the regular expression engine, 
 
 Our long-term goal is to make Python fast enough to start moving performance-important types and functions from C back to Python.
 
-The exact performance targets for the 2009Q3 release will be finalized some time in Q2.
 
 
 == Global Interpreter Lock ==
