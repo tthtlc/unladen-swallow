@@ -103,11 +103,26 @@ The plan for Q3 onwards is to simply iterate over [RelevantPapers the literature
 
 We plan to address performance considerations in the regular expression engine, as well as any other extension modules found to be bottlenecks. However, regular expressions are already known to be a good target for our work and will be considered first for optimization.
 
-In addition, we intend to remove the GIL and fix the state of multithreading in Python. We believe this is possible through the implementation of a more sophisticated GC system, something like IBM's Recycler (Bacon et al, 2001).
-
 Our long-term goal is to make Python fast enough to start moving performance-important types and functions from C back to Python.
 
 The exact performance targets for the 2009Q3 release will be finalized some time in Q2.
+
+
+== Global Interpreter Lock ==
+
+From an earlier draft of this document:
+
+<blockquote>
+In addition, we intend to remove the GIL and fix the state of multithreading in Python.
+We believe this is possible through the implementation of a more sophisticated GC
+system, something like IBM's Recycler (Bacon et al, 2001).
+</blockquote>
+
+Our original plans for dealing with the GIL centered around [http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.19.1065 Recycler], a garbage collection scheme proposed by IBM researchers. This appeared at first blush to be an excellent match for Python, and we were excited about prospects for success. Further investigation and private communications revealed that [http://code.google.com/p/python-safethread/ safethread], an experimental branch of CPython, had also implemented Recycler, but with minimal success. The author relayed that he had demonstrated a speed-up on a dual-core system, but performance degraded sharply at four cores.
+
+Accordingly, we are no longer as optimistic about our chances of removing the GIL completely. We now favor a more incremental approach improving the shortcomings [http://www.dabeaz.com/python/GIL.pdf pointed out by Dave Beazley], among others. In any case, work on the GIL should be done directly in mainline CPython, or on a very close branch of Python 3.x: the sensitive nature of the work recommends a minimal delta, and doing the work and then porting it from 2.x to 3.y (as would be the case for Unladen Swallow) is a sure-fire way of introducing exceedingly-subtle bugs.
+
+Longer-term, we believe that CPython should drop reference counting and move to a pure garbage collection system. There is a large volume of classic literature and on-going research into garbage collection that could be more effectively exploited in a pure-GC system. Even without the GIL, the current volume of refcount update operations will make scaling effectively to many-core systems a challenge; we believe a pure garbage collection scheme would alleviate these pressures somewhat.
 
 
 = Detailed Plans =
