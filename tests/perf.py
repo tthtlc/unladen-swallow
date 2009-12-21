@@ -13,7 +13,7 @@ as the baseline and `experiment/python` as the experiment. The --fast and
 
 Omitting the -b option will result in the default group of benchmarks being run
 This currently consists of: 2to3, django, nbody, slowspitfire, slowpickle,
-slowunpickle. Omitting -b is the same as specifying `-b default`.
+slowunpickle, spambayes. Omitting -b is the same as specifying `-b default`.
 
 To run every benchmark perf.py knows about, use `-b all`. To see a full list of
 all available benchmarks, use `--help`.
@@ -1288,6 +1288,28 @@ def BM_nbody(*args, **kwargs):
     return SimpleBenchmark(MeasureNbody, *args, **kwargs)
 
 
+def MeasureSpamBayes(python, options):
+    """Test the performance of the SpamBayes spam filter and its tokenizer.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run the benchmark loop once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    pypath = ":".join([Relative("lib/spambayes"), Relative("lib/lockfile")])
+    bm_path = Relative("performance/bm_spambayes.py")
+    bm_env = {"PYTHONPATH": pypath}
+    return MeasureGeneric(python, options, bm_path, bm_env)
+
+
+def BM_spambayes(*args, **kwargs):
+    return SimpleBenchmark(MeasureSpamBayes, *args, **kwargs)
+
+
 ### End benchmarks, begin main entry point support.
 
 def _FindAllBenchmarks():
@@ -1300,7 +1322,7 @@ def _FindAllBenchmarks():
 # specified. The "all" group includes every benchmark perf.py knows about.
 # If you update the default group, be sure to update the module docstring, too.
 BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
-                            "slowpickle", "slowunpickle"],
+                            "slowpickle", "slowunpickle", "spambayes"],
                 "startup": ["normal_startup", "startup_nosite"],
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
