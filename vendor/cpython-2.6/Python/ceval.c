@@ -504,6 +504,13 @@ enum why_code {
 static enum why_code do_raise(PyObject *, PyObject *, PyObject *);
 static int unpack_iterable(PyObject *, int, PyObject **);
 
+/* Records whether tracing is on for any thread.  Counts the number of
+   threads for which tstate->c_tracefunc is non-NULL, so if the value
+   is 0, we know we don't have to check this thread's c_tracefunc.
+   This speeds up the if statement in PyEval_EvalFrameEx() after
+   fast_next_opcode*/
+static int _Py_TracingPossible = 0;
+
 /* for manipulating the thread switch and periodic "stuff" - used to be
    per thread, now just a pair o' globals */
 int _Py_CheckInterval = 100;
@@ -886,7 +893,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 
 		/* line-by-line tracing support */
 
-		if (tstate->c_tracefunc != NULL && !tstate->tracing) {
+		if (_Py_TracingPossible &&
+		    tstate->c_tracefunc != NULL && !tstate->tracing) {
 			/* see maybe_call_line_trace
 			   for expository comments */
 			f->f_stacktop = stack_pointer;
@@ -1041,6 +1049,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			}
 			Py_FatalError("invalid argument to DUP_TOPX"
 				      " (bytecode corruption?)");
+			/* Never returns, so don't bother to set why. */
 			break;
 
 		case UNARY_POSITIVE:
@@ -1634,9 +1643,11 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 		case PRINT_NEWLINE:
 			if (stream == NULL || stream == Py_None) {
 				w = PySys_GetObject("stdout");
-				if (w == NULL)
+				if (w == NULL) {
 					PyErr_SetString(PyExc_RuntimeError,
 							"lost sys.stdout");
+					why = WHY_EXCEPTION;
+				}
 			}
 			if (w != NULL) {
 				/* w.write() may replace sys.stdout, so we
@@ -1862,6 +1873,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 				PyErr_Format(PyExc_SystemError,
 					     "no locals when loading %s",
 					     PyObject_REPR(w));
+				why = WHY_EXCEPTION;
 				break;
 			}
 			if (PyDict_CheckExact(v)) {
@@ -2337,11 +2349,20 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			/* XXX Not the fastest way to call it... */
 			x = PyObject_CallFunctionObjArgs(exit_func, u, v, w,
 							 NULL);
-			if (x == NULL) {
-				Py_DECREF(exit_func);
+			Py_DECREF(exit_func);
+			if (x == NULL)
 				break; /* Go to error exit */
-			}
-			if (u != Py_None && PyObject_IsTrue(x)) {
+
+			if (u != Py_None)
+				err = PyObject_IsTrue(x);
+			else
+				err = 0;
+			Py_DECREF(x);
+
+			if (err < 0)
+				break; /* Go to error exit */
+			else if (err > 0) {
+				err = 0;
 				/* There was an exception and a true return */
 				STACKADJ(-2);
 				Py_INCREF(Py_None);
@@ -2353,8 +2374,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 				/* The stack was rearranged to remove EXIT
 				   above. Let END_FINALLY do its thing */
 			}
-			Py_DECREF(x);
-			Py_DECREF(exit_func);
 			PREDICT(END_FINALLY);
 			break;
 		}
@@ -2451,7 +2470,10 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 			Py_DECREF(v);
 			if (x != NULL) {
 				v = POP();
-				err = PyFunction_SetClosure(x, v);
+				if (PyFunction_SetClosure(x, v) != 0) {
+					/* Can't happen unless bytecode is corrupt. */
+					why = WHY_EXCEPTION;
+				}
 				Py_DECREF(v);
 			}
 			if (x != NULL && oparg > 0) {
@@ -2465,7 +2487,11 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 					w = POP();
 					PyTuple_SET_ITEM(v, oparg, w);
 				}
-				err = PyFunction_SetDefaults(x, v);
+				if (PyFunction_SetDefaults(x, v) != 0) {
+					/* Can't happen unless
+                                           PyFunction_SetDefaults changes. */
+					why = WHY_EXCEPTION;
+				}
 				Py_DECREF(v);
 			}
 			PUSH(x);
@@ -3414,6 +3440,7 @@ PyEval_SetTrace(Py_tracefunc func, PyObject *arg)
 {
 	PyThreadState *tstate = PyThreadState_GET();
 	PyObject *temp = tstate->c_traceobj;
+	_Py_TracingPossible += (func != NULL) - (tstate->c_tracefunc != NULL);
 	Py_XINCREF(arg);
 	tstate->c_tracefunc = NULL;
 	tstate->c_traceobj = NULL;
@@ -3884,10 +3911,17 @@ do_call(PyObject *func, PyObject ***pp_stack, int na, int nk)
 		PCALL(PCALL_METHOD);
 	else if (PyType_Check(func))
 		PCALL(PCALL_TYPE);
+	else if (PyCFunction_Check(func))
+		PCALL(PCALL_CFUNCTION);
 	else
 		PCALL(PCALL_OTHER);
 #endif
-	result = PyObject_Call(func, callargs, kwdict);
+	if (PyCFunction_Check(func)) {
+		PyThreadState *tstate = PyThreadState_GET();
+		C_TRACE(result, PyCFunction_Call(func, callargs, kwdict));
+	}
+	else
+		result = PyObject_Call(func, callargs, kwdict);
  call_fail:
 	Py_XDECREF(callargs);
 	Py_XDECREF(kwdict);
@@ -3972,10 +4006,17 @@ ext_do_call(PyObject *func, PyObject ***pp_stack, int flags, int na, int nk)
 		PCALL(PCALL_METHOD);
 	else if (PyType_Check(func))
 		PCALL(PCALL_TYPE);
+	else if (PyCFunction_Check(func))
+		PCALL(PCALL_CFUNCTION);
 	else
 		PCALL(PCALL_OTHER);
 #endif
-	result = PyObject_Call(func, callargs, kwdict);
+	if (PyCFunction_Check(func)) {
+		PyThreadState *tstate = PyThreadState_GET();
+		C_TRACE(result, PyCFunction_Call(func, callargs, kwdict));
+	}
+	else
+		result = PyObject_Call(func, callargs, kwdict);
 ext_call_fail:
 	Py_XDECREF(callargs);
 	Py_XDECREF(kwdict);

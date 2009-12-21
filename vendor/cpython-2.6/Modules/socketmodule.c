@@ -379,7 +379,7 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
 #define SOCKETCLOSE close
 #endif
 
-#if defined(HAVE_BLUETOOTH_H) || defined(HAVE_BLUETOOTH_BLUETOOTH_H)
+#if defined(HAVE_BLUETOOTH_H) || defined(HAVE_BLUETOOTH_BLUETOOTH_H) &&  !defined(__NetBSD__)
 #define USE_BLUETOOTH 1
 #if defined(__FreeBSD__)
 #define BTPROTO_L2CAP BLUETOOTH_PROTO_L2CAP
@@ -3334,7 +3334,11 @@ socket_gethostbyaddr(PyObject *self, PyObject *args)
 #ifdef HAVE_GETHOSTBYNAME_R_3_ARG
 	struct hostent_data data;
 #else
-	char buf[16384];
+	/* glibcs up to 2.10 assume that the buf argument to
+	   gethostbyaddr_r is 8-byte aligned, which at least llvm-gcc
+	   does not ensure. The attribute below instructs the compiler
+	   to maintain this alignment. */
+	char buf[16384] Py_ALIGNED(8);
 	int buf_len = (sizeof buf) - 1;
 	int errnop;
 #endif
@@ -4056,8 +4060,13 @@ socket_getnameinfo(PyObject *self, PyObject *args)
 	flags = flowinfo = scope_id = 0;
 	if (!PyArg_ParseTuple(args, "Oi:getnameinfo", &sa, &flags))
 		return NULL;
-	if  (!PyArg_ParseTuple(sa, "si|ii",
-			       &hostp, &port, &flowinfo, &scope_id))
+	if (!PyTuple_Check(sa)) {
+		PyErr_SetString(PyExc_TypeError,
+				"getnameinfo() argument 1 must be a tuple");
+		return NULL;
+	}
+	if (!PyArg_ParseTuple(sa, "si|ii",
+			      &hostp, &port, &flowinfo, &scope_id))
 		return NULL;
 	PyOS_snprintf(pbuf, sizeof(pbuf), "%d", port);
 	memset(&hints, 0, sizeof(hints));
@@ -4080,9 +4089,7 @@ socket_getnameinfo(PyObject *self, PyObject *args)
 	switch (res->ai_family) {
 	case AF_INET:
 	    {
-		char *t1;
-		int t2;
-		if (PyArg_ParseTuple(sa, "si", &t1, &t2) == 0) {
+		if (PyTuple_GET_SIZE(sa) != 2) {
 			PyErr_SetString(socket_error,
 				"IPv4 sockaddr must be 2 tuple");
 			goto fail;
