@@ -4,7 +4,18 @@ Our goal is to be as compatible with mainline CPython 2.6.1 as possible, with bo
 
 == Running The Third-Party Tests ==
 
-First, check out Unladen Swallow's `/tests/` directory, which contains all the third-party packages we run against Unladen Swallow:
+The third-party tests have to be run against an _installed_ python, not just a build directory. To build and install a test python, assuming you build outside the source directory, run something like:
+
+{{{
+$ cd $test_python_objdir
+$ installdir=`pwd`/../install    # For example.
+$ $srcdir/configure --prefix=$installdir --any-other-configure-options
+$ make -j3
+$ ./python -mtest.regrtest   # To make sure Python itself is healthy.
+$ make install
+}}}
+
+Next, check out Unladen Swallow's `/tests/` directory, which contains all the third-party packages we run against Unladen Swallow:
 
 {{{
 $ svn co http://unladen-swallow.googlecode.com/svn/tests unladen-tests
@@ -16,13 +27,13 @@ In order for some of the tests to run correctly, they need to actually be instal
 
 {{{
 $ cd unladen-tests
-$ /path/to/test/python setup.py install
+$ $installdir/bin/python setup.py install
 }}}
 
 Now run the tests:
 
 {{{
-$ /path/to/test/python test.py
+$ $installdir/bin/python test.py
 }}}
 
 == Testing Correctness ==
