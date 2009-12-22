@@ -340,53 +340,14 @@ class MemoryUsageFuture(threading.Thread):
         return self._usage
 
 
-def GetMemoryUsageChart(base_usage, changed_usage, options):
-    """Build a Google Chart API URL for the given data.
-
-    Args:
-        base_usage: memory usage samples for the base binary.
-        changed_usage: memory usage samples for the changed binary.
-        options: optparse.Values instance.
-
-    Returns:
-        Google Chart API URL as a string. Use ShortenUrl() to shorten this
-        otherwise-very long URL.
-    """
-    base_data = SummarizeData(base_usage)
-    changed_data = SummarizeData(changed_usage)
-    # We use these to scale the graph.
-    min_data = min(min(base_data), min(changed_data)) - 100
-    max_data = max(max(base_data), max(changed_data)) + 100
-    # Google-bound data, formatted as desired by the Chart API.
-    data_for_google = (",".join(map(str, base_data)) + "|" +
-                       ",".join(map(str, changed_data)))
-
-    # Parameters for the Google Chart API. See
-    # http://code.google.com/apis/chart/ for more details.
-    # cht=lc: line graph with visible axes.
-    # chs: dimensions of the graph, in pixels.
-    # chdl: labels for the graph lines.
-    # chco: colors for the graph lines.
-    # chds: minimum and maximum values for the vertical axis.
-    # chxr: minimum and maximum values for the vertical axis labels.
-    # chd=t: the data sets, |-separated.
-    # chxt: which axes to draw.
-    base_binary = options.base_binary
-    changed_binary = options.changed_binary
-    return ("http://chart.apis.google.com/chart?cht=lc&chs=700x400&chxt=x,y&"
-            "chxr=1,%(min_data)s,%(max_data)s&chco=FF0000,0000FF&"
-            "chdl=%(base_binary)s|%(changed_binary)s&"
-            "chds=%(min_data)s,%(max_data)s&chd=t:%(data_for_google)s"
-            % locals())
-
-
 def CompareMemoryUsage(base_usage, changed_usage, options):
     """Like CompareMultipleRuns, but for memory usage."""
     max_base, max_changed = max(base_usage), max(changed_usage)
     delta_max = QuantityDelta(max_base, max_changed)
 
-    raw_link = GetMemoryUsageChart(base_usage, changed_usage, options)
-    chart_link = ShortenUrl(raw_link)
+    chart_link = GetChart(SummarizeData(base_usage),
+                          SummarizeData(changed_usage),
+                          options)
 
     return (("Mem max: %(max_base).3f -> %(max_changed).3f:" +
              " %(delta_max)s\n" +
@@ -428,6 +389,55 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
         return str(e)
 
     return CompareBenchmarkData(base_data, changed_data, options)
+
+
+def GetChart(base_data, changed_data, options, chart_margin=100):
+    """Build a Google Chart API URL for the given data.
+
+    Args:
+        base_data: data points for the base binary.
+        changed_data: data points for the changed binary.
+        options: optparse.Values instance.
+        chart_margin: optional integer margin to add/sub from the max/min.
+
+    Returns:
+        Google Chart API URL as a string.
+    """
+    # We use these to scale the graph.
+    min_data = min(min(base_data), min(changed_data)) - chart_margin
+    max_data = max(max(base_data), max(changed_data)) + chart_margin
+    # Google-bound data, formatted as desired by the Chart API.
+    data_for_google = (",".join(map(str, base_data)) + "|" +
+                       ",".join(map(str, changed_data)))
+
+    # Come up with labels for the X axis; not too many, though, or they'll be
+    # unreadable.
+    max_len = max(len(base_data), len(changed_data))
+    points = SummarizeData(range(1, max_len + 1), points=5)
+    if points[0] != 1:
+        points.insert(0, 1)
+    x_axis_labels = "".join("|%d" % i for i in points)
+
+    # Parameters for the Google Chart API. See
+    # http://code.google.com/apis/chart/ for more details.
+    # cht=lc: line graph with visible axes.
+    # chs: dimensions of the graph, in pixels.
+    # chdl: labels for the graph lines.
+    # chco: colors for the graph lines.
+    # chds: minimum and maximum values for the vertical axis.
+    # chxr: minimum and maximum values for the vertical axis labels.
+    # chd=t: the data sets, |-separated.
+    # chxt: which axes to draw.
+    # chxl: labels for the axes.
+    base_binary = options.base_binary
+    changed_binary = options.changed_binary
+    raw_url = ("http://chart.apis.google.com/chart?cht=lc&chs=700x400&chxt=x,y&"
+               "chxr=1,%(min_data)s,%(max_data)s&chco=FF0000,0000FF&"
+               "chdl=%(base_binary)s|%(changed_binary)s&"
+               "chds=%(min_data)s,%(max_data)s&chd=t:%(data_for_google)s&"
+               "chxl=0:%(x_axis_labels)s"
+               % locals())
+    return ShortenUrl(raw_url)
 
 
 def ShortenUrl(url):
@@ -589,6 +599,12 @@ def CompareMultipleRuns(base_times, changed_times, options):
         return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
                 % locals())
 
+    # Create a chart showing iteration times over time. We round the times so
+    # as not to exceed the GET limit for Google's chart server.
+    timeline_link = GetChart([round(t, 2) for t in base_times],
+                             [round(t, 2) for t in changed_times],
+                             options, chart_margin=1)
+
     base_times = sorted(base_times)
     changed_times = sorted(changed_times)
 
@@ -610,7 +626,8 @@ def CompareMultipleRuns(base_times, changed_times, options):
              "Avg: %(avg_base)f -> %(avg_changed)f:" +
              " %(delta_avg)s\n" + t_msg +
              "Stddev: %(std_base).5f -> %(std_changed).5f:" +
-             " %(delta_std)s")
+             " %(delta_std)s\n" +
+             "Timeline: %(timeline_link)s")
              % locals())
 
 
@@ -1418,11 +1435,11 @@ if __name__ == "__main__":
                       help=("Spend longer running tests to get more" +
                             " accurate results"))
     parser.add_option("-f", "--fast", action="store_true",
-                      help=("Get rough answers quickly"))
+                      help="Get rough answers quickly")
     parser.add_option("-v", "--verbose", action="store_true",
-                      help=("Print more output"))
+                      help="Print more output")
     parser.add_option("-m", "--track_memory", action="store_true",
-                      help=("Track memory usage. This only works on Linux."))
+                      help="Track memory usage. This only works on Linux.")
     parser.add_option("-a", "--args", default="",
                       help=("Pass extra arguments to the python binaries."
                             " If there is a comma in this option's value, the"
@@ -1477,5 +1494,5 @@ if __name__ == "__main__":
         print "Total CPU cores:", multiprocessing.cpu_count()
     for name, result in results:
         print
-        print name + ":"
+        print "###", name, "###"
         print result
