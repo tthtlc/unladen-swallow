@@ -21,7 +21,7 @@ def run_benchmark(options, num_runs, bench_func, *args):
     if options.profile:
         import cProfile
         prof = cProfile.Profile()
-        prof.runcall(bench_func, num_runs)
+        prof.runcall(bench_func, num_runs, *args)
         prof.print_stats(sort=options.profile_sort)
     else:
         data = bench_func(num_runs, *args)
