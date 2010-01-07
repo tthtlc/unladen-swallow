@@ -11,6 +11,7 @@ __author__ = "collinwinter@google.com (Collin Winter)"
 # Python imports
 import os
 import os.path
+import shutil
 import subprocess
 import sys
 
@@ -86,6 +87,15 @@ def SetupSubdir(subdir, argv):
         os.chdir(current_dir)
 
 
+def CleanSubdir(subdir):
+    """Simulate setup.py clean --all for a given subdirectory.
+
+    We simulate this, instead of actually running the command, so that we
+    don't have to deal with dependencies on setuptools just to rm -fr build.
+    """
+    shutil.rmtree(os.path.join(subdir, "build"), ignore_errors=True)
+
+
 def SortLibs(libs):
     """Sort the third-party libraries as they should be installed.
 
@@ -123,7 +133,15 @@ def FindThirdPartyLibs(basedir):
 
 
 if __name__ == "__main__":
+    action = sys.argv[1]
+    if action not in ("build", "clean", "install"):
+        raise ValueError("Invalid action: %r" % action)
+
     basedir = os.path.join(os.path.split(__file__)[0], "lib")
     for subdir in SortLibs(FindThirdPartyLibs(basedir)):
-        print "### Setting up", subdir
-        SetupSubdir(subdir, sys.argv[1:])
+        if action == "clean":
+            print "### Cleaning", subdir
+            CleanSubdir(subdir)
+        else:
+            print "### Setting up", subdir
+            SetupSubdir(subdir, sys.argv[1:])
