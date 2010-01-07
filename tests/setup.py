@@ -14,7 +14,7 @@ import os.path
 import subprocess
 import sys
 
-# We skip psyco because Unladen Swallow's stdlib includes it (for now).
+# We skip psyco because it doesn't build against Unladen Swallow.
 # The AppEngine SDK doesn't have any tests, but is used by some benchmarks.
 # Rietveld doesn't ship with any tests.
 SKIP_LIBS = set(["psyco", ".svn", "google_appengine", "rietveld"])
