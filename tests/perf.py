@@ -723,7 +723,7 @@ def MeasureGeneric(python, options, bm_path, bm_env=None,
         trials = 100
     elif options.fast:
         trials = 5
-    trials *= iteration_scaling
+    trials = max(1, int(trials * iteration_scaling))
 
     RemovePycs()
     command = python + [bm_path, "-n", trials] + extra_args
@@ -1327,6 +1327,28 @@ def BM_spambayes(*args, **kwargs):
     return SimpleBenchmark(MeasureSpamBayes, *args, **kwargs)
 
 
+def MeasureHtml5lib(python, options):
+    """Test the performance of the html5lib HTML 5 parser.
+
+    Args:
+        python: prefix of a command line for the Python binary.
+        options: optparse.Values instance.
+
+    Returns:
+        (perf_data, mem_usage), where perf_data is a list of floats, each the
+        time it took to run the benchmark loop once; mem_usage is a list
+        of memory usage samples in kilobytes.
+    """
+    bm_path = Relative("performance/bm_html5lib.py")
+    bm_env = {"PYTHONPATH": Relative("lib/html5lib")}
+    return MeasureGeneric(python, options, bm_path, bm_env,
+                          iteration_scaling=0.10)
+
+
+def BM_html5lib(*args, **kwargs):
+    return SimpleBenchmark(MeasureHtml5lib, *args, **kwargs)
+
+
 ### End benchmarks, begin main entry point support.
 
 def _FindAllBenchmarks():
@@ -1345,6 +1367,7 @@ BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
                 "micro": ["unpack_sequence", "call_simple"],
+                "app": ["2to3", "html5lib", "spambayes"],
                 "all": _FindAllBenchmarks().keys(),
                }
 

@@ -1,0 +1,2 @@
+This html5lib, cloned from https://html5lib.googlecode.com/hg/ at rev
+16b9dacec7. We only pull in the python/src directory.
