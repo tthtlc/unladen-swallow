@@ -3,7 +3,10 @@
 """Wrapper script for testing the performance of the html5lib HTML 5 parser.
 
 The input data is the spec document for HTML 5, written in HTML 5.
+The spec was pulled from http://svn.whatwg.org/webapps/index.
 """
+
+from __future__ import with_statement
 
 __author__ = "collinwinter@google.com (Collin Winter)"
 
@@ -44,10 +47,7 @@ if __name__ == "__main__":
     # Get all our IO over with early.
     data_dir = os.path.join(os.path.dirname(__file__), "data")
     spec_filename = os.path.join(data_dir, "html5lib_spec.html")
-    spec_fh = open(spec_filename)
-    try:
+    with open(spec_filename) as spec_fh:
         spec_data = StringIO.StringIO(spec_fh.read())
-    finally:
-        spec_fh.close()
 
     util.run_benchmark(options, options.num_runs, test_html5lib, spec_data)
