@@ -25,7 +25,7 @@ The Unladen Swallow team does not recommend wide adoption of the 2009Q3 release.
 
 == Memory Usage ==
 
-In the memory benchmarks, we compared the fastest configuration for Q3 against the fastest configuration for Q2. The Q2 configuration is the same as what was reported in [Release2009Q2]. The performance degradation/improvement is calculated using `((new - old) / new)`.
+In the memory benchmarks, we compared the fastest configuration for Q3 against the fastest configuration for Q2. The Q2 configuration is the same as what was reported in [Release2009Q2]. The performance degradation/improvement is calculated using `((new - old) / new)`. Units are kilobytes.
 
 *2009Q2 vs 2009Q3*<br>
 slowspitfire:<br>
