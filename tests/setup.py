@@ -17,8 +17,8 @@ import sys
 
 # We skip psyco because it doesn't build against Unladen Swallow.
 # The AppEngine SDK doesn't have any tests, but is used by some benchmarks.
-# Rietveld doesn't ship with any tests.
-SKIP_LIBS = set(["psyco", ".svn", "google_appengine", "rietveld"])
+# Rietveld and html5lib don't ship with any tests.
+SKIP_LIBS = set(["psyco", ".svn", "google_appengine", "rietveld", "html5lib"])
 
 
 class swig(object):
