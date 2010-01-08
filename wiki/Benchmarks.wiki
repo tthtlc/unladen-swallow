@@ -19,9 +19,26 @@ python2.5 unladen-bmarks/perf.py -r --benchmarks=2to3,django control/python expe
 This will run the 2to3 and Django template benchmarks in rigorous mode (lots of iterations), taking `control/python` as the baseline and `experiment/python` as the binary you've been mucking around with. `perf.py` will take care of comparing the performance and running statistics on the result to determine statistical significance.
 
 
+==Quick-Start Guide==
+
+Not all benchmarks are created equal: some of the benchmarks listed below are more useful than others. If you're interested in overall system performance, the best guide is this:
+
+{{{
+python unladen-bmarks/perf.py -r -b default control/python experiment/python
+}}}
+
+That will run the benchmarks we consider the most important headline indicators of performance.
+
+There's an additional collection of whole-app benchmarks that are important, but take longer to run:
+
+{{{
+python unladen-bmarks/perf.py -r -b app control/python experiment/python
+}}}
+
+
 ==Benchmarks==
 
-  * *ai* - small "AI" solvers for the N-Queens problem and for alphametics.
+  * *ai* - small solver for the N-Queens problem.
   * *2to3* - have [http://svn.python.org/view/sandbox/trunk/2to3/ the 2to3 tool] translate itself.
   * *django* - use the [http://www.djangoproject.com/ Django template system] to build a 150x150-cell HTML table.
   * *html5lib* - parse [http://svn.whatwg.org/webapps/index the HTML 5 spec] using [http://code.google.com/p/html5lib/ html5lib].
