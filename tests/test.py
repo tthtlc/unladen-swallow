@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.5
 
 """Wrapper script for running all of Unladen Swallow's third-party tests.
 
@@ -10,6 +10,8 @@ Usage:
     $ /path/to/python test.py  # Run all third-party tests
     $ /path/to/python test.py twisted django  # Only test Twisted and Django
 """
+
+from __future__ import with_statement
 
 __author__ = "collinwinter@google.com (Collin Winter)"
 
@@ -28,7 +30,7 @@ import time
 # The AppEngine SDK and Rietveld don't ship any tests.
 # TODO(collinwinter): add test integration for Spitfire.
 SKIP_LIBS = set(["psyco", ".svn", "spitfire", "mercurial", "google_appengine",
-                 "rietveld", "spambayes", "lockfile"])
+                 "rietveld", "spambayes", "lockfile", "html5lib"])
 
 
 @contextlib.contextmanager
@@ -296,6 +298,7 @@ if __name__ == "__main__":
                 tests_passed[test_name] = test_func()
             finally:
                 os.chdir(current_dir)
+                print "Done testing", test_name
 
     skipped = [k for k, v in tests_passed.items() if v is SKIP_TEST]
     if skipped:
