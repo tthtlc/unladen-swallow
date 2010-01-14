@@ -1348,6 +1348,12 @@ def MeasureHtml5lib(python, options):
 def BM_html5lib(*args, **kwargs):
     return SimpleBenchmark(MeasureHtml5lib, *args, **kwargs)
 
+def MeasureRichards(python, options):
+    bm_path = Relative("performance/bm_richards.py")
+    return MeasureGeneric(python, options, bm_path)
+
+def BM_richards(*args, **kwargs):
+    return SimpleBenchmark(MeasureRichards, *args, **kwargs)
 
 ### End benchmarks, begin main entry point support.
 
