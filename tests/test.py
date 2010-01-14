@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.5
+#!/usr/bin/env python
 
 """Wrapper script for running all of Unladen Swallow's third-party tests.
 

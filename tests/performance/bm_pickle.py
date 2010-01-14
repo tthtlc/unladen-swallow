@@ -1,4 +1,4 @@
-#! /usr/bin/python2.5
+#!/usr/bin/env python
 
 """Script for testing the performance of pickling/unpickling.
 

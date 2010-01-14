@@ -1,4 +1,4 @@
-#! /usr/bin/python2.5
+#!/usr/bin/env python
 
 """Tool for comparing the performance of two Python implementations.
 

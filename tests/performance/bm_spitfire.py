@@ -1,4 +1,4 @@
-#! /usr/bin/python2.5
+#!/usr/bin/env python
 
 """Wrapper script for testing the performance of the Spitfire template system.
 

@@ -1,4 +1,4 @@
-#! /usr/bin/python2.5
+#!/usr/bin/env python
 
 """Tests for utility functions in perf.py."""
 

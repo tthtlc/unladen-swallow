@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 """Microbenchmark for Python's sequence unpacking."""
 
