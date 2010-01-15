@@ -413,9 +413,12 @@ def GetChart(base_data, changed_data, options, chart_margin=100):
     # Come up with labels for the X axis; not too many, though, or they'll be
     # unreadable.
     max_len = max(len(base_data), len(changed_data))
-    points = SummarizeData(range(1, max_len + 1), points=5)
-    if points[0] != 1:
-        points.insert(0, 1)
+    if max_len <= 20:
+        points = range(1, max_len + 1)
+    else:
+        points = SummarizeData(range(1, max_len + 1), points=5)
+        if points[0] != 1:
+            points.insert(0, 1)
     x_axis_labels = "".join("|%d" % i for i in points)
 
     # Parameters for the Google Chart API. See
