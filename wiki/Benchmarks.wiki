@@ -32,7 +32,7 @@ That will run the benchmarks we consider the most important headline indicators 
 There's an additional collection of whole-app benchmarks that are important, but take longer to run:
 
 {{{
-python unladen-bmarks/perf.py -r -b app control/python experiment/python
+python unladen-bmarks/perf.py -r -b apps control/python experiment/python
 }}}
 
 
