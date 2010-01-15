@@ -556,19 +556,20 @@ def QuantityDelta(old, new):
         return "no change"
 
 
-def BuildEnv(env):
+def BuildEnv(env=None):
     """Massage an environment variables dict for the host platform.
 
     Platforms like Win32 require certain env vars to be set.
 
     Args:
-        env: environment variables dict.
+        env: optional; environment variables dict. If this is omitted, start
+            with an empty environment.
 
     Returns:
         A copy of `env`, possibly with modifications.
     """
-    if env == None:
-        return env
+    if env is None:
+        env = {}
     fixed_env = env.copy()
     if sys.platform == "win32":
         # Win32 requires certain environment variables be present
@@ -703,8 +704,8 @@ def MeasureGeneric(python, options, bm_path, bm_env=None,
         python: start of the argv list for running Python.
         options: optparse.Values instance.
         bm_path: path to the benchmark script.
-        bm_env: optional environment dict. If this is unspecified or None, "-E"
-            will be passed to Python so the environment is ignored.
+        bm_env: optional environment dict. If this is unspecified or None,
+            use an empty enviroment.
         extra_args: optional list of command line args to be given to the
             benchmark script.
         iteration_scaling: optional multiple by which to scale the -n argument
@@ -716,7 +717,7 @@ def MeasureGeneric(python, options, bm_path, bm_env=None,
         floats giving memory usage samples.
     """
     if bm_env is None:
-        python = python + ["-E"]
+        bm_env = {}
 
     trials = 50
     if options.rigorous:
@@ -775,20 +776,20 @@ def BM_PyBench(base_python, changed_python, options):
                                TemporaryFilename(prefix="changed.")
                                ) as (dev_null, base_pybench, changed_pybench):
             RemovePycs()
-            subprocess.check_call(LogCall(changed_python + ["-E",
+            subprocess.check_call(LogCall(changed_python + [
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", changed_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
             RemovePycs()
-            subprocess.check_call(LogCall(base_python + ["-E",
+            subprocess.check_call(LogCall(base_python + [
                                            PYBENCH_PATH,
                                            "-w", warp,
                                            "-f", base_pybench,
                                            ]), stdout=dev_null,
                                            env=PYBENCH_ENV)
-            comparer = subprocess.Popen(base_python + ["-E",
+            comparer = subprocess.Popen(base_python + [
                                          PYBENCH_PATH,
                                          "--debug",
                                          "-s", base_pybench,
@@ -828,7 +829,7 @@ def Measure2to3(python, options):
         # Warm up the cache and .pyc files. Use CallAndCaptureOutput() for its
         # more useful error messages.
         CallAndCaptureOutput(python +
-                             ["-E", TWO_TO_THREE_PROG, "-f", "all", target],
+                             [TWO_TO_THREE_PROG, "-f", "all", target],
                              env=TWO_TO_THREE_ENV)
         if options.rigorous:
             trials = 5
@@ -838,7 +839,7 @@ def Measure2to3(python, options):
         mem_usage = []
         for _ in range(trials):
             start_time = GetChildUserTime()
-            subproc = subprocess.Popen(LogCall(python + ["-E",
+            subproc = subprocess.Popen(LogCall(python + [
                                                 TWO_TO_THREE_PROG,
                                                 "-f", "all",
                                                 target]),
@@ -913,8 +914,9 @@ def _ComesWithPsyco(python):
     """
     try:
         with open(os.devnull, "wb") as dev_null:
-            subprocess.check_call(python + ["-E", "-c", "import psyco"],
-                                  stdout=dev_null, stderr=dev_null)
+            subprocess.check_call(python + ["-c", "import psyco"],
+                                  stdout=dev_null, stderr=dev_null,
+                                  env=BuildEnv())
         return True
     except subprocess.CalledProcessError:
         return False
@@ -1093,10 +1095,11 @@ def BM_Ai(*args, **kwargs):
 
 
 def _StartupPython(command, mem_usage, track_memory):
+    startup_env = BuildEnv()
     if not track_memory:
-        subprocess.check_call(command)
+        subprocess.check_call(command, env=startup_env)
     else:
-        subproc = subprocess.Popen(command)
+        subproc = subprocess.Popen(command, env=startup_env)
         future = MemoryUsageFuture(subproc.pid)
         if subproc.wait() != 0:
             raise RuntimeError("Startup benchmark died")
@@ -1151,7 +1154,7 @@ def BM_normal_startup(base_python, changed_python, options):
     else:
         num_loops = 50
 
-    opts = ["-E"]
+    opts = []
     changed_data = MeasureStartup(changed_python, opts, num_loops,
                                   options.track_memory)
     base_data = MeasureStartup(base_python, opts, num_loops,
@@ -1168,7 +1171,7 @@ def BM_startup_nosite(base_python, changed_python, options):
     else:
         num_loops = 100
 
-    opts = ["-E", "-S"]
+    opts = ["-S"]
     changed_data = MeasureStartup(changed_python, opts, num_loops,
                                   options.track_memory)
     base_data = MeasureStartup(base_python, opts, num_loops,
