@@ -1373,7 +1373,7 @@ BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
                 "micro": ["unpack_sequence", "call_simple"],
-                "app": ["2to3", "html5lib", "spambayes"],
+                "apps": ["2to3", "html5lib", "rietveld", "spambayes"],
                 "all": _FindAllBenchmarks().keys(),
                }
 
