@@ -891,6 +891,14 @@ def BM_Django(*args, **kwargs):
     return SimpleBenchmark(MeasureDjango, *args, **kwargs)
 
 
+def MeasureFloat(python, options):
+    bm_path = Relative("performance/bm_float.py")
+    return MeasureGeneric(python, options, bm_path)
+
+def BM_Float(*args, **kwargs):
+    return SimpleBenchmark(MeasureFloat, *args, **kwargs)
+
+
 def MeasureRietveld(python, options):
     PYTHONPATH = ":".join([DJANGO_DIR,
                            # These paths are lifted from
@@ -1385,7 +1393,7 @@ BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
-                "micro": ["unpack_sequence", "call_simple"],
+                "micro": ["unpack_sequence", "call_simple", "float"],
                 "apps": ["2to3", "html5lib", "rietveld", "spambayes"],
                 "all": _FindAllBenchmarks().keys(),
                }
