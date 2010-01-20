@@ -1,0 +1,48 @@
+=================================
+Bazaar Developer Document Catalog
+=================================
+
+Enhancing Bazaar
+================
+
+.. toctree::
+   :maxdepth: 1
+
+   process
+   HACKING
+   testing
+
+* `Bazaar Writer Guide <http://bazaar-vcs.org/ContributingToTheDocs>`_ (web link)
+
+
+Developing using bzrlib
+=======================
+
+.. toctree::
+   :maxdepth: 1
+
+   overview
+   integration
+
+* `Writing plugins for Bazaar <http://bazaar-vcs.org/WritingPlugins>`_ (web link) 
+
+* `bzrlib API reference <http://starship.python.net/crew/mwh/bzrlibapi/>`_ 
+  (web link)
+
+
+Other documents
+===============
+
+.. toctree::
+   :maxdepth: 1
+
+   plans
+   specifications
+   implementation-notes
+   miscellaneous-notes
+
+
+.. |--| unicode:: U+2014
+
+..
+   vim: ft=rst tw=74 ai

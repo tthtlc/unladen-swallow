@@ -30,7 +30,7 @@ import time
 # The AppEngine SDK and Rietveld don't ship any tests.
 # TODO(collinwinter): add test integration for Spitfire.
 SKIP_LIBS = set(["psyco", ".svn", "spitfire", "mercurial", "google_appengine",
-                 "rietveld", "spambayes", "lockfile", "html5lib"])
+                 "rietveld", "spambayes", "lockfile", "html5lib", "bazaar"])
 
 
 @contextlib.contextmanager
