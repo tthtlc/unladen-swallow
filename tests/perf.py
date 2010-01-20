@@ -542,6 +542,8 @@ def TemporaryFilename(prefix):
 
 
 def TimeDelta(old, new):
+    if old == 0 or new == 0:
+        return "incomparable (one result was zero)"
     if new > old:
         return "%.4fx slower" % (new / old)
     elif new < old:
@@ -551,6 +553,8 @@ def TimeDelta(old, new):
 
 
 def QuantityDelta(old, new):
+    if old == 0 or new == 0:
+        return "incomparable (one result was zero)"
     if new > old:
         return "%.4fx larger" % (new / old)
     elif new < old:
