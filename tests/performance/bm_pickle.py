@@ -17,7 +17,6 @@ __author__ = "collinwinter@google.com (Collin Winter)"
 
 # Python imports
 import datetime
-import gc
 import optparse
 import random
 import sys
@@ -25,8 +24,6 @@ import time
 
 # Local imports
 import util
-
-gc.disable()  # Minimize jitter.
 
 DICT = {
     'ads_flags': 0L,
