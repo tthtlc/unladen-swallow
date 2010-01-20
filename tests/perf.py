@@ -562,7 +562,10 @@ def QuantityDelta(old, new):
 def BuildEnv(env=None, inherit_env=[]):
     """Massage an environment variables dict for the host platform.
 
-    Platforms like Win32 require certain env vars to be set.
+    Massaging performed (in this order):
+    - Add any variables named in inherit_env.
+    - Copy PYTHONPATH to JYTHONPATH to support Jython.
+    - Win32 requires certain env vars to be set.
 
     Args:
         env: optional; environment variables dict. If this is omitted, start
@@ -578,6 +581,8 @@ def BuildEnv(env=None, inherit_env=[]):
     fixed_env = env.copy()
     for varname in inherit_env:
         fixed_env[varname] = os.environ[varname]
+    if "PYTHONPATH" in fixed_env:
+        fixed_env["JYTHONPATH"] = fixed_env["PYTHONPATH"]
     if sys.platform == "win32":
         # Win32 requires certain environment variables be present
         for k in ("COMSPEC", "SystemRoot"):
