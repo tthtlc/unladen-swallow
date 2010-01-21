@@ -832,38 +832,43 @@ def BM_PyBench(base_python, changed_python, options):
         return result
 
 
-def Measure2to3(python, options):
-    FAST_TARGET = Relative("lib/2to3/lib2to3/refactor.py")
-    TWO_TO_THREE_PROG = Relative("lib/2to3/2to3")
-    TWO_TO_THREE_DIR = Relative("lib/2to3")
-    TWO_TO_THREE_ENV = BuildEnv(inherit_env=options.inherit_env)
+def MeasureCommand(command, iterations, env, track_memory):
+    """Helper function to run arbitrary commands multiple times.
 
-    if options.fast:
-        target = FAST_TARGET
-    else:
-        target = TWO_TO_THREE_DIR
+    Differences from MeasureGeneric():
+        - MeasureGeneric() works with the performance/bm_*.py scripts.
+        - MeasureCommand() does not echo every command run; it is intended for
+          high-volume commands, like startup benchmarks
 
+    Args:
+        command: list of strings to be passed to Popen.
+        iterations: number of times to run the command.
+        env: environment vars dictionary.
+        track_memory: bool to indicate whether to track memory usage.
+
+    Returns:
+        (times, mem_usage) 2-tuple, where times is a list of floats giving the
+        running time of the benchmark iterations; and mem_usage is a list of
+        floats giving memory usage samples.
+    """
     with open(os.devnull, "wb") as dev_null:
         RemovePycs()
-        # Warm up the cache and .pyc files. Use CallAndCaptureOutput() for its
-        # more useful error messages.
-        CallAndCaptureOutput(python +
-                             [TWO_TO_THREE_PROG, "-f", "all", target],
-                             env=TWO_TO_THREE_ENV)
-        if options.rigorous:
-            trials = 5
-        else:
-            trials = 1
+
+        # Priming run (create pyc files, etc).
+        CallAndCaptureOutput(command, env=env)
+
+        an_s = "s"
+        if iterations == 1:
+            an_s = ""
+        info("Running `%s` %d time%s", command, iterations, an_s)
+
         times = []
         mem_usage = []
-        for _ in range(trials):
+        for _ in range(iterations):
             start_time = GetChildUserTime()
-            subproc = subprocess.Popen(LogCall(python + [
-                                                TWO_TO_THREE_PROG,
-                                                "-f", "all",
-                                                target]),
+            subproc = subprocess.Popen(command,
                                        stdout=dev_null, stderr=subprocess.PIPE,
-                                       env=TWO_TO_THREE_ENV)
+                                       env=env)
             if options.track_memory:
                 future = MemoryUsageFuture(subproc.pid)
             _, err = subproc.communicate()
@@ -883,8 +888,70 @@ def Measure2to3(python, options):
     return times, mem_usage
 
 
+def Measure2to3(python, options):
+    fast_target = Relative("lib/2to3/lib2to3/refactor.py")
+    two_to_three_bin = Relative("lib/2to3/2to3")
+    two_to_three_dir = Relative("lib/2to3")
+    env = BuildEnv({"PYTHONPATH": two_to_three_dir},
+                   inherit_env=options.inherit_env)
+
+    # This can be compressed, but it's harder to understand.
+    if options.fast:
+        trials = 1
+        target = fast_target
+    elif options.rigorous:
+        trials = 5
+        target = two_to_three_dir
+    else:
+        trials = 1
+        target = two_to_three_dir
+
+    command = python + [two_to_three_bin, "-f", "all", target]
+    return MeasureCommand(command, trials, env, options.track_memory)
+
+
 def BM_2to3(*args, **kwargs):
     return SimpleBenchmark(Measure2to3, *args, **kwargs)
+
+
+def MeasureHgStartup(python, options):
+    hg_bin = Relative("lib/mercurial/hg")
+    hg_dir = Relative("lib/mercurial")
+    hg_lib_dir = Relative("lib/mercurial/mercurial/pure")
+    hg_path = ":".join([hg_dir, hg_lib_dir])
+    hg_env = BuildEnv({"PYTHONPATH": hg_path}, options.inherit_env)
+
+    trials = 500
+    if options.rigorous:
+        trials = 1000
+    elif options.fast:
+        trials = 100
+
+    command = python + [hg_bin, "help"]
+    return MeasureCommand(command, trials, hg_env, options.track_memory)
+
+
+def BM_hg_startup(*args, **kwargs):
+    return SimpleBenchmark(MeasureHgStartup, *args, **kwargs)
+
+
+def MeasureBzrStartup(python, options):
+    bzr_bin = Relative("lib/bazaar/bzr")
+    bzr_path = Relative("lib/bazaar")
+    bzr_env = BuildEnv({"PYTHONPATH": bzr_path}, options.inherit_env)
+
+    trials = 100
+    if options.rigorous:
+        trials = 200
+    elif options.fast:
+        trials = 10
+
+    command = python + [bzr_bin, "help"]
+    return MeasureCommand(command, trials, bzr_env, options.track_memory)
+
+
+def BM_bzr_startup(*args, **kwargs):
+    return SimpleBenchmark(MeasureBzrStartup, *args, **kwargs)
 
 
 DJANGO_DIR = Relative("lib/django")
@@ -1398,7 +1465,8 @@ def _FindAllBenchmarks():
 # If you update the default group, be sure to update the module docstring, too.
 BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                             "slowpickle", "slowunpickle", "spambayes"],
-                "startup": ["normal_startup", "startup_nosite"],
+                "startup": ["normal_startup", "startup_nosite",
+                            "bzr_startup", "hg_startup"],
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
