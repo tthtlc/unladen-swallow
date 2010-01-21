@@ -340,19 +340,116 @@ class MemoryUsageFuture(threading.Thread):
         return self._usage
 
 
+class BenchmarkResult(object):
+    """An object representing data from a succesful benchmark run.
+
+    Can be converted to a string by calling string_representation().
+    """
+
+    def __init__(self, min_base, min_changed, delta_min, avg_base,
+                 avg_changed, delta_avg, t_msg, std_base, std_changed,
+                 delta_std, timeline_link):
+        self.min_base      = min_base
+        self.min_changed   = min_changed
+        self.delta_min     = delta_min
+        self.avg_base      = avg_base
+        self.avg_changed   = avg_changed
+        self.delta_avg     = delta_avg
+        self.t_msg         = t_msg
+        self.std_base      = std_base
+        self.std_changed   = std_changed
+        self.delta_std     = delta_std
+        self.timeline_link = timeline_link
+
+    def get_timeline(self):
+        if self.timeline_link is None:
+            return ""
+        return "\nTimeline: %(timeline_link)s" % self.__dict__
+
+    def string_representation(self):
+        return (("Min: %(min_base)f -> %(min_changed)f:" +
+                 " %(delta_min)s\n" +
+                 "Avg: %(avg_base)f -> %(avg_changed)f:" +
+                 " %(delta_avg)s\n" + self.t_msg +
+                 "Stddev: %(std_base).5f -> %(std_changed).5f:" +
+                 " %(delta_std)s" + self.get_timeline())
+                 % self.__dict__)
+
+
+class BenchmarkError(object):
+    """Object representing the error from a failed benchmark run.
+
+    Can be converted to a string by calling string_representation().
+    """
+
+    def __init__(self, e):
+        self.msg = str(e)
+
+    def string_representation(self):
+        return self.msg
+
+
+class MemoryUsageResult(object):
+    """Object representing memory usage data from a successful benchmark run.
+
+    Can be converted to a string by calling string_representation().
+    """
+
+    def __init__(self, max_base, max_changed, delta_max, chart_link):
+        self.max_base    = max_base
+        self.max_changed = max_changed
+        self.delta_max   = delta_max
+        self.chart_link  = chart_link
+
+    def get_usage_over_time(self):
+        if self.chart_link is None:
+            return ""
+        return "\nUsage over time: %(chart_link)s" % self.__dict__
+
+    def string_representation(self):
+        return (("Mem max: %(max_base).3f -> %(max_changed).3f:" +
+                 " %(delta_max)s" + self.get_usage_over_time())
+                 % self.__dict__)
+
+
+class SimpleBenchmarkResult(object):
+    """Object representing result data from a successful benchmark run.
+
+    Can be converted to a string by calling string_representation().
+    """
+
+    def __init__(self, base_time, changed_time, time_delta):
+        self.base_time    = base_time
+        self.changed_time = changed_time
+        self.time_delta   = time_delta
+
+    def string_representation(self):
+        return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
+                % self.__dict__)
+
+
 def CompareMemoryUsage(base_usage, changed_usage, options):
-    """Like CompareMultipleRuns, but for memory usage."""
+    """Like CompareMultipleRuns, but for memory usage.
+
+    Args:
+        base_usage: list of the memory usage numbers for the control.
+        changed_usage: list of the memory usage numbers for the experiment.
+        options: optparse.Values instance.
+
+    Returns:
+        A MemoryUsageResult object.
+    """
     max_base, max_changed = max(base_usage), max(changed_usage)
     delta_max = QuantityDelta(max_base, max_changed)
 
-    chart_link = GetChart(SummarizeData(base_usage),
-                          SummarizeData(changed_usage),
-                          options)
+    if options.disable_timelines:
+        chart_link = None
+    else:
+        chart_link = GetChart(SummarizeData(base_usage),
+                              SummarizeData(changed_usage),
+                              options)
 
-    return (("Mem max: %(max_base).3f -> %(max_changed).3f:" +
-             " %(delta_max)s\n" +
-             "Usage over time: %(chart_link)s")
-             % locals())
+    return MemoryUsageResult(max_base, max_changed, delta_max, chart_link)
 
 
 ### Utility functions
@@ -377,8 +474,8 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
         *args, **kwargs: will be passed through to benchmark_function. 
 
     Returns:
-        String summarizing the differences between the two benchmark runs,
-        suitable for human consumption.
+        A BenchmarkResult object if the benchmark runs succeeded.
+        A BenchmarkError object if either benchmark run failed.
     """
     try:
         changed_data = benchmark_function(changed_python, options,
@@ -386,7 +483,7 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
         base_data = benchmark_function(base_python, options,
                                        *args, **kwargs)
     except subprocess.CalledProcessError, e:
-        return str(e)
+        return BenchmarkError(e)
 
     return CompareBenchmarkData(base_data, changed_data, options)
 
@@ -401,8 +498,11 @@ def GetChart(base_data, changed_data, options, chart_margin=100):
         chart_margin: optional integer margin to add/sub from the max/min.
 
     Returns:
-        Google Chart API URL as a string.
+        Google Chart API URL as a string; or None, if options.disable_timelines
+        is true.
     """
+    if options.disable_timelines:
+        return None
     # We use these to scale the graph.
     min_data = min(min(base_data), min(changed_data)) - chart_margin
     max_data = max(max(base_data), max(changed_data)) + chart_margin
@@ -511,7 +611,7 @@ def RemovePycs():
 
 
 def Relative(path):
-    return os.path.join(os.path.dirname(sys.argv[0]), path)
+    return os.path.join(os.path.dirname(__file__), path)
 
 
 def LogCall(command):
@@ -604,8 +704,9 @@ def CompareMultipleRuns(base_times, changed_times, options):
         options: optparse.Values instance.
 
     Returns:
-        A string summarizing the difference between the runs, suitable for
-        human consumption.
+        A BenchmarkResult object, summarizing the difference between the two
+        runs; or a SimpleBenchmarkResult object, if there was only one data
+        point per run.
     """
     assert len(base_times) == len(changed_times)
     if len(base_times) == 1:
@@ -613,8 +714,7 @@ def CompareMultipleRuns(base_times, changed_times, options):
         # below.
         base_time, changed_time = base_times[0], changed_times[0]
         time_delta = TimeDelta(base_time, changed_time)
-        return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
-                % locals())
+        return SimpleBenchmarkResult(base_time, changed_time, time_delta)
 
     # Create a chart showing iteration times over time. We round the times so
     # as not to exceed the GET limit for Google's chart server.
@@ -638,14 +738,9 @@ def CompareMultipleRuns(base_times, changed_times, options):
     if significant:
         t_msg = "Significant (t=%f, a=0.95)\n" % t_score
 
-    return (("Min: %(min_base)f -> %(min_changed)f:" +
-             " %(delta_min)s\n" +
-             "Avg: %(avg_base)f -> %(avg_changed)f:" +
-             " %(delta_avg)s\n" + t_msg +
-             "Stddev: %(std_base).5f -> %(std_changed).5f:" +
-             " %(delta_std)s\n" +
-             "Timeline: %(timeline_link)s")
-             % locals())
+    return BenchmarkResult(min_base, min_changed, delta_min, avg_base,
+                           avg_changed, delta_avg, t_msg, std_base,
+                           std_changed, delta_std, timeline_link)
 
 
 def CompareBenchmarkData(base_data, changed_data, options):
@@ -659,8 +754,9 @@ def CompareBenchmarkData(base_data, changed_data, options):
         options: optparse.Values instance.
 
     Returns:
-        Human-readable summary of the difference between the base and changed
-        binaries.
+        A BenchmarkResult object, summarizing the difference between the two
+        runs; or a SimpleBenchmarkResult object, if there was only one data
+        point per run.
     """
     base_times, base_mem = base_data
     changed_times, changed_mem = changed_data
@@ -755,6 +851,23 @@ def MeasureGeneric(python, options, bm_path, bm_env=None,
 
 ### Benchmarks
 
+class PyBenchBenchmarkResult(object):
+
+    def __init__(self, min_base, min_changed, delta_min,
+                 avg_base, avg_changed, delta_avg):
+        self.min_base = min_base
+        self.min_changed = min_changed
+        self.delta_min = delta_min
+        self.avg_base = avg_base
+        self.avg_changed = avg_changed
+        self.delta_avg = delta_avg
+
+    def string_representation(self):
+        return (("Min: %(min_base)d -> %(min_changed)d: %(delta_min)s\n" +
+                 "Avg: %(avg_base)d -> %(avg_changed)d: %(delta_avg)s")
+                % self.__dict__)
+
+
 _PY_BENCH_TOTALS_LINE = re.compile("""
     Totals:\s+(?P<min_base>\d+)ms\s+
     (?P<min_changed>\d+)ms\s+
@@ -763,6 +876,7 @@ _PY_BENCH_TOTALS_LINE = re.compile("""
     (?P<avg_changed>\d+)ms\s+
     \S+  # Second percent change, also re-computed
     """, re.X)
+
 def MungePyBenchTotals(line):
     m = _PY_BENCH_TOTALS_LINE.search(line)
     if m:
@@ -770,15 +884,14 @@ def MungePyBenchTotals(line):
             "min_base", "min_changed", "avg_base", "avg_changed"))
         delta_min = TimeDelta(min_base, min_changed)
         delta_avg = TimeDelta(avg_base, avg_changed)
-        return (("Min: %(min_base)d -> %(min_changed)d: %(delta_min)s\n" +
-                 "Avg: %(avg_base)d -> %(avg_changed)d: %(delta_avg)s")
-                % locals())
-    return line
+        return PyBenchBenchmarkResult(min_base, min_changed, delta_min,
+                                      avg_base, avg_changed, delta_avg)
+    return BenchmarkError(line)
 
 
 def BM_PyBench(base_python, changed_python, options):
     if options.track_memory:
-        return "Benchmark does not report memory usage yet"
+        return BenchmarkError("Benchmark does not report memory usage yet")
 
     warp = "10"
     if options.rigorous:
@@ -818,18 +931,18 @@ def BM_PyBench(base_python, changed_python, options):
                                          env=PYBENCH_ENV)
             result, err = comparer.communicate()
             if comparer.returncode != 0:
-                return "pybench died: " + err
+                return BenchmarkError("pybench died: " + err)
     except subprocess.CalledProcessError, e:
-        return str(e)
+        return BenchmarkError(e)
 
     if options.verbose:
-        return result
+        return BenchmarkError(result)
     else:
         for line in result.splitlines():
             if line.startswith("Totals:"):
                 return MungePyBenchTotals(line)
         # The format's wrong...
-        return result
+        return BenchmarkError(result)
 
 
 def MeasureCommand(command, iterations, env, track_memory):
@@ -1454,15 +1567,18 @@ def BM_richards(*args, **kwargs):
 
 ### End benchmarks, begin main entry point support.
 
-def _FindAllBenchmarks():
+def _FindAllBenchmarks(namespace):
     return dict((name[3:].lower(), func)
-                for (name, func) in sorted(globals().iteritems())
+                for (name, func) in sorted(namespace.iteritems())
                 if name.startswith("BM_"))
 
+BENCH_FUNCS = _FindAllBenchmarks(globals())
 
 # Benchmark groups. The "default" group is what's run if no -b option is
-# specified. The "all" group includes every benchmark perf.py knows about.
+# specified. 
 # If you update the default group, be sure to update the module docstring, too.
+# An "all" group which includes every benchmark perf.py knows about is generated
+# automatically.
 BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                             "slowpickle", "slowunpickle", "spambayes"],
                 "startup": ["normal_startup", "startup_nosite",
@@ -1472,11 +1588,10 @@ BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                 "cpickle": ["pickle", "unpickle"],
                 "micro": ["unpack_sequence", "call_simple", "float"],
                 "apps": ["2to3", "html5lib", "rietveld", "spambayes"],
-                "all": _FindAllBenchmarks().keys(),
                }
 
 
-def _ExpandBenchmarkName(bm_name):
+def _ExpandBenchmarkName(bm_name, bench_groups):
     """Recursively expand name benchmark names.
 
     Args:
@@ -1485,16 +1600,16 @@ def _ExpandBenchmarkName(bm_name):
     Yields:
         Names of actual benchmarks, with all group names fully expanded.
     """
-    expansion = BENCH_GROUPS.get(bm_name)
+    expansion = bench_groups.get(bm_name)
     if expansion:
         for name in expansion:
-            for name in _ExpandBenchmarkName(name):
+            for name in _ExpandBenchmarkName(name, bench_groups):
                 yield name
     else:
         yield bm_name
 
 
-def ParseBenchmarksOption(benchmarks_opt):
+def ParseBenchmarksOption(benchmarks_opt, bench_groups):
     """Parses and verifies the --benchmarks option.
 
     Args:
@@ -1503,7 +1618,7 @@ def ParseBenchmarksOption(benchmarks_opt):
     Returns:
         A set() of the names of the benchmarks to run.
     """
-    legal_benchmarks = BENCH_GROUPS["all"]
+    legal_benchmarks = bench_groups["all"]
     benchmarks = benchmarks_opt.split(",")
     positive_benchmarks = set(
         bm.lower() for bm in benchmarks if bm and bm[0] != "-")
@@ -1512,16 +1627,16 @@ def ParseBenchmarksOption(benchmarks_opt):
 
     should_run = set()
     if not positive_benchmarks:
-        should_run = set(_ExpandBenchmarkName("default"))
+        should_run = set(_ExpandBenchmarkName("default", bench_groups))
 
     for name in positive_benchmarks:
-        for bm in _ExpandBenchmarkName(name):
+        for bm in _ExpandBenchmarkName(name, bench_groups):
             if bm not in legal_benchmarks:
                 logging.warning("No benchmark named %s", bm)
             else:
                 should_run.add(bm)
     for bm in negative_benchmarks:
-        if bm in BENCH_GROUPS:
+        if bm in bench_groups:
             raise ValueError("Negative groups not supported: -%s" % bm)
         elif bm not in legal_benchmarks:
             logging.warning("No benchmark named %s", bm)
@@ -1554,10 +1669,10 @@ def ParseEnvVars(option, opt_str, value, parser):
     """Parser callback to --inherit_env var names."""
     parser.values.inherit_env = [v for v in value.split(",") if v]
 
-
-if __name__ == "__main__":
-    bench_funcs = _FindAllBenchmarks()
-    all_benchmarks = BENCH_GROUPS["all"]
+def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
+    bench_groups = bench_groups.copy()
+    all_benchmarks = bench_funcs.keys()
+    bench_groups["all"] = all_benchmarks
 
     parser = optparse.OptionParser(
         usage="%prog [options] baseline_python changed_python",
@@ -1588,14 +1703,16 @@ if __name__ == "__main__":
                             " benchmarks except the negative arguments. " +
                             " Otherwise we run only the positive arguments. " +
                             " Valid benchmarks are: " +
-                            ", ".join(BENCH_GROUPS.keys() + all_benchmarks)))
+                            ", ".join(bench_groups.keys() + all_benchmarks)))
     parser.add_option("--inherit_env", metavar="VAR_LIST", type="string",
                       action="callback", callback=ParseEnvVars, default=[],
                       help=("Comma-separated list of environment variable names"
                             " that are inherited from the parent environment"
                             " when running benchmarking subprocesses."))
+    parser.add_option("--disable_timelines", default=False, action="store_true",
+                      help="Don't use Google charts for displaying timelines.")
 
-    options, args = parser.parse_args()
+    options, args = parser.parse_args(argv)
     if len(args) != 2:
         parser.error("incorrect number of arguments")
     base, changed = args
@@ -1616,7 +1733,7 @@ if __name__ == "__main__":
             parser.error("--track_memory requires Windows with PyWin32 or " +
                          "Linux 2.6.16 or above")
 
-    should_run = ParseBenchmarksOption(options.benchmarks)
+    should_run = ParseBenchmarksOption(options.benchmarks, bench_groups)
 
     results = []
     for name in sorted(should_run):
@@ -1632,4 +1749,8 @@ if __name__ == "__main__":
     for name, result in results:
         print
         print "###", name, "###"
-        print result
+        print result.string_representation()
+    return results
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
