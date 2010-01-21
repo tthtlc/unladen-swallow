@@ -59,6 +59,8 @@ python unladen-bmarks/perf.py -r -b apps control/python experiment/python
   * *spitfire* - use the [http://code.google.com/p/spitfire/ Spitfire template system] to build a 1000x1000-cell HTML table, taking advantage of Psyco for acceleration.
   * *spambayes* - run a canned mailbox through a [http://spambayes.sourceforge.net/ SpamBayes] ham/spam classifier.
   * *startup* - collection of microbenchmarks focused on Python interpreter start-up time:
+    * *bzr_startup* - get [http://bazaar.canonical.com/ Bazaar]'s help screen.
+    * *hg_startup* - get [http://mercurial.selenic.com/ Mercurial]'s help screen.
     * *normal_startup* - start Python, then exit immediately.
     * *startup_nosite* - start Python with the `-S` option, then exit immediately.
   * *threading* - collection of microbenchmarks for Python's threading support. These benchmarks come in pairs: an iterative version (iterative_foo), and a multithreaded version (threaded_foo).
