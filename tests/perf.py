@@ -982,21 +982,21 @@ def MeasureCommand(command, iterations, env, track_memory):
             subproc = subprocess.Popen(command,
                                        stdout=dev_null, stderr=subprocess.PIPE,
                                        env=env)
-            if options.track_memory:
+            if track_memory:
                 future = MemoryUsageFuture(subproc.pid)
             _, err = subproc.communicate()
             if subproc.returncode != 0:
                 raise RuntimeError("Benchmark died: " + err)
-            if options.track_memory:
+            if track_memory:
                 mem_samples = future.GetMemoryUsage()
             end_time = GetChildUserTime()
             elapsed = end_time - start_time
             assert elapsed != 0
             times.append(elapsed)
-            if options.track_memory:
+            if track_memory:
                 mem_usage.extend(mem_samples)
 
-    if not options.track_memory:
+    if not track_memory:
         mem_usage = None
     return times, mem_usage
 
