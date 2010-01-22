@@ -1539,7 +1539,7 @@ def BM_spambayes(*args, **kwargs):
     return SimpleBenchmark(MeasureSpamBayes, *args, **kwargs)
 
 
-def MeasureHtml5lib(python, options):
+def MeasureHtml5libWarmup(python, options):
     """Test the performance of the html5lib HTML 5 parser.
 
     Args:
@@ -1557,8 +1557,27 @@ def MeasureHtml5lib(python, options):
                           iteration_scaling=0.10)
 
 
+def BM_html5lib_warmup(*args, **kwargs):
+    return SimpleBenchmark(MeasureHtml5libWarmup, *args, **kwargs)
+
+
+def MeasureHtml5lib(python, options):
+    bm_path = Relative("performance/bm_html5lib.py")
+    bm_env = {"PYTHONPATH": Relative("lib/html5lib")}
+
+    trials = 5
+    if options.fast:
+        trials = 1
+    elif options.rigorous:
+        trials = 10
+
+    command = python + [bm_path, "-n", "1"]
+    return MeasureCommand(command, trials, bm_env, options.track_memory)
+
+
 def BM_html5lib(*args, **kwargs):
     return SimpleBenchmark(MeasureHtml5lib, *args, **kwargs)
+
 
 def MeasureRichards(python, options):
     bm_path = Relative("performance/bm_richards.py")
