@@ -504,8 +504,10 @@ def GetChart(base_data, changed_data, options, chart_margin=100):
     if options.disable_timelines:
         return None
     # We use these to scale the graph.
-    min_data = min(min(base_data), min(changed_data)) - chart_margin
     max_data = max(max(base_data), max(changed_data)) + chart_margin
+    min_data = min(min(base_data), min(changed_data)) - chart_margin
+    if min_data < 0:
+        min_data = 0
     # Google-bound data, formatted as desired by the Chart API.
     data_for_google = (",".join(map(str, base_data)) + "|" +
                        ",".join(map(str, changed_data)))
