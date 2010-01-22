@@ -471,7 +471,7 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
         base_python: path to the reference Python binary.
         changed_python: path to the experimental Python binary.
         options: optparse.Values instance.
-        *args, **kwargs: will be passed through to benchmark_function. 
+        *args, **kwargs: will be passed through to benchmark_function.
 
     Returns:
         A BenchmarkResult object if the benchmark runs succeeded.
@@ -787,7 +787,7 @@ def CallAndCaptureOutput(command, env=None, track_memory=False, inherit_env=[]):
     Returns:
         (stdout, mem_usage), where stdout is the captured stdout as a string;
         mem_usage is a list of memory usage samples in kilobytes (if
-        track_memory is False, mem_usage is None). 
+        track_memory is False, mem_usage is None).
 
     Raises:
         RuntimeError: if the command failed. The value of the exception will
@@ -1577,7 +1577,7 @@ def _FindAllBenchmarks(namespace):
 BENCH_FUNCS = _FindAllBenchmarks(globals())
 
 # Benchmark groups. The "default" group is what's run if no -b option is
-# specified. 
+# specified.
 # If you update the default group, be sure to update the module docstring, too.
 # An "all" group which includes every benchmark perf.py knows about is generated
 # automatically.
