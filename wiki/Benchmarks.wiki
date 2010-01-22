@@ -42,7 +42,7 @@ python unladen-bmarks/perf.py -r -b apps control/python experiment/python
   * *2to3* - have [http://svn.python.org/view/sandbox/trunk/2to3/ the 2to3 tool] translate itself.
   * *django* - use the [http://www.djangoproject.com/ Django template system] to build a 150x150-cell HTML table.
   * *html5lib* - parse [http://svn.whatwg.org/webapps/index the HTML 5 spec] using [http://code.google.com/p/html5lib/ html5lib].
-  * *html5lib_warmup* - like `html5lib`, but gives the JIT a change to warm up by doing the iterations in the same process.
+  * *html5lib_warmup* - like `html5lib`, but gives the JIT a chance to warm up by doing the iterations in the same process.
   * *nbody* - the [http://shootout.alioth.debian.org/u64q/benchmark.php?test=nbody&lang=python&id=4 N-body Shootout benchmark]. Microbenchmark for floating point operations.
   * *pickle* - use the `cPickle` module to pickle a variety of datasets.
   * *pickle_dict* - microbenchmark; use the `cPickle` module to pickle a lot of dicts.
