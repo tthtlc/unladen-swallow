@@ -1084,7 +1084,7 @@ def BM_Django(*args, **kwargs):
 
 def MeasureFloat(python, options):
     bm_path = Relative("performance/bm_float.py")
-    return MeasureGeneric(python, options, bm_path)
+    return MeasureGeneric(python, options, bm_path, iteration_scaling=5)
 
 def BM_Float(*args, **kwargs):
     return SimpleBenchmark(MeasureFloat, *args, **kwargs)
