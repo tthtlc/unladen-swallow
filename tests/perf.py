@@ -488,6 +488,9 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
     return CompareBenchmarkData(base_data, changed_data, options)
 
 
+def _FormatData(num):
+    return str(round(num, 2))
+
 def GetChart(base_data, changed_data, options, chart_margin=100):
     """Build a Google Chart API URL for the given data.
 
@@ -509,8 +512,8 @@ def GetChart(base_data, changed_data, options, chart_margin=100):
     if min_data < 0:
         min_data = 0
     # Google-bound data, formatted as desired by the Chart API.
-    data_for_google = (",".join(map(str, base_data)) + "|" +
-                       ",".join(map(str, changed_data)))
+    data_for_google = (",".join(map(_FormatData, base_data)) + "|" +
+                       ",".join(map(_FormatData, changed_data)))
 
     # Come up with labels for the X axis; not too many, though, or they'll be
     # unreadable.
@@ -720,8 +723,8 @@ def CompareMultipleRuns(base_times, changed_times, options):
 
     # Create a chart showing iteration times over time. We round the times so
     # as not to exceed the GET limit for Google's chart server.
-    timeline_link = GetChart([round(t, 2) for t in base_times],
-                             [round(t, 2) for t in changed_times],
+    timeline_link = GetChart(SummarizeData(base_times),
+                             SummarizeData(changed_times),
                              options, chart_margin=1)
 
     base_times = sorted(base_times)
