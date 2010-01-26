@@ -1,0 +1,321 @@
+How Unladen Swallow Uses LLVM
+=============================
+
+This document tries to provide a high-level overview of how LLVM is used inside
+Unladen Swallow, including details of all the optimizations implemented for
+LLVM-generated Python machine code. This document should be as
+developer-centric as possible: it should be able to answer questions like,
+"how does Unladen Swallow determine function hotness" and also "where is that
+implemented?".
+
+TODO(collinwinter): move the CodeLifecycle wiki page into this file.
+
+Invariants
+----------
+
+- If f->f_use_llvm is true, co->co_use_llvm is true; if co->co_use_llvm is true,
+  f->f_use_llvm may be true. Individual execution frames may disable LLVM for
+  a number of reasons: if tracing is enabled, or if some assumptions in the
+  machine code are known not to hold in this particular frame of execution.
+
+
+Feedback-directed optimization
+------------------------------
+
+- TODO: Explain data gathering (r778)
+- TODO: Bailing back to the interpreter
+
+If run with `-j never` or `-j always`, Unladen Swallow will not gather any data
+at runtime.
+
+Whenever we encode assumptions about the world into the generated machine code,
+we need a way to detect that those assumptions are no longer valid and recover
+gracefully. These assumptions are protected by cheap-to-execute tests called
+*guards*. These guards come in two flavors: fatal guards and non-fatal guards.
+
+Fatal guards:
+Let's say that we've implemented an optimization that embeds pointers to builtin
+functions in the generated machine code as immediates. If someone rebinds the
+`len` builtin, any pointer we've embedded to the `builtin_len` C function is no
+longer valid (we should be calling the new `len` instead); since the pointers
+are immediates in the machine code, the whole machine code function is invalid,
+and needs to be recompiled. Because we cannot reuse the machine code once the
+guard `actual_len == expected_len` fails, we say that the guard failure is
+fatal.
+
+Non-fatal guards:
+By constrast, there are some guards that do not invalidate the machine code
+when they fail. One such example is that machine code functions do not support
+tracing: if they detect that tracing has been turned on, they immediately
+bail to the interpreter. Once tracing is disabled, though, it's perfectly safe
+to start using the machine code again.
+
+
+Hotness model: finding critical functions
+-----------------------------------------
+
+We use an online model to estimate which functions are most critical to an
+application's performance. This model is as follows:
+
+- Each code object has a hotness level (the co_hotness field).
+    - For each function entry, add 10 to the hotness level.
+    - For each loop backedge, add 1 to the hotness level.
+- If the hotness level exceeds a given threshold (see eval.cc),
+  compile the code object to machine code via LLVM. This check is done on
+  function-entry and generator re-entry.
+
+There several classes of functions we're trying to catch with this model:
+
+- Straight-line utility functions (lots of invocations, low running time).
+- Loop-heavy main functions (few invocations, high running time).
+- Long-running generators (few invocations, long lifetime).
+
+Previous models:
+- Simple call count-based model (10000 calls == hot). This was implemented as
+  an obviously-deficient baseline to be improved upon.
+- Previously, we didn't check code hotness on generator re-entry, which we
+  changed to catch long-running generators that are called once.
+
+Instrumentation:
+- Passing --with-instrumentation to ./configure will cause Python to print,
+  among other things, a table of function hotness at interpreter-shutdown.
+  Misc/diff_hotness.py can then be used to highlight the differences between
+  two of these tables, showing the effects of changes to the model.
+
+
+Memory use: Destroying unused LLVM globals
+------------------------------------------
+
+When a user compiles a PyCodeObject to an llvm::Function, that Function holds
+references to lots of other llvm::GlobalValues produced by the PyConstantMirror
+(Util/ConstantMirror.h), each of which holds a reference to the PyObject it's
+mirroring.  If the PyCodeObject is destroyed, we want to free all the now-unused
+GlobalVariables and decref their PyObjects.  We do this by running LLVM's
+globaldce pass periodically.  Just before compiling a new PyCodeObject to IR in
+Python/llvm_compile.cc:_PyCode_ToLlvmIr(), we call
+PyGlobalLlvmData::MaybeCollectUnusedGlobals().  If the number of GlobalValues is
+at least 25% more than after the last collection, we run globaldce.  This
+parallels the backoff used for the ordinary cycle detector to avoid taking
+quadratic time for runs with lots of long-lived objects.
+
+
+Optimization: LOAD_GLOBAL compile-time caching
+----------------------------------------------
+
+In the eval loop, the LOAD_GLOBAL opcode requires two PyDict_GetItem() calls to
+look up builtin functions (only one PyDict_GetItem() call for objects in the
+module's global namespace). Since builtin functions rarely change, we would
+like to avoid the work of repeatedly looking up the builtins.
+
+To accomplish this, we shift the PyDict_GetItem() calls from code execution-time
+to code compilation-time. When compiling a LOAD_GLOBAL opcode to LLVM IR, we
+try the global lookup, then the builtins lookup, and if successful, we cache
+the pointer as an immediate in the generated IR. Note that this kind of caching
+means that if the globals/builtins change, the machine code is no longer valid.
+
+Python edge cases:
+- The following code is perfectly legal:
+
+    assert "foo" not in globals()
+    def bar():
+        foo()
+        return len([])
+    bar()
+
+  This should use an unoptimized LOAD_GLOBAL implementation for looking up
+  `foo()` and an optimized implementation for `len()`.
+- There are `PyEval_GetGlobals()` and `PyEval_GetBuiltins()` functions; these
+  are seductive, but wrong. Get the globals/builtins off the PyFrameObject
+  passed in to `PyEval_EvalFrame()`.
+- A given code object can be run against different globals/builtins dicts.
+  Accordingly, we must keep track of which globals/builtins a code object is
+  assuming and guard on those values.
+
+Implementation:
+- When a function has been selected for compilation to LLVM IR, it will ask
+  the given globals/builtins dicts (as pulled off the frame object) to notify
+  the code object when the dicts change.
+- All dicts will grow an array of code objects that are anticipating updates.
+  This array will be manipulated via `_PyDict_AddWatcher()` and
+  `_PyDict_DropWatcher()` functions. It is a fatal error to add the same watcher
+  twice, or to call `_PyDict_DropWatcher()` with a code object not in the
+  watcher array.
+- When code objects are deleted, they will call `_PyDict_DropWatcher()` on the
+  globals/builtins dicts they are assuming. When dicts are deleted, they will
+  notify all code objects watching them.
+- The optimized machine code will guard the cached pointer by testing
+  co_use_llvm; if this is 0, tailcall to the interpreter to continue execution.
+  Otherwise (if it is 1), continue execution of the machine code, using the
+  cached pointer in place of the two `PyDict_GetItem()` calls.
+- When a dict is modified or deleted, it will loop over the array of watchers
+  and do the following:
+  1. Set co_use_llvm to 0; this signifies that the machine code is invalid. Any
+     active machine code frames will see the change to co_use_llvm and tail call
+     to `PyEval_EvalFrame()` to continue execution.
+  2. Increment co_fatalbailcount since the machine code is invalidated.
+  3. Drop the code object from the watcher arrays of its assumed
+     builtins/globals.
+  The array of watchers will then be zeroed out.
+
+Instrumentation:
+- The --with-instrumentation build will tell you which functions have their
+  machine code disabled due to changing globals/builtins. It can also tell you
+  how many machine code functions were disabled per globals/builtins change.
+- sys.setbailerror(True) will cause an exception to be raised if a function
+  fails a guard (fatal or non-fatal) and bails back to the interpreter.
+
+
+Optimization: direct calls to C functions
+-----------------------------------------
+
+In the interpreter loop, CALL_FUNCTION opcodes that call zero- or
+single-argument C functions incur some overhead from checking that the number
+of arguments matches the number of expected parameters. It is unnecessary to
+incur this overhead repeatedly at runtime, since callsites with only positional
+arguments cannot change the nature or number of their arguments once written,
+and a C function cannot change its number of parameters.
+
+We can take advantage of this to move argument/parameter count checking from
+execution-time to compile-time. This allows us to emit direct calls to C
+functions, rather than going through the more generic Python call machinery.
+
+Implementation:
+- The runtime feedback-gathering code in Util/RuntimeFeedback.* will grow
+  support for recording the underlying C function pointers from
+  PyCFunctionObjects. The CALL_FUNCTION implementation in the interpreter loop
+  will use this to gather information about individual callsites.
+- When compiling CALL_FUNCTION opcodes, Python/fbuilder.cc will consult the
+  gathered runtime feedback. If the feedback meets its requirements (low arity,
+  all C functions, number of callsite arguments matches the number of function
+  parameters, etc), then fbuilder.cc will create an LLVM global value
+  representing the function pointer(s) and then emit a guarded direct call to
+  that function.
+- The optimized function call is guarded on the type of the callable object and
+  the callable object's underlying C function pointer. If either of these tests
+  fail, the function bails back to the interpreter. It is intended that these
+  guards will eventually be constant-propagated away.
+
+Example code:
+
+    def foo(l):
+        l.append(5)
+
+The actual call of the CALL_FUNCTION opcode goes from
+
+%CALL_FUNCTION_result = call %struct._object* @_PyEval_CallFunction(
+    %struct._object** %58, i32 1, i32 0) ;
+
+to
+
+%68 = call %struct._object* @append(%struct._object* %CALL_FUNCTION_actual_self,
+    %struct._object* bitcast (%struct.PyIntObject* @14 to %struct._object*)) ;
+
+This intentionally omits the necessary guards.
+
+Instrumentation:
+- The --with-tsc build already included instrumentation for measuring call
+  overhead. This optimization supports those TSC-based hooks.
+- The --with-instrumentation build includes support for measuring callsite
+  arity across an application, as well as tracking the reasons why various
+  callsites were forced to use the safe version of CALL_FUNCTION.
+
+
+Optimization: omit untaken branches
+-----------------------------------
+
+Unladen Swallow's runtime feedback system records whether a branch was taken or
+not. When compiling to LLVM IR, if we see a branch that is either 100% taken or
+not taken, we will replace the other direction with a bail-to-interpreter block.
+
+To limit the effect of mispredictions, we only optimize branches where we have
+200 or more data points. This gives us greater confidence that a given branch
+has stabilized.
+
+In order to keep this optimization minimally invasive, we actually compile
+code in the not-taken direction to LLVM IR, but the conditional branch doesn't
+jump to it. We rely on LLVM's dead-code elimination passes to remove any
+truly untaken branches (the code may have additional in-edges).
+
+Instrumentation:
+- The --with-instrumentation build collects statistics on how many conditional
+  branches were compiled to IR, how many we were able to optimize, how many
+  failed to optimize due to inconsistency, and how many failed to optimize due
+  to insufficient data.
+
+
+Optimization: specialized binary operators
+------------------------------------------
+
+We take advantage of the gathered type feedback to optimize certain binary
+operators based on their input types. For example, if we know that a certain
++ operator always receives integer arguments, we can omit a lot of unnecessary
+indirection.
+
+Example codegen:
+
+def add(a, b):
+    return a + b
+
+def main():
+    for x in xrange(15000):
+        add(x, x + 1)
+
+
+Before type-based specialization:
+
+%binop_result = call %struct._object* @PyNumber_Add(%struct._object* %47,
+                                                    %struct._object* %local_b2)
+
+After type-based specialization:
+
+  %44 = load %struct._typeobject** %43
+  %45 = icmp eq %struct._typeobject* %44, @PyInt_Type
+  br i1 %45, label %46, label %BINOP_OPT_bail
+
+; <label>:46                                      ; preds = %line_start
+  %47 = getelementptr inbounds %struct._object* %local_b2, i32 0, i32 1
+  %48 = load %struct._typeobject** %47
+  %49 = icmp eq %struct._typeobject* %48, @PyInt_Type
+  br i1 %49, label %50, label %BINOP_OPT_bail
+
+; <label>:50                                      ; preds = %46
+  %51 = getelementptr inbounds %struct._object* %42, i32 1, i32 0
+  %52 = load i32* %51
+  %53 = getelementptr inbounds %struct._object* %local_b2, i32 1, i32 0
+  %54 = load i32* %53
+  %55 = add nsw i32 %54, %52
+  %56 = xor i32 %55, %52
+  %57 = icmp slt i32 %56, 0
+  br i1 %57, label %58, label %_PyLlvm_BinAdd_Int.exit
+
+_PyLlvm_BinAdd_Int.exit:                          ; preds = %50, %58
+  %61 = call %struct._object* @PyInt_FromLong(i32 %55) nounwind
+  %62 = icmp eq %struct._object* %61, null
+  br i1 %62, label %BINOP_OPT_bail, label %BINOP_OPT_success
+
+
+While this certainly increases code size, it eliminates the following
+indirection/runtime overhead:
+
+- Call PyNumber_Add().
+- ...which calls binary_op1().
+- ...which fetches the foo->ob_type->tp_as_number->nb_add function pointer.
+- ...and then does a bunch of checks to make sure that both operands are the
+     same types.
+- ...and then calls foo->ob_type->tp_as_number->nb_add.
+- ...which checks that both arguments are of PyInt_Type.
+- ...and then converts them to machine longs.
+- ...and finally does the work to add them and return up the call stack.
+
+
+Supported operators:
+- List subscription with an integer index.
+- Int/int addition, subtraction, multiplication, division and modulus.
+- Float/float addition, subtraction, multiplication, division and modulus.
+
+Instrumentation:
+- The --with-instrumentation build includes measurements for binary operator
+  inlining.
+
+Relevant revisions:
+- http://code.google.com/p/unladen-swallow/source/detail?r=957
