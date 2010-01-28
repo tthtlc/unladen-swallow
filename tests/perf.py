@@ -1481,23 +1481,39 @@ def BM_unpack_sequence(*args, **kwargs):
 
 
 def MeasureCallSimple(python, options):
-    """Test the performance of simple function calls.
-
-    Args:
-        python: prefix of a command line for the Python binary.
-        options: optparse.Values instance.
-
-    Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the threading benchmark once; mem_usage is a list
-        of memory usage samples in kilobytes.
-    """
     bm_path = Relative("performance/bm_call_simple.py")
-    return MeasureGeneric(python, options, bm_path)
+    return MeasureGeneric(python, options, bm_path, iteration_scaling=3)
 
 
 def BM_call_simple(*args, **kwargs):
     return SimpleBenchmark(MeasureCallSimple, *args, **kwargs)
+
+
+def MeasureCallMethod(python, options):
+    bm_path = Relative("performance/bm_call_method.py")
+    return MeasureGeneric(python, options, bm_path, iteration_scaling=3)
+
+
+def BM_call_method(*args, **kwargs):
+    return SimpleBenchmark(MeasureCallMethod, *args, **kwargs)
+
+
+def MeasureCallMethodUnknown(python, options):
+    bm_path = Relative("performance/bm_call_method_unknown.py")
+    return MeasureGeneric(python, options, bm_path, iteration_scaling=3)
+
+
+def BM_call_method_unknown(*args, **kwargs):
+    return SimpleBenchmark(MeasureCallMethodUnknown, *args, **kwargs)
+
+
+def MeasureCallMethodSlots(python, options):
+    bm_path = Relative("performance/bm_call_method_slots.py")
+    return MeasureGeneric(python, options, bm_path, iteration_scaling=3)
+
+
+def BM_call_method_slots(*args, **kwargs):
+    return SimpleBenchmark(MeasureCallMethodSlots, *args, **kwargs)
 
 
 def MeasureNbody(python, options):
@@ -1610,7 +1626,8 @@ BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
-                "micro": ["unpack_sequence", "call_simple", "float"],
+                "micro": ["unpack_sequence", "call_simple", "call_method",
+                          "call_method_slots", "call_method_unknown", "float"],
                 "apps": ["2to3", "html5lib", "rietveld", "spambayes"],
                }
 
