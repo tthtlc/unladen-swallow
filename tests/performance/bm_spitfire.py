@@ -13,7 +13,6 @@ allows us to keep all our stats in perf.py.
 __author__ = "collinwinter@google.com (Collin Winter)"
 
 # Python imports
-import gc
 import optparse
 import sys
 import time
@@ -25,9 +24,6 @@ import util
 import spitfire
 import spitfire.compiler.analyzer
 import spitfire.compiler.util
-
-# Spitfire's normal environment runs with garbage collection disabled.
-gc.disable()
 
 SPITFIRE_SRC = """<table xmlns:py="http://spitfire/">
 #for $row in $table
