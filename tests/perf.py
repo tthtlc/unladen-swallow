@@ -11,6 +11,10 @@ as the baseline and `experiment/python` as the experiment. The --fast and
 --rigorous options can be used to vary the duration/accuracy of the run. Run
 --help to get a full list of options that can be passed to -b.
 
+perf.py will run Student's two-tailed T test on the benchmark results at the 95%
+confidence level to indicate whether the observed difference is statistically
+significant.
+
 Omitting the -b option will result in the default group of benchmarks being run
 This currently consists of: 2to3, django, nbody, slowspitfire, slowpickle,
 slowunpickle, spambayes. Omitting -b is the same as specifying `-b default`.
@@ -395,16 +399,16 @@ class MemoryUsageResult(object):
     Can be converted to a string by calling string_representation().
     """
 
-    def __init__(self, max_base, max_changed, delta_max, chart_link):
-        self.max_base    = max_base
-        self.max_changed = max_changed
-        self.delta_max   = delta_max
-        self.chart_link  = chart_link
+    def __init__(self, max_base, max_changed, delta_max, timeline_link):
+        self.max_base      = max_base
+        self.max_changed   = max_changed
+        self.delta_max     = delta_max
+        self.timeline_link = timeline_link
 
     def get_usage_over_time(self):
-        if self.chart_link is None:
+        if self.timeline_link is None:
             return ""
-        return "\nUsage over time: %(chart_link)s" % self.__dict__
+        return "\nUsage over time: %(timeline_link)s" % self.__dict__
 
     def string_representation(self):
         return (("Mem max: %(max_base).3f -> %(max_changed).3f:" +
@@ -453,6 +457,110 @@ def CompareMemoryUsage(base_usage, changed_usage, options):
 
 
 ### Utility functions
+
+
+def _FormatPerfDataForTable(base_label, changed_label, results):
+    """Prepare performance data for tabular output.
+
+    Args:
+        base_label: label for the control binary.
+        changed_label: label for the experimental binary.
+        results: iterable of (bench_name, result) 2-tuples where bench_name is
+            the name of the benchmark being reported; and result is a
+            BenchmarkResult object.
+
+    Returns:
+        A list of 6-tuples, where each tuple corresponds to a row in the output
+        table, and each item in the tuples corresponds to a cell in the output
+        table.
+    """
+    table = [("Benchmark", base_label, changed_label, "Change", "Significance",
+              "Timeline")]
+
+    for (bench_name, result) in results:
+        table.append((bench_name,
+                      # Limit the precision for conciseness in the table.
+                      str(round(result.avg_base, 2)),
+                      str(round(result.avg_changed, 2)),
+                      result.delta_avg,
+                      result.t_msg.strip(),
+                      result.timeline_link))
+
+    return table
+
+
+def _FormatMemoryUsageForTable(base_label, changed_label, results):
+    """Prepare memory usage data for tabular output.
+
+    Args:
+        base_label: label for the control binary.
+        changed_label: label for the experimental binary.
+        results: iterable of (bench_name, result) 2-tuples where bench_name is
+            the name of the benchmark being reported; and result is a
+            MemoryUsageResult object.
+
+    Returns:
+        A list of 5-tuples, where each tuple corresponds to a row in the output
+        table, and each item in the tuples corresponds to a cell in the output
+        table.
+    """
+    table = [("Benchmark", base_label, changed_label, "Change", "Timeline")]
+
+    for (bench_name, result) in results:
+        table.append((bench_name,
+                      # We don't care about fractional kilobytes.
+                      str(int(result.max_base)),
+                      str(int(result.max_changed)),
+                      result.delta_max,
+                      result.timeline_link))
+
+    return table
+
+
+def FormatOutputAsTable(base_label, changed_label, results):
+    """Format a benchmark result in a PEP-fiendly ASCII-art table.
+
+    Args:
+        base_label: label to use for the baseline binary.
+        changed_label: label to use for the experimental binary.
+        results: list of (bench_name, result) 2-tuples, where bench_name is the
+            name of the just-run benchmark; and result is a BenchmarkResult
+            object.
+
+    Returns:
+        A string holding the desired ASCII-art table.
+    """
+    if isinstance(results[0][1], BenchmarkResult):
+        table = _FormatPerfDataForTable(base_label, changed_label, results)
+    elif isinstance(results[0][1], MemoryUsageResult):
+        table = _FormatMemoryUsageForTable(base_label, changed_label, results)
+    else:
+        raise TypeError("Unknown result type: %r" % type(results[0][1]))
+
+    col_widths = [0] * len(table[0])
+    for row in table:
+        for col, val in enumerate(row):
+            col_widths[col] = max(col_widths[col], len(val))
+
+    outside_line = "+"
+    header_sep_line = "+"
+    for width in col_widths:
+        width += 2  # Compensate for the left and right padding spaces.
+        outside_line += "-" * width + "+"
+        header_sep_line += "=" * width + "+"
+
+    output = [outside_line]
+    for row_i, row in enumerate(table):
+        output_row = []
+        for col_i, val in enumerate(row):
+            output_row.append("| " + val.ljust(col_widths[col_i]) + " ")
+        output.append("".join(output_row) + "|")
+        if row_i > 0:
+            output.append(outside_line)
+
+    output.insert(2, "".join(header_sep_line))
+    return "\n".join(output)
+
 
 def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
                     *args, **kwargs):
@@ -537,11 +645,11 @@ def GetChart(base_data, changed_data, options, chart_margin=100):
     # chd=t: the data sets, |-separated.
     # chxt: which axes to draw.
     # chxl: labels for the axes.
-    base_binary = options.base_binary
-    changed_binary = options.changed_binary
+    control_label = options.control_label
+    experiment_label = options.experiment_label
     raw_url = ("http://chart.apis.google.com/chart?cht=lc&chs=700x400&chxt=x,y&"
                "chxr=1,%(min_data)s,%(max_data)s&chco=FF0000,0000FF&"
-               "chdl=%(base_binary)s|%(changed_binary)s&"
+               "chdl=%(control_label)s|%(experiment_label)s&"
                "chds=%(min_data)s,%(max_data)s&chd=t:%(data_for_google)s&"
                "chxl=0:%(x_axis_labels)s"
                % locals())
@@ -741,7 +849,7 @@ def CompareMultipleRuns(base_times, changed_times, options):
     t_msg = "Not significant\n"
     significant, t_score = IsSignificant(base_times, changed_times)
     if significant:
-        t_msg = "Significant (t=%f, a=0.95)\n" % t_score
+        t_msg = "Significant (t=%f)\n" % t_score
 
     return BenchmarkResult(min_base, min_changed, delta_min, avg_base,
                            avg_changed, delta_avg, t_msg, std_base,
@@ -1710,6 +1818,13 @@ def ParseEnvVars(option, opt_str, value, parser):
     """Parser callback to --inherit_env var names."""
     parser.values.inherit_env = [v for v in value.split(",") if v]
 
+
+def ParseOutputStyle(option, opt_str, value, parser):
+    if value not in ("normal", "table"):
+        parser.error("Invalid output style: %r" % value)
+    parser.values.output_style = value
+
+
 def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
     bench_groups = bench_groups.copy()
     all_benchmarks = bench_funcs.keys()
@@ -1752,6 +1867,19 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
                             " when running benchmarking subprocesses."))
     parser.add_option("--disable_timelines", default=False, action="store_true",
                       help="Don't use Google charts for displaying timelines.")
+    parser.add_option("--output_style", metavar="STYLE", type="string",
+                      action="callback", callback=ParseOutputStyle,
+                      default="normal",
+                      help=("What style the benchmark output should take."
+                            " Valid options are 'normal' and 'table'."
+                            " Default is '%default'."))
+    parser.add_option("--control_label", metavar="LABEL", type="string",
+                      action="store", default="",
+                      help="Optional label for the control binary")
+    parser.add_option("--experiment_label", metavar="LABEL", type="string",
+                      action="store", default="",
+                      help="Optional label for the experiment binary")
+
 
     options, args = parser.parse_args(argv)
     if len(args) != 2:
@@ -1759,6 +1887,11 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
     base, changed = args
     options.base_binary = base
     options.changed_binary = changed
+
+    if not options.control_label:
+        options.control_label = options.base_binary
+    if not options.experiment_label:
+        options.experiment_label = options.changed_binary
 
     base_args, changed_args = ParsePythonArgsOption(options.args)
     base_cmd_prefix = [base] + base_args
@@ -1787,10 +1920,17 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
     print "Report on %s" % " ".join(platform.uname())
     if multiprocessing:
         print "Total CPU cores:", multiprocessing.cpu_count()
-    for name, result in results:
-        print
-        print "###", name, "###"
-        print result.string_representation()
+    if options.output_style == "normal":
+        for name, result in results:
+            print
+            print "###", name, "###"
+            print result.string_representation()
+    elif options.output_style == "table":
+        print FormatOutputAsTable(options.control_label,
+                                  options.experiment_label,
+                                  results)
+    else:
+        raise ValueError("Invalid output_style: %r" % options.output_style)
     return results
 
 if __name__ == "__main__":
