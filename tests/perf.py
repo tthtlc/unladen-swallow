@@ -1734,9 +1734,10 @@ BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
                 "threading": ["threaded_count", "iterative_count"],
                 "cpickle": ["pickle", "unpickle"],
-                "micro": ["unpack_sequence", "call_simple", "call_method",
-                          "call_method_slots", "call_method_unknown", "float"],
                 "apps": ["2to3", "html5lib", "rietveld", "spambayes"],
+                "calls": ["call_simple", "call_method", "call_method_slots",
+                          "call_method_unknown"],
+                "math": ["nbody", "float"],
                }
 
 
