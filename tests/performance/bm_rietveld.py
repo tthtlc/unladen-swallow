@@ -78,7 +78,7 @@ def setup():
 
 def get_benchmark_data():
     # Load data.
-    data_file = rel_path("rietveld_data.pickle")
+    data_file = rel_path(os.path.join("data", "rietveld_data.pickle"))
     templ_name, canned_data = cPickle.load(open(data_file))
     context = Context(canned_data)
 
