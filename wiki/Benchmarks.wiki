@@ -38,13 +38,18 @@ python unladen-bmarks/perf.py -r -b apps control/python experiment/python
 
 ==Benchmarks==
 
-  * *ai* - small solver for the N-Queens problem.
   * *2to3* - have [http://svn.python.org/view/sandbox/trunk/2to3/ the 2to3 tool] translate itself.
+  * *calls* - collection of function and method call microbenchmarks:
+    * *call_simple* - positional arguments-only function calls.
+    * *call_method* - positional arguments-only method calls.
+    * *call_method_slots* - method calls on classes that use `__slots__`.
+    * *call_method_unknown* - method calls where the receiver cannot be predicted.
   * *django* - use the [http://www.djangoproject.com/ Django template system] to build a 150x150-cell HTML table.
   * *float* - artificial, floating point-heavy benchmark originally used by [[http://factor-language.blogspot.com/2009/08/performance-comparison-between-factor.html Factor].
   * *html5lib* - parse [http://svn.whatwg.org/webapps/index the HTML 5 spec] using [http://code.google.com/p/html5lib/ html5lib].
   * *html5lib_warmup* - like `html5lib`, but gives the JIT a chance to warm up by doing the iterations in the same process.
   * *nbody* - the [http://shootout.alioth.debian.org/u64q/benchmark.php?test=nbody&lang=python&id=4 N-body Shootout benchmark]. Microbenchmark for floating point operations.
+  * *nqueens* - small solver for the N-Queens problem.
   * *pickle* - use the `cPickle` module to pickle a variety of datasets.
   * *pickle_dict* - microbenchmark; use the `cPickle` module to pickle a lot of dicts.
   * *pickle_list* - microbenchmark; use the `cPickle` module to pickle a lot of lists.
@@ -69,6 +74,22 @@ python unladen-bmarks/perf.py -r -b apps control/python experiment/python
     * *threaded_count*, *iterative_count* - spin in a while loop, counting down from a large number.
   * *unpack_sequence* - microbenchmark for unpacking lists and tuples.
   * *unpickle* - use the `cPickle` module to unpickle a variety of datasets.
+
+==Benchmark Groups==
+
+We have grouped the above benchmarks into a number of categories. These categories are called "benchmark groups" in perf.py, and are runnable just like the individual benchmarks; running a benchmark group will run all benchmarks in that group.
+
+Groups:
+  * *apps*: 2to3, html5lib, rietveld, spambayes
+  * *calls*: call_simple, call_method, call_method_slots, call_method_unknown
+  * *cpickle*: pickle, unpickle
+  * *default*: 2to3, django, nbody, slowspitfire, slowpickle, slowunpickle, spambayes
+  * *math*: float, nbody
+  * *regex*: regex_compile, regex_effbot, regex_v8
+  * *startup*: bzr_startup, hg_startup, normal_startup, startup_nosite
+  * *threading*: iterative_count, threaded_count
+
+The `default` benchmark group is the main group we use to assess pure-Python application performance. Other groups are more specialized. Use the group most appropriate to your optimization, but always check for an impact on the `default` group.
 
 ==Memory benchmarking==
 
