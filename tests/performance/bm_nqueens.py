@@ -1,16 +1,6 @@
 #!/usr/bin/env python
 
-"""Wrapper script for testing the performance of simple AI systems.
-
-bm_ai.py runs the following little solvers:
-    - N-Queens
-
-This used to contain an alphametics solver, but that was found to be bound
-primarily by eval() performance.
-"""
-
-# Wanted by the alphametics solver.
-from __future__ import division
+"""Simple, brute-force N-Queens solver."""
 
 __author__ = "collinwinter@google.com (Collin Winter)"
 
@@ -86,7 +76,7 @@ def test_n_queens(iterations):
 if __name__ == "__main__":
     parser = optparse.OptionParser(
         usage="%prog [options]",
-        description=("Test the performance of simple AI solvers."))
+        description=("Test the performance of an N-Queens solvers."))
     util.add_standard_options_to(parser)
     options, args = parser.parse_args()
 

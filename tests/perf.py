@@ -1394,8 +1394,8 @@ def BM_SlowUnpickle(base_python, changed_python, options):
     return _PickleBenchmark(base_python, changed_python, options, ["unpickle"])
 
 
-def MeasureAi(python, options):
-    """Test the performance of some small AI problem solvers.
+def MeasureNQueens(python, options):
+    """Test the performance of an N-Queens solver.
 
     Args:
         python: prefix of a command line for the Python binary.
@@ -1406,12 +1406,12 @@ def MeasureAi(python, options):
         time it took to run the ai routine once; mem_usage is a list of
         memory usage samples in kilobytes.
     """
-    bm_path = Relative("performance/bm_ai.py")
+    bm_path = Relative("performance/bm_nqueens.py")
     return MeasureGeneric(python, options, bm_path)
 
 
-def BM_Ai(*args, **kwargs):
-    return SimpleBenchmark(MeasureAi, *args, **kwargs)
+def BM_NQueens(*args, **kwargs):
+    return SimpleBenchmark(MeasureNQueens, *args, **kwargs)
 
 
 def _StartupPython(command, mem_usage, track_memory, inherit_env):
