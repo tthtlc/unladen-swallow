@@ -1,0 +1,89 @@
+#summary How to use OProfile on Unladen Swallow
+
+= Introduction =
+
+[http://oprofile.sourceforge.net/ OProfile] is a system-wide sampling-based profiler for Linux systems. You need to be root to use it.
+
+OProfile has [http://oprofile.sourceforge.net/doc/devel/index.html supported JIT compilers] since the 0.9.4 release, but 0.9.5 fixed a bug in line number handling on 64-bit systems.  [http://prdownloads.sourceforge.net/oprofile/oprofile-0.9.6.tar.gz 0.9.6] is the most recent release, and it seems to work fine. Install it somewhere on your system.
+
+Pass `--with-oprofile=/prefix/path` to the LLVM or Unladen Swallow `configure` script. So, if you built OProfile with its default prefix, you'll pass `--with-oprofile=/usr/local`. If you installed OProfile from your distribution's packaging system, you should be able to use just `--with-oprofile`, since it defaults to the `/usr` prefix.
+
+By default, OProfile will attribute cost to Python functions by just the function name, which is often uninformative.  Assuming `$PWD` is a built Unladen Swallow directory, and you've [http://unladen-swallow.googlecode.com/svn/tests checked out the tests] to `../tests`, you'll see:
+
+{{{
+$ sudo opcontrol --reset
+Signalling daemon... done
+$ sudo opcontrol --start-daemon; sudo opcontrol --start; \
+PYTHONPATH=../tests/lib/django/ ./python ../tests/performance/bm_django.py -n \
+100; sudo opcontrol --stop
+
+$ opreport -l ./python | less
+CPU: Core 2, speed 1600 MHz (estimated)
+Counted CPU_CLK_UNHALTED events (Clock cycles when not halted) with a unit mask
+of 0x00 (Unhalted core cycles) count 
+100000
+samples  %        image name               symbol name
+79589     4.2329  python                   PyString_FromFormatV
+62971     3.3491  python                   PyEval_EvalCodeEx
+62713     3.3354  python                   tupledealloc
+57071     3.0353  python                   _PyEval_CallFunction
+50009     2.6597  24532.jo                 #u#force_unicode
+47468     2.5246  python                   PyUnicodeUCS2_Decode
+45829     2.4374  python                   PyFrame_New
+45173     2.4025  python                   lookdict_string
+43082     2.2913  python                   PyType_IsSubtype
+39763     2.1148  24532.jo                 #u#render5
+38145     2.0287  python                   _PyType_Lookup
+37643     2.0020  python                   PyObject_GC_UnTrack
+37105     1.9734  python                   frame_dealloc
+36849     1.9598  python                   PyEval_EvalFrame
+}}}
+
+Here, `#u#force_unicode` and `#u#render5` are Python functions named `force_unicode()` and `render()`, respectively, but we have no indication of what class they belong to or what file they're defined in.  For slightly better and more detailed results, run Python with the `-g` flag. This will embed line numbers into the JIT output and tell OProfile about them. Then you can run oprofile with the `-g` flag to get it to print the filename and line number of each function, and `-d` to get instruction-level timings:
+
+{{{
+$ sudo opcontrol --reset; sudo opcontrol --start-daemon; sudo opcontrol --start; \
+PYTHONPATH=../tests/lib/django/ ./python -g ../tests/performance/bm_django.py \
+-n 100; sudo opcontrol --stop
+
+Signalling daemon... done
+Profiler running.
+...
+Stopping profiling.
+
+$ opreport -g -l ./python |less
+CPU: Core 2, speed 1998 MHz (estimated)
+Counted CPU_CLK_UNHALTED events (Clock cycles when not halted) with a unit mask of 0x00 (Unhalted core cycles) count 100000
+samples  %        linenr info                 image name               symbol name
+186745    3.4261  obmalloc.c:1275             python                   write_size_t
+135246    2.4813  frameobject.c:411           python                   frame_dealloc
+133457    2.4484  frameobject.c:586           python                   PyFrame_New
+132905    2.4383  eval.cc:3151                python                   PyEval_EvalCodeEx
+123259    2.2613  obmalloc.c:1260             python                   read_size_t
+123123    2.2589  tupleobject.c:28            python                   PyTuple_New
+118909    2.1815  object.c:2147               python                   _Py_ForgetReference
+117928    2.1635  encoding.py:44              26545.jo                 #u#force_unicode
+116538    2.1380  methodobject.c:18           python                   PyCFunction_NewEx
+105709    1.9394  eval.cc:4350                python                   _PyEval_CallFunction
+103707    1.9026  typeobject.c:1169           python                   PyType_IsSubtype
+99938     1.8335  obmalloc.c:1437             python                   _PyObject_DebugCheckAddress
+95842     1.7583  stringobject.c:164          python                   PyString_FromFormatV
+95285     1.7481  tupleobject.c:162           python                   tupledealloc
+91328     1.6755  object.c:59                 python                   _Py_AddToAllObjects
+88539     1.6244  (no location information)   libc-2.7.so              memset
+87952     1.6136  defaulttags.py:116          26545.jo                 #u#render5
+82625     1.5159  object.c:1316               python                   PyObject_GenericGetAttr
+80607     1.4788  dictobject.c:392            python                   lookdict_string
+74722     1.3709  object.c:2172               python                   _Py_Dealloc
+71016     1.3029  methodobject.c:181          python                   meth_dealloc
+68272     1.2525  __init__.py:534             26545.jo                 #u#resolve
+67952     1.2467  obmalloc.c:725              python                   PyObject_Malloc
+67392     1.2364  getargs.c:1495              python                   vgetargskeywords
+66798     1.2255  gcmodule.c:1393             python                   PyObject_GC_UnTrack
+63645     1.1677  typeobject.c:2495           python                   _PyType_Lookup
+...
+}}}
+
+= Details =
+
+http://code.google.com/p/jrfonseca/wiki/Gprof2Dot may be useful in visualizing profile results.
