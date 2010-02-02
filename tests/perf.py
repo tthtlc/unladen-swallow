@@ -344,11 +344,24 @@ class MemoryUsageFuture(threading.Thread):
         return self._usage
 
 
-class BenchmarkResult(object):
-    """An object representing data from a succesful benchmark run.
+class RawData(object):
+    """Raw data from a benchmark run.
 
-    Can be converted to a string by calling string_representation().
+    Attributes:
+        runtimes: list of floats, one per iteration.
+        mem_usage: list of ints, memory usage in kilobytes.
+        inst_output: output from Unladen's --with-instrumentation build. This is
+            the empty string if there was no instrumentation output.
     """
+
+    def __init__(self, runtimes, mem_usage, inst_output=""):
+        self.runtimes = runtimes
+        self.mem_usage = mem_usage
+        self.inst_output = inst_output
+
+
+class BenchmarkResult(object):
+    """An object representing data from a succesful benchmark run."""
 
     def __init__(self, min_base, min_changed, delta_min, avg_base,
                  avg_changed, delta_avg, t_msg, std_base, std_changed,
@@ -370,7 +383,7 @@ class BenchmarkResult(object):
             return ""
         return "\nTimeline: %(timeline_link)s" % self.__dict__
 
-    def string_representation(self):
+    def __str__(self):
         return (("Min: %(min_base)f -> %(min_changed)f:" +
                  " %(delta_min)s\n" +
                  "Avg: %(avg_base)f -> %(avg_changed)f:" +
@@ -381,23 +394,17 @@ class BenchmarkResult(object):
 
 
 class BenchmarkError(object):
-    """Object representing the error from a failed benchmark run.
-
-    Can be converted to a string by calling string_representation().
-    """
+    """Object representing the error from a failed benchmark run."""
 
     def __init__(self, e):
         self.msg = str(e)
 
-    def string_representation(self):
+    def __str__(self):
         return self.msg
 
 
 class MemoryUsageResult(object):
-    """Object representing memory usage data from a successful benchmark run.
-
-    Can be converted to a string by calling string_representation().
-    """
+    """Memory usage data from a successful benchmark run."""
 
     def __init__(self, max_base, max_changed, delta_max, timeline_link):
         self.max_base      = max_base
@@ -410,26 +417,46 @@ class MemoryUsageResult(object):
             return ""
         return "\nUsage over time: %(timeline_link)s" % self.__dict__
 
-    def string_representation(self):
+    def __str__(self):
         return (("Mem max: %(max_base).3f -> %(max_changed).3f:" +
                  " %(delta_max)s" + self.get_usage_over_time())
                  % self.__dict__)
 
 
 class SimpleBenchmarkResult(object):
-    """Object representing result data from a successful benchmark run.
-
-    Can be converted to a string by calling string_representation().
-    """
+    """Object representing result data from a successful benchmark run."""
 
     def __init__(self, base_time, changed_time, time_delta):
         self.base_time    = base_time
         self.changed_time = changed_time
         self.time_delta   = time_delta
 
-    def string_representation(self):
+    def __str__(self):
         return ("%(base_time)f -> %(changed_time)f: %(time_delta)s"
                 % self.__dict__)
+
+
+class InstrumentationResult(object):
+    """Object respresenting a --diff_instrumentation result."""
+
+    def __init__(self, inst_diff, options):
+        self.inst_diff = inst_diff
+        self._control_label = options.control_label
+        self._experiment_label = options.experiment_label
+
+    def __str__(self):
+        if not self.inst_diff:
+            return "No difference in instrumentation"
+        output = []
+        for header, (control, exp) in self.inst_diff.items():
+            output.append(header)
+            output.append(self._control_label)
+            output.append(control or "No data")
+            output.append("")
+            output.append(self._experiment_label)
+            output.append(exp or "No data")
+            output.append("\n")
+        return "\n".join(output).strip()
 
 
 def CompareMemoryUsage(base_usage, changed_usage, options):
@@ -562,6 +589,62 @@ def FormatOutputAsTable(base_label, changed_label, results):
     return "\n".join(output)
 
 
+def _SegmentInstrumentation(inst_output):
+    """Cut --with-instrumentation output into its component sections.
+
+    Instrumentation sections are separated by two newlines, and begin with a
+    header that ends in a colon and a newline.
+
+    Args:
+        inst_output: text holding full --with-instrumentation output.
+
+    Returns:
+        Dict mapping string section headers to section output text.
+    """
+    if not inst_output:
+        return {}
+
+    sections = {}
+    text_sections = [s.strip() for s in inst_output.split("\n\n")]
+    for section in text_sections:
+        header, lines = section.split("\n", 1)
+        if header.endswith(":"):
+            sections[header] = lines
+    return sections
+
+
+def DiffInstrumentation(control_inst_output, exp_inst_output):
+    """Compare the instrumentation output from two Unladen Swallow binaries.
+
+    These binaries should have been configured with Unladen's
+    --with-instrumentation flag.
+
+    Args:
+        control_inst_output: string; the control binary's instrumentation data.
+        exp_inst_output: string; the experimental binary's instrumentation data.
+
+    Returns:
+        Dict mapping section headers to (control, exp) 2-tuples, where `control`
+        is the output section from control binary, and `exp` is the output
+        section from the experimental binary. If either `control` or `exp` is
+        the empty string, that binary did not emit the section.
+    """
+    control_sections = _SegmentInstrumentation(control_inst_output)
+    exp_sections = _SegmentInstrumentation(exp_inst_output)
+    control_keys = set(control_sections)
+    exp_keys = set(exp_sections)
+
+    diff = {}
+    for section in (control_keys - exp_keys):
+        diff[section] = (control_sections[section], "")
+    for section in (exp_keys - control_keys):
+        diff[section] = ("", exp_sections[section])
+    for section in (exp_keys & control_keys):
+        if control_sections[section] != exp_sections[section]:
+            diff[section] = (control_sections[section], exp_sections[section])
+    return diff
+
+
 def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
                     *args, **kwargs):
     """Abstract out the body for most simple benchmarks.
@@ -575,7 +658,7 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
 
     Args:
         benchmark_function: callback that takes (python_path, options) and
-            returns a (times, memory_usage) 2-tuple.
+            returns a RawData instance.
         base_python: path to the reference Python binary.
         changed_python: path to the experimental Python binary.
         options: optparse.Values instance.
@@ -856,32 +939,37 @@ def CompareMultipleRuns(base_times, changed_times, options):
                            std_changed, delta_std, timeline_link)
 
 
-def CompareBenchmarkData(base_data, changed_data, options):
+def CompareBenchmarkData(base_data, exp_data, options):
     """Compare performance and memory usage.
 
     Args:
-        base_data: 2-tuple of (times, mem_usage) where times is an iterable
-            of floats; mem_usage is a list of memory usage samples.
-        changed_data: 2-tuple of (times, mem_usage) where times is an iterable
-            of floats; mem_usage is a list of memory usage samples.
+        base_data: RawData instance for the control binary.
+        exp_data: RawData instance for the experimental binary.
         options: optparse.Values instance.
 
     Returns:
-        A BenchmarkResult object, summarizing the difference between the two
-        runs; or a SimpleBenchmarkResult object, if there was only one data
-        point per run.
+        Something that implements a __str__() method:
+
+        - BenchmarkResult: summarizes the difference between the two runs.
+        - SimpleBenchmarkResult: if there was only one data point per run.
+        - InstrumentationResult: if --diff_instrumentation was given.
+        - MemoryUsageResult: if --track_memory was given.
+        - BenchmarkError: if something went wrong.
     """
-    base_times, base_mem = base_data
-    changed_times, changed_mem = changed_data
-
-    # We suppress performance data when running with --track_memory.
+    # We suppress performance data when running with --track_memory or
+    # --diff_instrumentation.
     if options.track_memory:
-        if base_mem is not None:
-            assert changed_mem is not None
-            return CompareMemoryUsage(base_mem, changed_mem, options)
-        return "Benchmark does not report memory usage yet"
+        if base_data.mem_usage is not None:
+            assert exp_data.mem_usage is not None
+            return CompareMemoryUsage(base_data.mem_usage, exp_data.mem_usage,
+                                      options)
+        return BencharkError("Benchmark does not report memory usage yet")
+    if options.diff_instrumentation:
+        inst_diff = DiffInstrumentation(base_data.inst_output,
+                                        exp_data.inst_output)
+        return InstrumentationResult(inst_diff, options)
 
-    return CompareMultipleRuns(base_times, changed_times, options)
+    return CompareMultipleRuns(base_data.runtimes, exp_data.runtimes, options)
 
 
 def CallAndCaptureOutput(command, env=None, track_memory=False, inherit_env=[]):
@@ -896,9 +984,10 @@ def CallAndCaptureOutput(command, env=None, track_memory=False, inherit_env=[]):
             environment variable to inherit from os.environ.
 
     Returns:
-        (stdout, mem_usage), where stdout is the captured stdout as a string;
-        mem_usage is a list of memory usage samples in kilobytes (if
-        track_memory is False, mem_usage is None).
+        (stdout, stderr, mem_usage), where stdout is the captured stdout as a
+        string; stderr is the captured stderr as a string; mem_usage is a list
+        of memory usage samples in kilobytes (if track_memory is False,
+        mem_usage is None).
 
     Raises:
         RuntimeError: if the command failed. The value of the exception will
@@ -911,12 +1000,12 @@ def CallAndCaptureOutput(command, env=None, track_memory=False, inherit_env=[]):
                                env=BuildEnv(env, inherit_env))
     if track_memory:
         future = MemoryUsageFuture(subproc.pid)
-    result, err = subproc.communicate()
+    stdout, stderr = subproc.communicate()
     if subproc.returncode != 0:
-        raise RuntimeError("Benchmark died: " + err)
+        raise RuntimeError("Benchmark died: " + stderr)
     if track_memory:
         mem_usage = future.GetMemoryUsage()
-    return result, mem_usage
+    return stdout, stderr, mem_usage
 
 
 def MeasureGeneric(python, options, bm_path, bm_env=None,
@@ -939,9 +1028,7 @@ def MeasureGeneric(python, options, bm_path, bm_env=None,
             to the benchmark.
 
     Returns:
-        (times, mem_usage) 2-tuple, where times is a list of floats giving the
-        running time of the benchmark iterations; and mem_usage is a list of
-        floats giving memory usage samples.
+        RawData instance.
     """
     if bm_env is None:
         bm_env = {}
@@ -955,11 +1042,12 @@ def MeasureGeneric(python, options, bm_path, bm_env=None,
 
     RemovePycs()
     command = python + [bm_path, "-n", trials] + extra_args
-    result, mem_usage = CallAndCaptureOutput(command, bm_env,
-                                             track_memory=options.track_memory,
-                                             inherit_env=options.inherit_env)
-    times = [float(line) for line in result.splitlines()]
-    return times, mem_usage
+    output = CallAndCaptureOutput(command, bm_env,
+                                  track_memory=options.track_memory,
+                                  inherit_env=options.inherit_env)
+    stdout, stderr, mem_usage = output
+    times = [float(line) for line in stdout.splitlines()]
+    return RawData(times, mem_usage, inst_output=stderr)
 
 
 ### Benchmarks
@@ -975,7 +1063,7 @@ class PyBenchBenchmarkResult(object):
         self.avg_changed = avg_changed
         self.delta_avg = delta_avg
 
-    def string_representation(self):
+    def __str__(self):
         return (("Min: %(min_base)d -> %(min_changed)d: %(delta_min)s\n" +
                  "Avg: %(avg_base)d -> %(avg_changed)d: %(delta_avg)s")
                 % self.__dict__)
@@ -1073,9 +1161,12 @@ def MeasureCommand(command, iterations, env, track_memory):
         track_memory: bool to indicate whether to track memory usage.
 
     Returns:
-        (times, mem_usage) 2-tuple, where times is a list of floats giving the
-        running time of the benchmark iterations; and mem_usage is a list of
-        floats giving memory usage samples.
+        RawData instance. Note that we take instrumentation data from the final
+        run; merging instrumentation data between multiple runs is
+        prohibitively difficult at this point.
+
+    Raises:
+        RuntimeError: if the command failed.
     """
     with open(os.devnull, "wb") as dev_null:
         RemovePycs()
@@ -1097,9 +1188,9 @@ def MeasureCommand(command, iterations, env, track_memory):
                                        env=env)
             if track_memory:
                 future = MemoryUsageFuture(subproc.pid)
-            _, err = subproc.communicate()
+            _, stderr = subproc.communicate()
             if subproc.returncode != 0:
-                raise RuntimeError("Benchmark died: " + err)
+                raise RuntimeError("Benchmark died: " + stderr)
             if track_memory:
                 mem_samples = future.GetMemoryUsage()
             end_time = GetChildUserTime()
@@ -1111,7 +1202,7 @@ def MeasureCommand(command, iterations, env, track_memory):
 
     if not track_memory:
         mem_usage = None
-    return times, mem_usage
+    return RawData(times, mem_usage, inst_output=stderr)
 
 
 def Measure2to3(python, options):
@@ -1274,9 +1365,7 @@ def MeasureSpitfire(python, options, env=None, extra_args=[]):
             command.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the Spitfire test once; mem_usage is a list of
-        memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_spitfire.py")
     return MeasureGeneric(python, options, bm_path, env, extra_args)
@@ -1290,9 +1379,7 @@ def MeasureSpitfireWithPsyco(python, options):
         options: optparse.Values instance.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the Spitfire test once; mem_usage is a list of
-        memory usage samples in kilobytes.
+        RawData instance.
     """
     SPITFIRE_DIR = Relative("lib/spitfire")
 
@@ -1340,9 +1427,7 @@ def MeasurePickle(python, options, extra_args):
         extra_args: list of arguments to append to the command line.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the pickle test once; mem_usage is a list of
-        memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_pickle.py")
     return MeasureGeneric(python, options, bm_path, extra_args=extra_args)
@@ -1402,9 +1487,7 @@ def MeasureNQueens(python, options):
         options: optparse.Values instance.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the ai routine once; mem_usage is a list of
-        memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_nqueens.py")
     return MeasureGeneric(python, options, bm_path)
@@ -1463,7 +1546,7 @@ def MeasureStartup(python, cmd_opts, num_loops, track_memory, inherit_env):
         times.append(t1 - t0)
     if not track_memory:
       mem_usage = None
-    return times, mem_usage
+    return RawData(times, mem_usage)
 
 
 def BM_normal_startup(base_python, changed_python, options):
@@ -1509,9 +1592,7 @@ def MeasureRegexPerformance(python, options, bm_path):
         bm_path: relative path; which benchmark script to run.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run all the regexes routines once; mem_usage is a list
-        of memory usage samples in kilobytes.
+        RawData instance.
     """
     return MeasureGeneric(python, options, Relative(bm_path))
 
@@ -1545,9 +1626,7 @@ def MeasureThreading(python, options, bm_name):
         bm_name: name of the threading benchmark to run.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the threading benchmark once; mem_usage is a list
-        of memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_threading.py")
     return MeasureGeneric(python, options, bm_path, extra_args=[bm_name])
@@ -1576,9 +1655,7 @@ def MeasureUnpackSequence(python, options):
         options: optparse.Values instance.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the threading benchmark once; mem_usage is a list
-        of memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_unpack_sequence.py")
     return MeasureGeneric(python, options, bm_path, iteration_scaling=1000)
@@ -1632,9 +1709,7 @@ def MeasureNbody(python, options):
         options: optparse.Values instance.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the benchmark loop once; mem_usage is a list
-        of memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_nbody.py")
     return MeasureGeneric(python, options, bm_path)
@@ -1652,9 +1727,7 @@ def MeasureSpamBayes(python, options):
         options: optparse.Values instance.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the benchmark loop once; mem_usage is a list
-        of memory usage samples in kilobytes.
+        RawData instance.
     """
     pypath = ":".join([Relative("lib/spambayes"), Relative("lib/lockfile")])
     bm_path = Relative("performance/bm_spambayes.py")
@@ -1674,9 +1747,7 @@ def MeasureHtml5libWarmup(python, options):
         options: optparse.Values instance.
 
     Returns:
-        (perf_data, mem_usage), where perf_data is a list of floats, each the
-        time it took to run the benchmark loop once; mem_usage is a list
-        of memory usage samples in kilobytes.
+        RawData instance.
     """
     bm_path = Relative("performance/bm_html5lib.py")
     bm_env = {"PYTHONPATH": Relative("lib/html5lib")}
@@ -1880,6 +1951,11 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
     parser.add_option("--experiment_label", metavar="LABEL", type="string",
                       action="store", default="",
                       help="Optional label for the experiment binary")
+    parser.add_option("--diff_instrumentation", action="store_true",
+                      help=("Compare the --with-instrumentation output from two"
+                            " Unladen Swallow binaries. This is useful for"
+                            " examining many benchmarks for optimization"
+                            " effects."))
 
 
     options, args = parser.parse_args(argv)
@@ -1908,6 +1984,9 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
             parser.error("--track_memory requires Windows with PyWin32 or " +
                          "Linux 2.6.16 or above")
 
+    if options.diff_instrumentation:
+        info("Suppressing performance data due to --diff_instrumentation")
+
     should_run = ParseBenchmarksOption(options.benchmarks, bench_groups)
 
     results = []
@@ -1925,7 +2004,7 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
         for name, result in results:
             print
             print "###", name, "###"
-            print result.string_representation()
+            print result
     elif options.output_style == "table":
         print FormatOutputAsTable(options.control_label,
                                   options.experiment_label,
