@@ -1,7 +1,0 @@
-#summary Generating LLVM IR directly from compile.c rather than going through CPython bytecode first.
-
-= Generating LLVM IR directly =
-
-We should be able to get some extra performance by generating LLVM IR directly from the Python AST, rather than having an intermediate CPython bytecode stage. On the other hand, we should be able to make the LLVM optimizations good enough to produce the same final code, so this would just speed up the initial compilation.
-
-Also, to reduce the delta from CPython's mainline and make it easier to keep up with external changes to the language, we may want to keep compile.c as similar as possible to the external version.
