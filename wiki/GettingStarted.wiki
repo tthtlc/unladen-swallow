@@ -38,6 +38,8 @@ If you're building the 2009Q2 release on a 32/64-bit hybrid system (say, a 64-bi
 CFLAGS=-m32 CXXFLAGS=-m32 ./configure --build=i386-unknown-linux-gnu
 }}}
 
+See BuildingOnWindows for MSVC build instructions.
+
 
 == Working on Unladen Swallow ==
 
