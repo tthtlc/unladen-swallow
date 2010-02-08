@@ -126,7 +126,7 @@ call_trace38:		; preds = %_PyLlvm_WrapXDecref.exit192
 >>> 
 }}}
 
-Fourth, this code is JIT-compiled to native machine code. Unfortunately, there's no easy way to display this machine code. The easiest involves setting `PYTHONLLVMFLAGS=-debug-only=jit` before starting Python and running Python inside gdb with a breakpoint in `_PyLlvmFunction_Eval()` just before the call to `native(frame)`. When `_PyLlvmFunction_Eval()` calls `ExecutionEngine::getPointerToFunction()`, the JIT will dump a lot of information including the location and size of the machine code:
+Fourth, this code is JIT-compiled to native machine code. Unfortunately, there's no easy way to display this machine code. The easiest involves setting `PYTHONLLVMFLAGS=-debug-only=jit` before starting Python and running Python inside gdb with a breakpoint in `_PyLlvmFunction_Eval()` just before the call to `native(frame)`. (This requires a debug build of Unladen Swallow/LLVM.) When `_PyLlvmFunction_Eval()` calls `ExecutionEngine::getPointerToFunction()`, the JIT will dump a lot of information including the location and size of the machine code:
 
 {{{
 $ PYTHONLLVMFLAGS=-debug-only=jit gdb ./python.exe 
