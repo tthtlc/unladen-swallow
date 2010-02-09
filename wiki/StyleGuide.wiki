@@ -22,3 +22,7 @@ Class and struct names, member function names (all of public, private, and stati
 = Smart Pointers =
 
 For now, we're only using [http://llvm.org/doxygen/classllvm_1_1OwningPtr.html llvm::OwningPtr] (and OwningArrayPtr). `std::auto_ptr` does nearly the same thing, but has confusing assignment and copy construction semantics, so we're avoiding it. We don't have a smart pointer for Python refcounting because we couldn't use it in the C code anyway, and we haven't yet discussed the requirements for a non-PyObject refcounting pointer.
+
+= C++ is Optional =
+
+Any C++ used in Unladen Swallow should be disabled when configured with `--without-llvm`. Accordingly, any C++ should be guarded with `#ifdef WITH_LLVM`.
