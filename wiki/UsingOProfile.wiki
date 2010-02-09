@@ -8,42 +8,11 @@ OProfile has [http://oprofile.sourceforge.net/doc/devel/index.html supported JIT
 
 Pass `--with-oprofile=/prefix/path` to the LLVM or Unladen Swallow `configure` script. So, if you built OProfile with its default prefix, you'll pass `--with-oprofile=/usr/local`. If you installed OProfile from your distribution's packaging system, you should be able to use just `--with-oprofile`, since it defaults to the `/usr` prefix.
 
-By default, OProfile will attribute cost to Python functions by just the function name, which is often uninformative.  Assuming `$PWD` is a built Unladen Swallow directory, and you've [http://unladen-swallow.googlecode.com/svn/tests checked out the tests] to `../tests`, you'll see:
-
-{{{
-$ sudo opcontrol --reset
-Signalling daemon... done
-$ sudo opcontrol --start-daemon; sudo opcontrol --start; \
-PYTHONPATH=../tests/lib/django/ ./python ../tests/performance/bm_django.py -n \
-100; sudo opcontrol --stop
-
-$ opreport -l ./python | less
-CPU: Core 2, speed 1600 MHz (estimated)
-Counted CPU_CLK_UNHALTED events (Clock cycles when not halted) with a unit mask
-of 0x00 (Unhalted core cycles) count 
-100000
-samples  %        image name               symbol name
-79589     4.2329  python                   PyString_FromFormatV
-62971     3.3491  python                   PyEval_EvalCodeEx
-62713     3.3354  python                   tupledealloc
-57071     3.0353  python                   _PyEval_CallFunction
-50009     2.6597  24532.jo                 #u#force_unicode
-47468     2.5246  python                   PyUnicodeUCS2_Decode
-45829     2.4374  python                   PyFrame_New
-45173     2.4025  python                   lookdict_string
-43082     2.2913  python                   PyType_IsSubtype
-39763     2.1148  24532.jo                 #u#render5
-38145     2.0287  python                   _PyType_Lookup
-37643     2.0020  python                   PyObject_GC_UnTrack
-37105     1.9734  python                   frame_dealloc
-36849     1.9598  python                   PyEval_EvalFrame
-}}}
-
-Here, `#u#force_unicode` and `#u#render5` are Python functions named `force_unicode()` and `render()`, respectively, but we have no indication of what class they belong to or what file they're defined in.  For slightly better and more detailed results, run Python with the `-g` flag. This will embed line numbers into the JIT output and tell OProfile about them. Then you can run oprofile with the `-g` flag to get it to print the filename and line number of each function, and `-d` to get instruction-level timings:
+Assuming `$PWD` is a built Unladen Swallow directory, and you've [http://unladen-swallow.googlecode.com/svn/tests checked out the tests] to `../tests`, you'll see:
 
 {{{
 $ sudo opcontrol --reset; sudo opcontrol --start-daemon; sudo opcontrol --start; \
-PYTHONPATH=../tests/lib/django/ ./python -g ../tests/performance/bm_django.py \
+PYTHONPATH=../tests/lib/django/ ./python ../tests/performance/bm_django.py \
 -n 100; sudo opcontrol --stop
 
 Signalling daemon... done
@@ -84,6 +53,8 @@ samples  %        linenr info                 image name               symbol na
 ...
 }}}
 
-= Details =
+Here, `#u#force_unicode` and `#u#render5` are Python functions named `force_unicode()` and `render()`, and defined at encoding.py:44 and defaulttags.py:116.
+
+You can also run oprofile with the `-d` flag to get instruction-level timings.
 
 http://code.google.com/p/jrfonseca/wiki/Gprof2Dot may be useful in visualizing profile results.
