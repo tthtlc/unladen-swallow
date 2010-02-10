@@ -1,5 +1,5 @@
 from __future__ import generators
-import sys, imp, marshal, dis
+import sys, imp, marshal
 from imp import PKG_DIRECTORY, PY_COMPILED, PY_SOURCE, PY_FROZEN
 from distutils.version import StrictVersion, LooseVersion
 
@@ -36,7 +36,7 @@ class Require:
     def version_ok(self,version):
         """Is 'version' sufficiently up-to-date?"""
         return self.attribute is None or self.format is None or \
-            str(version)<>"unknown" and version >= self.requested_version
+            str(version)!="unknown" and version >= self.requested_version
 
 
     def get_version(self, paths=None, default="unknown"):
@@ -237,9 +237,7 @@ def extract_constant(code,symbol,default=-1):
         else:
             const = default
             
-if (sys.platform.startswith('java') or sys.platform == 'cli' or
-    # Unladen Swallow 2009Q1 doesn't have an EXTENDED_ARG opcode.
-    not hasattr(dis, 'EXTENDED_ARG')):
+if sys.platform.startswith('java') or sys.platform == 'cli':
     # XXX it'd be better to test assertions about bytecode instead...
     del extract_constant, get_module_constant
     __all__.remove('extract_constant')
