@@ -1,71 +1,83 @@
 #summary How to build Unladen Swallow on Windows
 
-Contributed by Baptiste Lepilleur:
+Before building Unladen Swallow the bundled copy of LLVM needs to be compiled.  Then the python executable can be built by using the PCBuild/PCBuild.sln solution file as in CPython.
+
+You will need CMake 2.6 or later (http://www.cmake.org/) in order to build the LLVM project files.  There are two versions of the instructions depending on whether you prefer the command line or the GUI tools.
+
+=Building LLVM using the GUI tools=
+
+These instructions assume you have Unladen in C:\unladen-swallow.  If not, adjust the paths as appropriate
+  # Run cmake-gui and enter {{{"C:/unladen-swallow/Util/llvm"}}} in the "Where is the source code" box.
+  # Enter {{{"C:/unladen-swallow/Util/llvm/obj"}}} in the "Where to build the binaries" box.
+  # Click "Configure", select {{{"Visual Studio 9 2008"}}} or {{{"Visual Studio 8 2005"}}} as the generator, and click Finish.
+  # If you are building the Q3 release, change LLVM_TARGETS_TO_BUILD from {{{"X86"}}} to {{{"X86;CppBackend"}}}
+  # Click "Configure" again
+  # Click "Generate"
+  # Open C:\unladen-swallow\Util\llvm\obj\LLVM.sln in Visual Studio
+  # Click Build | Batch Build.  Put a check mark next to ALL_BUILD | Release.
+  # If you are interested in building a Debug build of Unladen, you should additionally check ALL_BUILD | Debug.
+  # Click "Build"
+
+After LLVM has been built you can open PCBuild/PCBuild.sln and build Unladen.
+
+=Building LLVM via the command line=
+
+Instructions contributed by Baptiste Lepilleur.  Make sure CMake
+is in your PATH or specify the full path to cmake.exe in the commands below.
 
 {{{
-Below are the build instructions for Unladden Swallow on Windows with
-Microsoft Visual Studio 2008. I could not find them, and it would have
-saved a few minutes poking around...
-
-Short build instructions: before building python, llvm need to be
-compiled. You must generate MSVS solution using cmake in directory Util
-\llvm\obj, then build the Release and Debug configurations (plan about
-30mn for building llvm). Then proceed as usual to build python using
-the PCBuild/PCBuild.sln solution.
-
-Notes: if you copy the python binary/dll in another directory, you
-also need to copy python26.bc found in the PCBuild directory.
-
-Detailed instructions (command-dump):
-
-You need to install cmake (http://cmake.org/) and make sure cmake.exe
-is in the path (or adapt the commands below). I tested with cmake 2.6.
-
 > cd Util\llvm
 
 Util\llvm> mkdir obj
 
 Util\llvm> cd obj
+}}}
 
+If you are building the latest trunk:
+{{{
 Util\llvm\obj> cmake -G "Visual Studio 9 2008" ..
+}}}
+(or you can use {{{"Visual Studio 8 2005"}}} instead)
+
+If you are building the Q3 release:
+{{{
+Util\llvm\obj> cmake -G "Visual Studio 9 2008" -D LLVM_TARGETS_TO_BUILD="X86;CppBackend" ..
+}}}
+
+Continuing:
+{{{
 -- Check for working C compiler: cl
 -- Check for working C compiler: cl -- works
 ...
 -- Configuring done
 -- Generating done
--- Build files have been written to: E:/prg/thirdparties/unladden/Util/
-llvm/obj
+-- Build files have been written to: E:/prg/thirdparties/unladen/Util/llvm/obj
 
-Util\llvm\obj>%VS90COMNTOOLS%\vsvars32.bat
+Util\llvm\obj>"%VS90COMNTOOLS%\vsvars32.bat"
 Setting environment for using Microsoft Visual Studio 2008 x86 tools.
 
-Util\llvm\obj>vcbuild /M%NUMBER_OF_PROCESSORS% LLVM.sln "Release|
-Win32"
+Util\llvm\obj>vcbuild /M%NUMBER_OF_PROCESSORS% LLVM.sln "Release|Win32"
 ...
 181>ALL_BUILD - up-to-date
-Skipped building project E:\prg\thirdparties\unladden\Util\llvm\obj\.
-\INSTALL.vcproj for solution configuration RELEASE|WIN32. This project
-is excluded from build for this solution configuration.
+Skipped building project E:\prg\thirdparties\unladen\Util\llvm\obj\.\INSTALL.vcproj
+for solution configuration RELEASE|WIN32. This project is excluded from build for this
+solution configuration.
 
-Build complete: 91 Projects succeeded, 0 Projects failed, 26 Projects
-skipped
+Build complete: 91 Projects succeeded, 0 Projects failed, 26 Projects skipped
+}}}
 
-Util\llvm\obj>vcbuild /M%NUMBER_OF_PROCESSORS% LLVM.sln "Debug|WIN32"
+If you want to build only a release build of Unladen Swallow then you can skip the next step.
+
+{{{
+Util\llvm\obj>vcbuild /M%NUMBER_OF_PROCESSORS% LLVM.sln "Debug|Win32"
 ...
 181>Build started: Project: ALL_BUILD, Configuration: Debug|Win32
 181>ALL_BUILD - up-to-date
-Skipped building project E:\prg\thirdparties\unladden\Util\llvm\obj\.
-\INSTALL.vcproj for solution configuration DEBUG|WIN32. This project
-is excluded from build for this solution configuration.
+Skipped building project E:\prg\thirdparties\unladen\Util\llvm\obj\.\INSTALL.vcproj
+for solution configuration DEBUG|WIN32. This project is excluded from build for this
+solution configuration.
 
-Build complete: 91 Projects succeeded, 0 Projects failed, 26 Projects
-skipped
----
-
-Then open python solution found in PCBuild/PCBuild.sln and build as
-usual.
-
-Notes: you will need to regenerate the llvm solution (cmake -G step)
-if you move the source around. The generated solution contains hard-
-coded paths.
+Build complete: 91 Projects succeeded, 0 Projects failed, 26 Projects skipped
 }}}
+
+At this point you can open PCBuild/PCBuild.sln and build Unladen.
