@@ -478,7 +478,9 @@ def CompareMemoryUsage(base_usage, changed_usage, options):
     else:
         chart_link = GetChart(SummarizeData(base_usage),
                               SummarizeData(changed_usage),
-                              options)
+                              options,
+                              title=options.benchmark_name,
+                              y_label="Memory+(kb)")
 
     return MemoryUsageResult(max_base, max_changed, delta_max, chart_link)
 
@@ -682,13 +684,16 @@ def SimpleBenchmark(benchmark_function, base_python, changed_python, options,
 def _FormatData(num):
     return str(round(num, 2))
 
-def GetChart(base_data, changed_data, options, chart_margin=100):
+def GetChart(base_data, changed_data, options, title, y_label,
+             chart_margin=100):
     """Build a Google Chart API URL for the given data.
 
     Args:
         base_data: data points for the base binary.
         changed_data: data points for the changed binary.
         options: optparse.Values instance.
+        title: title for the chart.
+        y_label: label for Y axis on the chart.
         chart_margin: optional integer margin to add/sub from the max/min.
 
     Returns:
@@ -728,13 +733,17 @@ def GetChart(base_data, changed_data, options, chart_margin=100):
     # chd=t: the data sets, |-separated.
     # chxt: which axes to draw.
     # chxl: labels for the axes.
+    # chtt: chart title, using + for space and | for line breaks
     control_label = options.control_label
     experiment_label = options.experiment_label
-    raw_url = ("http://chart.apis.google.com/chart?cht=lc&chs=700x400&chxt=x,y&"
+    title = title.replace(' ', '+').replace('\n', '|')
+    raw_url = ("http://chart.apis.google.com/chart?cht=lc&chs=700x400&"
+               "chxt=x,y,x,y&"
                "chxr=1,%(min_data)s,%(max_data)s&chco=FF0000,0000FF&"
                "chdl=%(control_label)s|%(experiment_label)s&"
                "chds=%(min_data)s,%(max_data)s&chd=t:%(data_for_google)s&"
-               "chxl=0:%(x_axis_labels)s"
+               "chxl=0:%(x_axis_labels)s|2:||Iteration|3:||%(y_label)s&"
+               "chtt=%(title)s"
                % locals())
     return ShortenUrl(raw_url)
 
@@ -916,7 +925,10 @@ def CompareMultipleRuns(base_times, changed_times, options):
     # as not to exceed the GET limit for Google's chart server.
     timeline_link = GetChart(SummarizeData(base_times),
                              SummarizeData(changed_times),
-                             options, chart_margin=1)
+                             options,
+                             title=options.benchmark_name,
+                             y_label="Time+(secs)",
+                             chart_margin=1)
 
     base_times = sorted(base_times)
     changed_times = sorted(changed_times)
@@ -1993,6 +2005,7 @@ def main(argv, bench_funcs=BENCH_FUNCS, bench_groups=BENCH_GROUPS):
     for name in sorted(should_run):
         func = bench_funcs[name]
         print "Running %s..." % name
+        options.benchmark_name = name  # Easier than threading this everywhere.
         results.append((name, func(base_cmd_prefix, changed_cmd_prefix,
                                    options)))
 
