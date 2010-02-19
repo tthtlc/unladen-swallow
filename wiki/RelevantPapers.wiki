@@ -30,6 +30,7 @@ Here, "phase one" refers to [ProjectPlan the 2009Q1 release]; "phase two" refers
   * *[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.47.7437 Optimization of Object-Oriented Programs Using Static Class Hierarchy Analysis] (Dean, Grove & Chambers, 1994)*
   * *[http://portal.acm.org/citation.cfm?id=646153.679533 The Cartesian Product Algorithm: Simple and Precise Type Inference Of Parametric Polymorphism] (Agesen, 1995)*
   * *[http://www.ocf.berkeley.edu/~bac/thesis.pdf Localized Type Inference of Atomic Types in Python] (Cannon, 2005)* A cautionary tale of an attempt at type inference in Python. Things to think about once/if we start looking at type inference for Python.
+  * *[http://www.cs.indiana.edu/~dyb/pubs/inlining.pdf Fast and Eﬀective Procedure Inlining] (Waddell & Dybvig 2004)* Top-down inliner that makes inlining decisions based on how much it can optimize the inlined function.
 
 
 ==Garbage Collection:==
