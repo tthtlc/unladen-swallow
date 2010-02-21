@@ -177,6 +177,16 @@ And there's the machine code for this function.  If you link LLVM with [http://u
 
 By default, running `make clean` will clean both Python and the LLVM tree in `Util/llvm`. Rebuilding LLVM takes approximately forever (compared to the rest of Python), so there's a script to save you the need to rebuild LLVM over and over:
 
+For development:
+{{{
+$ cd ~/unladen-swallow/trunk/Util/llvm
+$ ./install-llvm debug --prefix=/tmp/llvm
+# Configures LLVM correctly, then runs make && make install
+$ cd ../..  # Back down to ~/unladen-swallow/trunk
+$ ./configure --with-llvm=/tmp/llvm --with-pydebug && make
+}}}
+
+For benchmarking:
 {{{
 $ cd ~/unladen-swallow/trunk/Util/llvm
 $ ./install-llvm release --prefix=/tmp/llvm
