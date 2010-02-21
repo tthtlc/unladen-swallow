@@ -42,6 +42,33 @@ CFLAGS=-m32 CXXFLAGS=-m32 ../src/configure --build=i386-unknown-linux-gnu
 See BuildingOnWindows for MSVC build instructions.
 
 
+== Reducing build times ==
+
+By default, running `make clean` will clean both Python and the LLVM tree in `Util/llvm`. Rebuilding LLVM takes approximately forever (compared to the rest of Python), so there's a script to save you the need to rebuild LLVM over and over:
+
+For development:
+{{{
+$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
+$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm debug --prefix=/tmp/llvm
+# Configures LLVM correctly, then runs make && make install
+$ cd ~/unladen-swallow/trunk/dbg  # Back down to ~/unladen-swallow/trunk/dbg
+$ ../src/configure --with-llvm=/tmp/llvm --with-pydebug && make
+}}}
+
+For benchmarking:
+{{{
+$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
+$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm release --prefix=/tmp/llvm
+# Configures LLVM correctly, then runs make && make install
+$ cd ~/unladen-swallow/trunk/opt  # Back down to ~/unladen-swallow/trunk/opt
+$ ../src/configure --with-llvm=/tmp/llvm && make
+}}}
+
+This will configure, build and install LLVM into `/tmp/llvm`, then reuse that directory when building Unladen Swallow. The LLVM installation in `/tmp/llvm` can be reused and shared among different Unladen Swallow object directories, saving you considerable build time. See [http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/llvm/install-llvm.sh install-llvm.sh] for more details.
+
+On OS X, Python comes with a suite of Carbon toolkit modules that we generally don't care about when working on Unladen Swallow. You can pass `--disable-toolbox-glue` to avoid wasting cycles building these modules you won't use. This brings build times down to what they are on Linux.
+
+
 == Working on Unladen Swallow ==
 
 We maintain a list of [http://code.google.com/p/unladen-swallow/issues/list?can=2&q=label%3AStarterProject good volunteer projects] in our issue tracker under the label [http://code.google.com/p/unladen-swallow/issues/list?can=2&q=label%3AStarterProject StarterProject]. Look over these and let us know if any strike your fancy.
@@ -173,32 +200,6 @@ Current language:  auto; currently c++
 
 And there's the machine code for this function.  If you link LLVM with [http://udis86.sourceforge.net/ libudis86], it'll disassemble this for you in the JIT debug output, but getting that link to work is non-trivial.
 
-
-== Reducing build times ==
-
-By default, running `make clean` will clean both Python and the LLVM tree in `Util/llvm`. Rebuilding LLVM takes approximately forever (compared to the rest of Python), so there's a script to save you the need to rebuild LLVM over and over:
-
-For development:
-{{{
-$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
-$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm debug --prefix=/tmp/llvm
-# Configures LLVM correctly, then runs make && make install
-$ cd ~/unladen-swallow/trunk/dbg  # Back down to ~/unladen-swallow/trunk/dbg
-$ ../src/configure --with-llvm=/tmp/llvm --with-pydebug && make
-}}}
-
-For benchmarking:
-{{{
-$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
-$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm release --prefix=/tmp/llvm
-# Configures LLVM correctly, then runs make && make install
-$ cd ~/unladen-swallow/trunk/opt  # Back down to ~/unladen-swallow/trunk/opt
-$ ../src/configure --with-llvm=/tmp/llvm && make
-}}}
-
-This will configure, build and install LLVM into `/tmp/llvm`, then reuse that directory when building Unladen Swallow. The LLVM installation in `/tmp/llvm` can be reused and shared among different Unladen Swallow object directories, saving you considerable build time. See [http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/llvm/install-llvm.sh install-llvm.sh] for more details.
-
-On OS X, Python comes with a suite of Carbon toolkit modules that we generally don't care about when working on Unladen Swallow. You can pass `--disable-toolbox-glue` to avoid wasting cycles building these modules you won't use. This brings build times down to what they are on Linux.
 
 == Performance analysis ==
 
