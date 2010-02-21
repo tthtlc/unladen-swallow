@@ -49,18 +49,18 @@ By default, running `make clean` will clean both Python and the LLVM tree in `Ut
 For development:
 {{{
 $ mkdir /tmp/llvm_build; cd /tmp/llvm_build
-$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm debug --prefix=/tmp/llvm
+$ ~/unladen-swallow/src/Util/llvm/install-llvm debug --prefix=/tmp/llvm
 # Configures LLVM correctly, then runs make && make install
-$ cd ~/unladen-swallow/trunk/dbg  # Back down to ~/unladen-swallow/trunk/dbg
+$ cd ~/unladen-swallow/dbg  # Back down to ~/unladen-swallow/dbg
 $ ../src/configure --with-llvm=/tmp/llvm --with-pydebug && make
 }}}
 
 For benchmarking:
 {{{
 $ mkdir /tmp/llvm_build; cd /tmp/llvm_build
-$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm release --prefix=/tmp/llvm
+$ ~/unladen-swallow/src/Util/llvm/install-llvm release --prefix=/tmp/llvm
 # Configures LLVM correctly, then runs make && make install
-$ cd ~/unladen-swallow/trunk/opt  # Back down to ~/unladen-swallow/trunk/opt
+$ cd ~/unladen-swallow/opt  # Back down to ~/unladen-swallow/opt
 $ ../src/configure --with-llvm=/tmp/llvm && make
 }}}
 
