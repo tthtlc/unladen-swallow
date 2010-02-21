@@ -8,10 +8,11 @@
 Setting up Unladen Swallow uses the same procedure as setting up CPython:
 
 {{{
-> svn checkout http://unladen-swallow.googlecode.com/svn/trunk unladen
+> mkdir unladen; cd unladen
+> svn checkout http://unladen-swallow.googlecode.com/svn/trunk src
 ...
-> cd unladen
-> ./configure --with-pydebug
+> mkdir dbg; cd dbg
+> ../src/configure --with-pydebug
 ...
 > make
 ...
@@ -33,9 +34,9 @@ Other interesting checkout targets:
 
 Active development is being done in `trunk/`. We try to keep trunk stable and correct at all times, but there may be bugs that have yet to be addressed. Caveat downloader.
 
-If you're building the 2009Q2 release on a 32/64-bit hybrid system (say, a 64-bit kernel but a 32-bit userspace), you'll need to run a different `./configure` command. In the case of a 32-bit userspace, something like this should work:
+If you're building the 2009Q2 release on a 32/64-bit hybrid system (say, a 64-bit kernel but a 32-bit userspace), you'll need to run a different `../src/configure` command. In the case of a 32-bit userspace, something like this should work:
 {{{
-CFLAGS=-m32 CXXFLAGS=-m32 ./configure --build=i386-unknown-linux-gnu
+CFLAGS=-m32 CXXFLAGS=-m32 ../src/configure --build=i386-unknown-linux-gnu
 }}}
 
 See BuildingOnWindows for MSVC build instructions.
@@ -179,20 +180,20 @@ By default, running `make clean` will clean both Python and the LLVM tree in `Ut
 
 For development:
 {{{
-$ cd ~/unladen-swallow/trunk/Util/llvm
-$ ./install-llvm debug --prefix=/tmp/llvm
+$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
+$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm debug --prefix=/tmp/llvm
 # Configures LLVM correctly, then runs make && make install
-$ cd ../..  # Back down to ~/unladen-swallow/trunk
-$ ./configure --with-llvm=/tmp/llvm --with-pydebug && make
+$ cd ~/unladen-swallow/trunk/dbg  # Back down to ~/unladen-swallow/trunk/dbg
+$ ../src/configure --with-llvm=/tmp/llvm --with-pydebug && make
 }}}
 
 For benchmarking:
 {{{
-$ cd ~/unladen-swallow/trunk/Util/llvm
-$ ./install-llvm release --prefix=/tmp/llvm
+$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
+$ ~/unladen-swallow/trunk/src/Util/llvm/install-llvm release --prefix=/tmp/llvm
 # Configures LLVM correctly, then runs make && make install
-$ cd ../..  # Back down to ~/unladen-swallow/trunk
-$ ./configure --with-llvm=/tmp/llvm && make
+$ cd ~/unladen-swallow/trunk/opt  # Back down to ~/unladen-swallow/trunk/opt
+$ ../src/configure --with-llvm=/tmp/llvm && make
 }}}
 
 This will configure, build and install LLVM into `/tmp/llvm`, then reuse that directory when building Unladen Swallow. The LLVM installation in `/tmp/llvm` can be reused and shared among different Unladen Swallow object directories, saving you considerable build time. See [http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/llvm/install-llvm.sh install-llvm.sh] for more details.
