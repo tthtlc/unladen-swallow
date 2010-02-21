@@ -8,22 +8,22 @@
 Setting up Unladen Swallow uses the same procedure as setting up CPython:
 
 {{{
-> svn checkout http://unladen-swallow.googlecode.com/svn/branches/release-2009Q3-maint unladen
+> svn checkout http://unladen-swallow.googlecode.com/svn/trunk unladen
 ...
 > cd unladen
-> ./configure
+> ./configure --with-pydebug
 ...
 > make
 ...
 > ./python.exe
-Python 2.6.1 (r261:311:312M, Oct 14 2009, 23:24:25) 
+Python 2.6.4 (r261:311:312M, Oct 14 2009, 23:24:25) 
 [GCC 4.0.1 (Apple Inc. build 5490)] on darwin
-[Unladen Swallow 2009Q3]
+[Unladen Swallow 2010Q1]
 Type "help", "copyright", "credits" or "license" for more information.
 >>>
 }}}
 
-This will checkout and build [Release2009Q3 our 2009Q3 release]. Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher].
+Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher].
 
 Other interesting checkout targets:
   * Release2009Q1: http://unladen-swallow.googlecode.com/svn/branches/release-2009Q1-maint
