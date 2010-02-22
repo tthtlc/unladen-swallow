@@ -44,7 +44,7 @@ See BuildingOnWindows for MSVC build instructions.
 
 == Reducing build times ==
 
-By default, running `make clean` will clean both Python and the LLVM tree in `Util/llvm`. Rebuilding LLVM takes approximately forever (compared to the rest of Python), so there's a script to save you the need to rebuild LLVM over and over:
+By default, running `make clean` will clean both Python and the LLVM tree in `Util/llvm`. Rebuilding LLVM takes approximately forever (compared to the rest of Python), so there's a script to save you the need to rebuild LLVM over and over. Note that when we update LLVM in the source tree, you'll get compile errors until you re-run this script.
 
 For development (debug build):
 {{{
