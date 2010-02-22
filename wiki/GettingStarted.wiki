@@ -174,13 +174,13 @@ call_trace38:		; preds = %_PyLlvm_WrapXDecref.exit192
 >>> 
 }}}
 
-Fourth, this code is JIT-compiled to native machine code. Unfortunately, there's no easy way to display this machine code. The easiest involves setting `PYTHONLLVMFLAGS=-debug-only=jit` before starting Python and running Python inside gdb with a breakpoint in `_PyLlvmFunction_Eval()` just before the call to `native(frame)`. (This requires a debug build of Unladen Swallow/LLVM.) When `_PyLlvmFunction_Eval()` calls `ExecutionEngine::getPointerToFunction()`, the JIT will dump a lot of information including the location and size of the machine code:
+Fourth, this code is JIT-compiled to native machine code. Unfortunately, there's no easy way to display this machine code. The easiest involves setting `PYTHONLLVMFLAGS=-debug-only=jit` before starting Python and running Python inside gdb with a breakpoint at `_llvmfunctionobject.cc:clear_body`. (This requires a debug build of Unladen Swallow/LLVM via `--with-pydebug`.) When the JIT kicks in and lowers your Python code to machine code, it will print out a huge amount of information along the way:
 
 {{{
 $ PYTHONLLVMFLAGS=-debug-only=jit gdb ./python.exe 
 ...
-(gdb) b _llvmfunctionobject.cc:69
-Breakpoint 1 at 0xa72a0: file ../src/Objects/_llvmfunctionobject.cc, line 69.
+(gdb) break _llvmfunctionobject.cc:clear_body
+Breakpoint 1 at 0x86e878e: file ../trunk/Objects/_llvmfunctionobject.cc, line 105.
 (gdb) run
 ...
 >>> def sum(x):
@@ -189,9 +189,9 @@ Breakpoint 1 at 0xa72a0: file ../src/Objects/_llvmfunctionobject.cc, line 69.
 ...     result += i
 ...   return result
 ... 
->>> sum.__code__.__use_llvm__=True
->>> sum.__code__.co_optimization=1
->>> sum([1,2,3])
+>>> sum.__code__.__use_llvm__ = True  # Required!
+>>> sum.__code__.co_optimization = 1
+>>> sum([1,2,3])  # This will trigger code generation.
 JIT: Starting CodeGen of Function #u#sum
 ...
 JIT: Finished CodeGen of [0x2080020] Function: #u#sum: 2763 bytes of text, 214 relocations
@@ -200,8 +200,19 @@ JIT: 00000000: 56575355 e83cec83 fe0e2771 00147883
 ...
 JIT: 00000ac0: 8950244c 2fe9240c fffffc
 
-Breakpoint 1, _PyLlvmFunction_Eval (function_obj=0x14a3208, frame=0x1552ad8) at ../src/Objects/_llvmfunctionobject.cc:69
-69	    return native(frame);
+Breakpoint 1, clear_body (function=0x9347570) at ../trunk/Objects/_llvmfunctionobject.cc:105
+105	    llvm::SmallPtrSet<Value*, 8> globals;
+(gdb)
+}}}
+
+Explanation of the next line:
+  # We take the address of the function from `Finished CodeGen of [0x2080020]`; this is `0x2080020`.
+  # We want to disassemble the whole function, so we grab the length from `2763 bytes of text`: the length is `2763`.
+  # We have to give `disassemble` the range of code to work on, so we add the length to the starting address of the function: `(0x2080020 + 2763)`.
+
+LLVM's JIT will compile a number of functions; the one you care about is `#u#sum`, ignore the others.
+
+{{{
 (gdb) disassemble 0x2080020 (0x2080020 + 2763)
 Dump of assembler code from 0x2080020 to 0x2080aeb:
 0x02080020:	push   %ebp
