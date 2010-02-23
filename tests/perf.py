@@ -1247,7 +1247,7 @@ def MeasureHgStartup(python, options):
     hg_bin = Relative("lib/mercurial/hg")
     hg_dir = Relative("lib/mercurial")
     hg_lib_dir = Relative("lib/mercurial/mercurial/pure")
-    hg_path = ":".join([hg_dir, hg_lib_dir])
+    hg_path = os.pathsep.join([hg_dir, hg_lib_dir])
     hg_env = BuildEnv({"PYTHONPATH": hg_path}, options.inherit_env)
 
     trials = 500
@@ -1305,15 +1305,15 @@ def BM_Float(*args, **kwargs):
 
 
 def MeasureRietveld(python, options):
-    PYTHONPATH = ":".join([DJANGO_DIR,
-                           # These paths are lifted from
-                           # lib/google_appengine.appcfg.py.  Note that we use
-                           # our own version of Django instead of Appengine's.
-                           Relative("lib/google_appengine"),
-                           Relative("lib/google_appengine/lib/antlr3"),
-                           Relative("lib/google_appengine/lib/webob"),
-                           Relative("lib/google_appengine/lib/yaml/lib"),
-                           Relative("lib/rietveld")])
+    PYTHONPATH = os.pathsep.join([DJANGO_DIR,
+				  # These paths are lifted from
+				  # lib/google_appengine.appcfg.py.  Note that we use
+				  # our own version of Django instead of Appengine's.
+				  Relative("lib/google_appengine"),
+				  Relative("lib/google_appengine/lib/antlr3"),
+				  Relative("lib/google_appengine/lib/webob"),
+				  Relative("lib/google_appengine/lib/yaml/lib"),
+				  Relative("lib/rietveld")])
     bm_path = Relative("performance/bm_rietveld.py")
     bm_env = {"PYTHONPATH": PYTHONPATH, "DJANGO_SETTINGS_MODULE": "settings"}
 
@@ -1741,9 +1741,9 @@ def MeasureSpamBayes(python, options):
     Returns:
         RawData instance.
     """
-    pypath = ":".join([Relative("lib/spambayes"), Relative("lib/lockfile")])
+    pypath = os.pathsep.join([Relative("lib/spambayes"), Relative("lib/lockfile")])
     bm_path = Relative("performance/bm_spambayes.py")
-    bm_env = {"PYTHONPATH": pypath}
+    bm_env = BuildEnv({"PYTHONPATH": pypath}, options.inherit_env)
     return MeasureGeneric(python, options, bm_path, bm_env)
 
 
@@ -1762,7 +1762,8 @@ def MeasureHtml5libWarmup(python, options):
         RawData instance.
     """
     bm_path = Relative("performance/bm_html5lib.py")
-    bm_env = {"PYTHONPATH": Relative("lib/html5lib")}
+    bm_env = BuildEnv({"PYTHONPATH": Relative("lib/html5lib")},
+                      options.inherit_env)
     return MeasureGeneric(python, options, bm_path, bm_env,
                           iteration_scaling=0.10)
 
@@ -1773,7 +1774,8 @@ def BM_html5lib_warmup(*args, **kwargs):
 
 def MeasureHtml5lib(python, options):
     bm_path = Relative("performance/bm_html5lib.py")
-    bm_env = {"PYTHONPATH": Relative("lib/html5lib")}
+    bm_env = BuildEnv({"PYTHONPATH": Relative("lib/html5lib")},
+                      options.inherit_env)
 
     trials = 5
     if options.fast:
