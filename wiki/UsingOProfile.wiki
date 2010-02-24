@@ -1,5 +1,7 @@
 #summary How to use OProfile on Unladen Swallow
 
+<wiki:toc max_depth="3" />
+
 = Introduction =
 
 [http://oprofile.sourceforge.net/ OProfile] is a system-wide sampling-based profiler for Linux systems. You need to be root to use it.
@@ -58,3 +60,33 @@ Here, `#u#force_unicode` and `#u#render5` are Python functions named `force_unic
 You can also run oprofile with the `-d` flag to get instruction-level timings.
 
 http://code.google.com/p/jrfonseca/wiki/Gprof2Dot may be useful in visualizing profile results.
+
+= Troubleshooting =
+
+== Using oProfile on Ubuntu and Debian ==
+
+The oProfile packages in Debian Sid and Ubuntu Hardy, Jaunty, Karmic, and
+Lucid are all broken. You can go to https://edge.launchpad.net/~statik/+archive/ppa to get fixed oProfile 0.9.6 Ubuntu packages for Hardy, Jaunty, Karmic, and Lucid. That page has instructions on how to install packages from that PPA (personal package archive).
+
+More details passed on from Elliot Murphy, an Ubuntu developer:
+
+  Debian sid has oProfile (0.9.6-1), but the package does not currently
+  create the oprofile user and group needed for JIT profiler to work. If
+  you are using this version of the package, you will need to manually
+  create an oprofile user, otherwise JIT profiling just silently doesn't
+  work. I will be sending a patch to Debian to so that the package
+  automatically creates the necessary system user when the package is
+  installed.
+
+  In Ubuntu, oProfile package was very old, 0.9.4+cvs20090629-2.1ubuntu3
+  or so, and this package has several major problems: doesn't work on 64
+  bit, doesn't install the opjitconv command, and doesn't create the
+  oprofile user. I am working to fix this so that Lucid (Ubuntu 10.04)
+  will have a modern version of oProfile with all of these problems
+  fixed. For Unladen Swallow hackers who want to easily use oProfile on
+  Ubuntu now without having to install from source, I have built fixed
+  packages in my personal archive.
+
+== Tips/Tricks ==
+
+  * If oprofile is not working and you are working on a laptop that has been suspended/resumed, try running `opcontrol --shutdown` and then running oProfile again.
