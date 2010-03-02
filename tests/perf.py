@@ -16,8 +16,9 @@ confidence level to indicate whether the observed difference is statistically
 significant.
 
 Omitting the -b option will result in the default group of benchmarks being run
-This currently consists of: 2to3, django, nbody, slowspitfire, slowpickle,
-slowunpickle, spambayes. Omitting -b is the same as specifying `-b default`.
+This currently consists of: 2to3, django, nbody, rietveld, slowspitfire,
+slowpickle, slowunpickle, spambayes. Omitting -b is the same as specifying
+`-b default`.
 
 To run every benchmark perf.py knows about, use `-b all`. To see a full list of
 all available benchmarks, use `--help`.
@@ -1812,8 +1813,9 @@ BENCH_FUNCS = _FindAllBenchmarks(globals())
 # If you update the default group, be sure to update the module docstring, too.
 # An "all" group which includes every benchmark perf.py knows about is generated
 # automatically.
-BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "slowspitfire",
-                            "slowpickle", "slowunpickle", "spambayes"],
+BENCH_GROUPS = {"default": ["2to3", "django", "nbody", "rietveld",
+                            "slowspitfire", "slowpickle", "slowunpickle",
+                            "spambayes"],
                 "startup": ["normal_startup", "startup_nosite",
                             "bzr_startup", "hg_startup"],
                 "regex": ["regex_v8", "regex_effbot", "regex_compile"],
