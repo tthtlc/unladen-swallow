@@ -1,6 +1,6 @@
 #summary Also known as PEP 7++
 
-C code continues to follow [http://www.python.org/dev/peps/pep-0007/ PEP 7]. C++ should follow PEP 7 as much as possible. For things PEP 7 doesn't cover, try to follow [http://llvm.org/docs/CodingStandards.html the LLVM style guide]. We also have a few rules below for things they don't cover.
+C code continues to follow [http://www.python.org/dev/peps/pep-0007/ PEP 7]. C++ should follow PEP 7 as much as possible. For things PEP 7 doesn't cover, try to follow [http://llvm.org/docs/CodingStandards.html the LLVM style guide]. For things that neither the LLVM style guide nor PEP 7 cover, consult [http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml the Google C++ style guide]. We also have a few rules below for things they don't cover.
 
 = Always use `this`. =
 
