@@ -214,7 +214,10 @@ def TestPyxml():
     with ChangeDir("test"):
         output, _ = CallAndCaptureOutput([sys.executable, "-E", "regrtest.py"])
         lines = output.splitlines()
-        return lines[-1].endswith("OK.")
+        for line in reversed(lines):
+            if line == "All 21 tests OK.":
+                return True
+        return False
 
 def TestSetuptools():
     return DefaultPassCheck([sys.executable, "-E", "setup.py", "test"])
