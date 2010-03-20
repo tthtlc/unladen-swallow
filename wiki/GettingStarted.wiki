@@ -3,16 +3,52 @@
 
 <wiki:toc max_depth="3" />
 
+== Installing LLVM ==
+
+You need LLVM and Clang 2.7, currently on pre-release 1:
+{{{
+> wget 'http://llvm.org/pre-releases/2.7/pre-release1/llvm-2.7.tar.gz'
+> wget 'http://llvm.org/pre-releases/2.7/pre-release1/clang-2.7.tar.gz'
+> tar xzvf llvm-2.7.tar.gz
+llvm-2.7/...
+> tar xzvf clang-2.7.tar.gz
+clang-2.7/...
+> mv clang-2.7 llvm-2.7/tools/clang
+> mkdir llvm_build_dbg
+> cd llvm_build_dbg
+}}}
+If you have [UsingOProfile OProfile >=0.9.5] installed, add `--with-oprofile=<prefix>` to the `configure` commands below.
+{{{
+> ../llvm-2.7/configure --enable-shared --disable-optimized --prefix=`pwd`/../llvm_install_dbg
+> make -j4
+> make check-lit && (cd tools/clang/; make test)  # Optional
+> make install
+> cd ..
+}}}
+The above built a "Debug" LLVM and Clang, and installed it to `.../llvm_install_dbg`. Now we'll build a "Release+Debug-Asserts" LLVM and Clang, and install it to `.../llvm_install_opt`. The "+Debug" in this second build mode indicates that it has debugging symbols despite being optimized.
+{{{
+> mkdir llvm_build_opt
+> cd llvm_build_opt
+> ../llvm-2.7/configure --enable-shared --enable-optimized --disable-assertions \
+    --enable-debug-symbols --prefix=`pwd`/../llvm_install_opt
+> make -j4
+> make check-lit && (cd tools/clang/; make test)  # Optional, unittests will fail
+> make install
+> cd ..
+}}}
+
+You only have to do the above once per LLVM release (so, again at pre-release 2, and at 2.7 final, but after that not until 2.8), and you can share the resulting directories among many Unladen Swallow checkouts.
+
 == The basics ==
 
-Setting up Unladen Swallow uses the same procedure as setting up CPython:
+Setting up Unladen Swallow uses nearly the same procedure as setting up CPython:
 
 {{{
 > mkdir unladen; cd unladen
 > svn checkout http://unladen-swallow.googlecode.com/svn/trunk src
 ...
 > mkdir dbg; cd dbg
-> ../src/configure --with-pydebug
+> ../src/configure --with-pydebug --with-llvm=.../llvm_install_dbg
 ...
 > make
 ...
@@ -22,6 +58,25 @@ Python 2.6.4 (r261:311:312M, Oct 14 2009, 23:24:25)
 [Unladen Swallow 2010Q1]
 Type "help", "copyright", "credits" or "license" for more information.
 >>>
+}}}
+
+To build an optimized binary for benchmarking, use:
+
+{{{
+> mkdir unladen; cd unladen
+> svn checkout http://unladen-swallow.googlecode.com/svn/trunk src
+...
+> mkdir opt; cd opt
+> ../src/configure --with-llvm=.../llvm_install_opt
+...
+> make
+...
+> ./python.exe
+Python 2.6.4 (r261:1137, Mar 20 2010, 12:27:18) 
+[GCC 4.2.4 (Ubuntu 4.2.4-1ubuntu4)] on linux2
+[Unladen Swallow 2009Q4]
+Type "help", "copyright", "credits" or "license" for more information.
+>>> 
 }}}
 
 Note that our `tests/` top-level directory uses Subversion 1.5-style relative `svn:externals` properties; accordingly, you'll need [http://subversion.tigris.org/ SVN 1.5 or higher].
@@ -43,28 +98,6 @@ See BuildingOnWindows for MSVC build instructions.
 
 
 == Reducing build times ==
-
-By default, running `make clean` will clean both Python and the LLVM tree in `Util/llvm`. Rebuilding LLVM takes approximately forever (compared to the rest of Python), so there's a script to save you the need to rebuild LLVM over and over. Note that when we update LLVM in the source tree, you'll get compile errors until you re-run this script.
-
-For development (debug build):
-{{{
-$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
-$ ~/unladen-swallow/src/Util/llvm/install-llvm.sh debug --prefix=/tmp/llvm
-# Configures LLVM correctly, then runs make && make install
-$ cd ~/unladen-swallow/dbg  # Back down to ~/unladen-swallow/dbg
-$ ../src/configure --with-llvm=/tmp/llvm --with-pydebug && make
-}}}
-
-For benchmarking (release build):
-{{{
-$ mkdir /tmp/llvm_build; cd /tmp/llvm_build
-$ ~/unladen-swallow/src/Util/llvm/install-llvm.sh release --prefix=/tmp/llvm
-# Configures LLVM correctly, then runs make && make install
-$ cd ~/unladen-swallow/opt  # Back down to ~/unladen-swallow/opt
-$ ../src/configure --with-llvm=/tmp/llvm && make
-}}}
-
-This will configure, build and install LLVM into `/tmp/llvm`, then reuse that directory when building Unladen Swallow. The LLVM installation in `/tmp/llvm` can be reused and shared among different Unladen Swallow object directories, saving you considerable build time. See [http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/llvm/install-llvm.sh install-llvm.sh] for more details.
 
 On OS X, Python comes with a suite of Carbon toolkit modules that we generally don't care about when working on Unladen Swallow. You can pass `--disable-toolbox-glue` to avoid wasting cycles building these modules you won't use. This brings build times down to what they are on Linux.
 
