@@ -107,19 +107,19 @@ On OS X, Python comes with a suite of Carbon toolkit modules that we generally d
 ===Important Files===
 
 Here are the primary files that you'll be working on as part of Unladen Swallow:
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/llvm_notes.txt Python/llvm_notes.txt]* - Deep dive into optimizations and general JIT operations.
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/llvm_fbuilder.h Python/llvm_fbuilder.h], [http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/llvm_fbuilder.cc Python/llvm_fbuilder.cc]* - The heart of the compiler. These files take care of converting CPython bytecode to LLVM IR.
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/llvm_inline_functions.c Python/llvm_inline_functions.c]* - Special-cased C functions to be inlined.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/llvm_notes.txt JIT/llvm_notes.txt]* - Deep dive into optimizations and general JIT operations.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/llvm_fbuilder.h JIT/llvm_fbuilder.h], [http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/llvm_fbuilder.cc JIT/llvm_fbuilder.cc]* - The heart of the compiler. These files take care of converting CPython bytecode to LLVM IR.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/llvm_inline_functions.c JIT/llvm_inline_functions.c]* - Special-cased C functions to be inlined.
   * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Lib/test/test_llvm.py Lib/test/test_llvm.py]* - Tests for the JIT compiler. All code generation and optimization changes need tests. Tests should include both positive and negative cases.
   * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/eval.cc Python/eval.cc]* - The interpreter loop. If you need to collect new types of runtime feedback for an optimization, you'll be modifying this file.
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Util/PyTypeBuilder.h Util/PyTypeBuilder.h]* - Support code for exposing Python objects to LLVM analyzers and code generators.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/PyTypeBuilder.h JIT/PyTypeBuilder.h]* - Support code for exposing Python objects to LLVM analyzers and code generators.
 
 
 Secondary files:
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/llvm_compile.cc Python/llvm_compile.cc]* - Primary entry point for JIT compilation. Code comes in here, gets optimized.
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/global_llvm_data.h Python/global_llvm_data.h], [http://code.google.com/p/unladen-swallow/source/browse/trunk/Python/global_llvm_data.cc Python/global_llvm_data.cc]* - Per-interpreter shared state used to compile Python code to LLVM IR.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/llvm_compile.cc JIT/llvm_compile.cc]* - Primary entry point for JIT compilation. Code comes in here, gets optimized.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/global_llvm_data.h JIT/global_llvm_data.h], [http://code.google.com/p/unladen-swallow/source/browse/trunk/JIT/global_llvm_data.cc JIT/global_llvm_data.cc]* - Per-interpreter shared state used to compile Python code to LLVM IR.
   * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Unittests Unittests/]* - Directory of C++ unittests. Write unittests, keep them passing.
-  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Util Util/]* - Directory of utility code: alias analysis, bytecode iteration, statistics, customized dead-code elimination.
+  * *[http://code.google.com/p/unladen-swallow/source/browse/trunk/Util Util/]* - Directory of utility code: statistics, abstract data types, etc.
 
 
 ===Getting Things Done===
