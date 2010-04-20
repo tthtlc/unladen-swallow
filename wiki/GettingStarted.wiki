@@ -5,10 +5,10 @@
 
 == Installing LLVM ==
 
-You need LLVM and Clang 2.7, currently on pre-release 1:
+You need LLVM and Clang 2.7, currently on pre-release 2:
 {{{
-> wget 'http://llvm.org/pre-releases/2.7/pre-release1/llvm-2.7.tar.gz'
-> wget 'http://llvm.org/pre-releases/2.7/pre-release1/clang-2.7.tar.gz'
+> wget 'http://llvm.org/pre-releases/2.7/pre-release2/llvm-2.7.tar.gz'
+> wget 'http://llvm.org/pre-releases/2.7/pre-release2/clang-2.7.tar.gz'
 > tar xzvf llvm-2.7.tar.gz
 llvm-2.7/...
 > tar xzvf clang-2.7.tar.gz
@@ -37,7 +37,7 @@ The above built a "Debug" LLVM and Clang, and installed it to `.../llvm_install_
 > cd ..
 }}}
 
-You only have to do the above once per LLVM release (so, again at pre-release 2, and at 2.7 final, but after that not until 2.8), and you can share the resulting directories among many Unladen Swallow checkouts.
+You only have to do the above once per LLVM release (so, again at 2.7 final, but after that not until 2.8), and you can share the resulting directories among many Unladen Swallow checkouts.
 
 == The basics ==
 
